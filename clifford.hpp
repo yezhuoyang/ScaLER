@@ -15,6 +15,11 @@ struct Gate{
 };
 
 
+struct paritygroup{
+    std::vector<int> indexlist;
+};
+
+
 class cliffordcircuit{
 
 public:
@@ -48,10 +53,14 @@ public:
     /*--Get gate by index-------------------------------------*/
     const Gate& get_gate(int gateindex) const;
 
-    /*Get member-------------------------------------------*/
+    /*Setter/Getter of class members-------------------------------------------*/
     int get_num_qubit() const;
+    void set_num_qubit(int num_qubit);
     int get_gate_num() const;
 
+
+    /*compile from stim string---------------------------------------------------*/
+    void compile_from_rewrited_stim_string(std::string stim_str);
 
 private:
 
@@ -60,11 +69,11 @@ private:
     int     num_qubit_;
     double  error_rate_{0.0};
 
-
     std::vector<Gate> circuit_;
+    std::vector<int> measureindexList;
 
-
-
+    std::vector<paritygroup> detectors_;
+    paritygroup observable_;
 
 };
 

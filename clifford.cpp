@@ -74,6 +74,15 @@ const Gate& cliffordcircuit::get_gate(int gateindex) const{return circuit_.at(ga
 int cliffordcircuit::get_num_qubit() const{return num_qubit_;}
 int cliffordcircuit::get_gate_num() const{return circuit_.size();}
 
+void cliffordcircuit::set_num_qubit(int num_qubit) {num_qubit_=num_qubit;}
+
+
+
+/*compile from stim string---------------------------------------------------*/
+void cliffordcircuit::compile_from_rewrited_stim_string(std::string stim_str){
+
+}
+
 
 
 }
