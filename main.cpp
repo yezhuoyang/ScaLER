@@ -62,6 +62,11 @@ int main()
     c.add_cnot(0, 1);
     c.add_XError(2);
     c.print_circuit();
+
+    const clifford::Gate& g=c.get_gate(2);
+
+    std::cout<<g.name<<"\n";
+
 }
 
 

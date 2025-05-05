@@ -65,4 +65,15 @@ void cliffordcircuit::print_circuit() const{
     std::cout<<"-------------------------------------------------------------\n";
 }
 
+
+
+/*--Get gate by index-------------------------------------*/
+const Gate& cliffordcircuit::get_gate(int gateindex) const{return circuit_.at(gateindex);}
+
+/*Get member-------------------------------------------*/
+int cliffordcircuit::get_num_qubit() const{return num_qubit_;}
+int cliffordcircuit::get_gate_num() const{return circuit_.size();}
+
+
+
 }

@@ -9,6 +9,11 @@
 
 namespace clifford{
 
+struct Gate{
+    std::string name;
+    std::vector<int> qubits;
+};
+
 
 class cliffordcircuit{
 
@@ -40,13 +45,16 @@ public:
     void print_circuit() const;
 
 
+    /*--Get gate by index-------------------------------------*/
+    const Gate& get_gate(int gateindex) const;
+
+    /*Get member-------------------------------------------*/
+    int get_num_qubit() const;
+    int get_gate_num() const;
+
+
 private:
 
-
-    struct Gate{
-        std::string name;
-        std::vector<int> qubits;
-    };
 
 
     int     num_qubit_;

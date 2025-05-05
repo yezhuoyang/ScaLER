@@ -7,6 +7,7 @@
 #include <ostream>
 #include <string>
 
+
 namespace QEPG{
 
 
@@ -18,6 +19,9 @@ class QEPG{
     
         QEPG();
         ~QEPG();
+
+
+        void backward_graph_construction();
 
     private:
 
