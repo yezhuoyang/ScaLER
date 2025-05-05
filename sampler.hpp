@@ -19,17 +19,17 @@ class sampler{
     
     /*---------------------------------------ctor----------*/
         sampler();
-        explicit sampler(int num_total_paulierror);
+        explicit sampler(size_t num_total_paulierror);
         ~sampler();
 
-        
+
     /*---------------------------------------Sample one vector with fixed weight----------*/        
-        std::vector<int> sample_fixed_one_two_three(int weight);
+        std::vector<size_t> sample_fixed_one_two_three(size_t weight);
 
 
     private:
 
-        int     num_total_pauliError_;
+        size_t     num_total_pauliError_;
 
 
 
