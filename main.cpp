@@ -48,24 +48,36 @@ Matrix multiply(const Matrix& A, const Matrix& B){
 
 
 #include "clifford.hpp"
+#include <stdexcept>
+#include <fstream>
+#include <sstream>
 
-// Ensure the QEPG.hpp file defines the 'clifford' namespace or class
-// and includes the necessary declarations for 'cliffordcircuit'.
+std::string read_file_to_string(const std::string& path)
+{
+    std::ifstream in(path, std::ios::in | std::ios::binary);
+    if(!in) throw std::runtime_error("Cannot open "+ path);
+
+    std::ostringstream buffer;
+    buffer<< in.rdbuf();
+    return buffer.str();
+};
+
+
 
 
 
 int main()
 {
     clifford::cliffordcircuit c(3);
-    c.set_error_rate(1e-3);
-    c.add_hadamard(0);
-    c.add_cnot(0, 1);
-    c.add_XError(2);
-    c.print_circuit();
 
-    const clifford::Gate& g=c.get_gate(2);
+    try{
+        std::string stim_str=read_file_to_string("C:/Users/yezhu/OneDrive/Documents/GitHub/Sampling/stimprograms/surface3");
+        c.compile_from_rewrited_stim_string(stim_str);
+    } catch(const std::exception& e){
+        std::cerr<<e.what()<<'\n';
+    }
 
-    std::cout<<g.name<<"\n";
+
 
 }
 

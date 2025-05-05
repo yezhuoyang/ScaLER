@@ -1,7 +1,7 @@
 #include "clifford.hpp"
 #include <iomanip>
 #include <iostream>
-
+#include <string_view>
 
 namespace clifford{
 
@@ -78,8 +78,37 @@ void cliffordcircuit::set_num_qubit(int num_qubit) {num_qubit_=num_qubit;}
 
 
 
+
+/*Helper function------------------------------------------------------------*/
+
+
+template <typename Callback>
+void for_each_line(std::string_view sv, Callback&& callback){
+    while(!sv.empty()){
+        auto pos = sv.find_first_of("\n\r");
+        std::string_view line=sv.substr(0,pos);
+        callback(line);
+
+        if(pos == sv.npos) break;
+        sv.remove_prefix(pos+1);
+
+        if(!sv.empty()&&sv.front()=='\n'&& line.back()=='\r')
+        sv.remove_prefix(1);
+    }
+}
+
+
+
+
+
+
 /*compile from stim string---------------------------------------------------*/
 void cliffordcircuit::compile_from_rewrited_stim_string(std::string stim_str){
+    
+    for_each_line(stim_str, [](std::string_view line){
+        std::cout<<line<<"\n";
+    });
+
 
 }
 
