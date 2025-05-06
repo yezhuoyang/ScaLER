@@ -48,7 +48,7 @@ void print_bit_matrix(const std::vector<BitRow>& rows,
 }
 
 
-void QEPG::print_detectorMatrix(char zero, char one){
+void QEPG::print_detectorMatrix(char zero, char one) const{
 
     std::cout<<"-----------detectorMatrix:----------------------\n";
     for(const auto& row:detectorMatrix_){
@@ -158,7 +158,13 @@ void QEPG::backward_graph_construction(){
 
 
 
+const std::vector<Row>& QEPG::get_detectorMatrix() const noexcept{
+    return detectorMatrix_;
+} 
 
+const std::vector<Row>& QEPG::get_dectorMatrixTrans() const noexcept{
+    return detectorMatrixTranspose_;
+}
 
 
 

@@ -9,6 +9,8 @@
 #include <vector>
 #include <random>
 #include <unordered_set>  
+#include "QEPG.hpp"
+
 
 namespace SAMPLE{
 
@@ -47,9 +49,11 @@ class sampler{
         std::vector<singlePauli> generate_sample_Floyd(size_t weight);
 
 
+        QEPG::Row calculate_output_from_one_sample(std::vector<singlePauli> sample);
 
 
     private:
+
 
         size_t     num_total_pauliError_;
 

@@ -12,7 +12,7 @@
 
 namespace QEPG{
 
-
+using Row=boost::dynamic_bitset<>;
 
 class QEPG{
 
@@ -25,7 +25,11 @@ class QEPG{
 
         void backward_graph_construction();
 
-        void print_detectorMatrix(char zero = '0', char one='1');
+        void print_detectorMatrix(char zero = '0', char one='1') const;
+
+        const std::vector<Row>& get_detectorMatrix() const noexcept; 
+
+        const std::vector<Row>& get_dectorMatrixTrans() const noexcept;
 
     private:
 
@@ -34,11 +38,11 @@ class QEPG{
         std::size_t total_noise_=0;
 
         std::size_t COLS = 3*total_noise_;
-        using Row=boost::dynamic_bitset<>;
+
 
 
         std::vector<Row> detectorMatrix_;
-        
+
         std::vector<Row> detectorMatrixTranspose_;
         
 };
