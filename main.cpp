@@ -115,31 +115,32 @@ int main()
     // print_bit_matrix(M);       // default '0'/'1'
     // std::cout << '\n';
     
-    // clifford::cliffordcircuit c(3);
+    clifford::cliffordcircuit c(3);
 
-    // try{
-    //     std::string stim_str=read_file_to_string("C:/Users/yezhu/OneDrive/Documents/GitHub/Sampling/stimprograms/simple");
-    //     c.compile_from_rewrited_stim_string(stim_str);
-    // } catch(const std::exception& e){
-    //     std::cerr<<e.what()<<'\n';
-    // }
-
-    // c.print_circuit();
-
-    // QEPG::QEPG graph(c,c.get_num_detector(),c.get_num_noise());
-
-
-    // graph.backward_graph_construction();
-
-    SAMPLE::sampler sampler(100);
-
-
-    std::vector<SAMPLE::singlePauli> result=sampler.generate_sample_Floyd(10);
-
-    for(SAMPLE::singlePauli sample:result){
-        std::cout<<"("<<sample.qindex<<","<<sample.type<<") ";
+    try{
+        std::string stim_str=read_file_to_string("C:/Users/yezhu/OneDrive/Documents/GitHub/Sampling/stimprograms/cnot01");
+        c.compile_from_rewrited_stim_string(stim_str);
+    } catch(const std::exception& e){
+        std::cerr<<e.what()<<'\n';
     }
-    std::cout<<"\n";
+
+    c.print_circuit();
+
+    QEPG::QEPG graph(c,c.get_num_detector(),c.get_num_noise());
+
+
+    graph.backward_graph_construction();
+    graph.print_detectorMatrix('0','1');
+
+    // SAMPLE::sampler sampler(100);
+
+
+    // std::vector<SAMPLE::singlePauli> result=sampler.generate_sample_Floyd(10);
+
+    // for(SAMPLE::singlePauli sample:result){
+    //     std::cout<<"("<<sample.qindex<<","<<sample.type<<") ";
+    // }
+    // std::cout<<"\n";
 
 
 }

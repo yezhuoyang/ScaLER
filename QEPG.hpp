@@ -25,6 +25,7 @@ class QEPG{
 
         void backward_graph_construction();
 
+        void print_detectorMatrix(char zero = '0', char one='1');
 
     private:
 
@@ -37,7 +38,8 @@ class QEPG{
 
 
         std::vector<Row> detectorMatrix_;
-
+        
+        std::vector<Row> detectorMatrixTranspose_;
         
 };
 }

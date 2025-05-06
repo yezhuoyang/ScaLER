@@ -48,6 +48,25 @@ void print_bit_matrix(const std::vector<BitRow>& rows,
 }
 
 
+void QEPG::print_detectorMatrix(char zero, char one){
+
+    std::cout<<"-----------detectorMatrix:----------------------\n";
+    for(const auto& row:detectorMatrix_){
+        for(std::size_t c=0;c<row.size();++c){
+            std::cout<<(row.test(c)? one:zero);
+        }
+        std::cout<<"\n";
+    }
+    std::cout<<"-----------detectorMatrix(Transpose):----------------------\n";
+    for(const auto& row:detectorMatrixTranspose_){
+        for(std::size_t c=0;c<row.size();++c){
+            std::cout<<(row.test(c)? one:zero);
+        }
+        std::cout<<"\n";
+    }
+}
+
+
 
 
 /*---------------Construction of the QEPG graph-------------------------------*/
@@ -62,6 +81,8 @@ void QEPG::backward_graph_construction(){
     size_t total_meas=circuit.get_num_meas();
     size_t current_meas_index=circuit.get_num_meas()-1;
     size_t current_noise_index=total_noise_-1;
+
+
     for(int t=gate_size-1;t>=0;t--){
         const auto& gate=circuit.get_gate(t);
         std::string name=gate.name;
@@ -117,6 +138,21 @@ void QEPG::backward_graph_construction(){
             current_x_prop[qindex].swap(current_z_prop[qindex]);   // fast, no copy
         }
     }
+
+    /*
+    Compute the transpose of detectorMatrix for future calculation
+    */
+    const std::size_t n_rows=detectorMatrix_.size();
+    const std::size_t n_cols=n_rows ? detectorMatrix_[0].size():0;
+    detectorMatrixTranspose_.assign(n_cols, Row(n_rows));
+    
+    for(std::size_t r=0; r<n_rows; ++r){
+        const Row& src= detectorMatrix_[r];
+        for(std::size_t c=src.find_first();c!=Row::npos; c=src.find_next(c)){
+            detectorMatrixTranspose_[c].set(r);
+        }
+    }
+
 
 } 
 
