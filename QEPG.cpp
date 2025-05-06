@@ -166,7 +166,13 @@ const std::vector<Row>& QEPG::get_dectorMatrixTrans() const noexcept{
     return detectorMatrixTranspose_;
 }
 
+const std::vector<Row>& QEPG::get_parityPropMatrix() const noexcept{
+    return parityPropMatrix_;
+}
 
 
+void compute_parityPropMatrix(){
+
+}
 
 }

@@ -31,6 +31,8 @@ class QEPG{
 
         const std::vector<Row>& get_dectorMatrixTrans() const noexcept;
 
+        const std::vector<Row>& get_parityPropMatrix() const noexcept; 
+
     private:
 
         clifford::cliffordcircuit circuit;
@@ -39,12 +41,13 @@ class QEPG{
 
         std::size_t COLS = 3*total_noise_;
 
-
+        std::vector<Row> parityPropMatrix_;        
 
         std::vector<Row> detectorMatrix_;
 
         std::vector<Row> detectorMatrixTranspose_;
         
+        void compute_parityPropMatrix();
 };
 }
 
