@@ -7,3 +7,15 @@ This is the compiler implemented in C++ that sampling and calculate logical erro
 
 
 The code is developed in C++17. 
+
+
+We are using dynamic bitset from boost, to install it, run:
+
+```bash
+choco install   boost-msvc-14.3 -y
+```
+
+The boost header file will be stored under the path "C:\local\boost_1_87_0\boost". Add this path into VScode cpp include path. 
+
+
+

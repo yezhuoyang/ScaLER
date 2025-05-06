@@ -1,2 +1,2 @@
-g++ -std=c++17 -Wall -Wextra -pedantic -O3 main.cpp clifford.cpp -o demo
+g++ -std=c++20 -I"C:\local\boost_1_87_0" -Wall -Wextra -pedantic -O3 main.cpp clifford.cpp -o demo
 ./demo

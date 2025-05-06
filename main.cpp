@@ -64,22 +64,57 @@ std::string read_file_to_string(const std::string& path)
 
 
 
+#include "QEPG.hpp"
 
+
+template<class BitRow>
+void print_bit_matrix(const std::vector<BitRow>& rows,
+                      char zero = '0', char one='1')
+{
+    if(rows.empty()) return;
+
+    const std::size_t cols= rows.front().size();
+    for(const auto& r: rows){
+        if(r.size()!=cols){
+            std::cerr<<"[print_bit_matrix] row width mismatach\n";
+            return;
+        }
+        for(std::size_t c=0; c<cols;++c){
+            std::cout<<(r.test(c)? one: zero);
+        }
+        std::cout<<"\n";
+    }
+}
 
 int main()
 {
-    clifford::cliffordcircuit c(3);
 
-    try{
-        std::string stim_str=read_file_to_string("C:/Users/yezhu/OneDrive/Documents/GitHub/Sampling/stimprograms/surface3");
-        c.compile_from_rewrited_stim_string(stim_str);
-    } catch(const std::exception& e){
-        std::cerr<<e.what()<<'\n';
-    }
+    
+    // clifford::cliffordcircuit* c=new clifford::cliffordcircuit(3);
 
-    c.print_circuit();
+    // try{
+    //     std::string stim_str=read_file_to_string("C:/Users/yezhu/OneDrive/Documents/GitHub/Sampling/stimprograms/surface3");
+    //     c->compile_from_rewrited_stim_string(stim_str);
+    // } catch(const std::exception& e){
+    //     std::cerr<<e.what()<<'\n';
+    // }
 
+    // c->print_circuit();
+    // delete c;
 
+    
+    std::size_t rows = 4, cols = 8;
+    std::vector<boost::dynamic_bitset<>> M(rows, boost::dynamic_bitset<>(cols));
+
+    // set a few bits
+    M[0].set(0).set(3);
+    M[1].set(4);
+    M[2].set(1).set(2).set(7);
+    M[3].flip();               // row of all 1s
+
+    print_bit_matrix(M);       // default '0'/'1'
+    std::cout << '\n';
+    print_bit_matrix(M, '.', '#');   // custom glyphs
 }
 
 
