@@ -88,7 +88,9 @@ void cliffordcircuit::add_reset(size_t qindex){
 }
 
 void cliffordcircuit::add_measurement(size_t qindex){
+    measureindexList.push_back(circuit_.size());
     circuit_.push_back({"M", {qindex}});
+    num_meas_++;
     num_qubit_=std::max(num_qubit_,qindex+1);
 }
 
@@ -170,6 +172,67 @@ inline int to_int(std::string_view tok){
 }
 
 
+
+
+//--------------------------------------------------------------------
+//  Consume one  rec[<signed_int>]  from the front of `sv`.
+//  On success:
+//      returns the integer
+//      advances `sv` to just after the closing ']'
+//  Throws std::runtime_error on malformed input.
+//
+inline int parse_one_rec(std::string_view& sv)
+{
+    constexpr std::string_view tag = "rec[";
+    const auto pos = sv.find(tag);
+    if (pos == std::string_view::npos)
+        throw std::runtime_error{"missing 'rec['"};
+
+    sv.remove_prefix(pos + tag.size());          // skip "rec["
+
+    const char* begin = sv.data();
+    auto end_offset   = sv.find(']');
+    if (end_offset == std::string_view::npos)
+        throw std::runtime_error{"missing ']'"};
+
+    int value{};
+    auto res = std::from_chars(begin, begin + end_offset, value);
+    if (res.ec != std::errc())
+        throw std::runtime_error{"bad integer inside rec[]"};
+
+    sv.remove_prefix(end_offset + 1);            // drop "<int>]"
+    return value;
+}
+
+
+//--------------------------------------------------------------------
+//  Parse *all* rec[...] occurrences in a DETECTOR line.
+//  The input `rest` must begin with "(x, y, z)" (already trimmed of
+//  the "DETECTOR" token) and may contain any number of rec[...] tokens.
+//  Returns a vector<int> of the signed indices in the order found.
+//
+inline std::vector<int> parse_detector_recs(std::string_view rest)
+{
+    // 1.  Skip the coordinate block "(…, …, …)"
+    auto close_paren = rest.find(')');
+    if (close_paren != std::string_view::npos)
+        rest.remove_prefix(close_paren + 1);
+
+    // 2.  Collect every rec[...] that follows
+    std::vector<int> indices;
+    while (true) {
+        auto next = rest.find("rec[");
+        if (next == std::string_view::npos) break;   // no more
+        // parse_one_rec will advance `rest`
+        indices.push_back(parse_one_rec(rest));
+    }
+    if (indices.empty())
+        throw std::runtime_error{"DETECTOR line has no rec[...] tokens"};
+    return indices;
+}
+
+
+
 inline std::size_t to_size_t(std::string_view tok){
     std::size_t value{};
     const char* begin = tok.data();
@@ -214,11 +277,20 @@ void cliffordcircuit::compile_from_rewrited_stim_string(std::string stim_str){
             size_t qtarget=to_size_t(next_token(rest));
             add_cnot(qcontrol,qtarget);
         }
-        else if(op=="DETECTOR"){
-           
+        else if(op.substr(0,8)=="DETECTOR"){
+           std::vector<int> intlist= parse_detector_recs(rest);
+           num_detectors_++; 
+           paritygroup measuregroup;
+           for(int index: intlist)
+                measuregroup.indexlist.push_back((size_t)((int)num_meas_+index));
+           detectors_.push_back(measuregroup);
         }
-        else if(op=="OBSERVABLE"){
-
+        else if(op.substr(0,10)=="OBSERVABLE"){
+            std::vector<int> intlist= parse_detector_recs(rest);
+            paritygroup measuregroup;
+            for(int index: intlist)
+                 measuregroup.indexlist.push_back((size_t)((int)num_meas_+index));
+            observable_=measuregroup;            
         }
     });
 

@@ -70,6 +70,8 @@ private:
     size_t     num_qubit_=0;
     size_t     num_noise_=0;
     size_t     num_meas_=0;
+    size_t     num_detectors_=0;
+
 
     double  error_rate_{0.0};
 

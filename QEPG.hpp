@@ -36,10 +36,7 @@ class QEPG{
         using Row=boost::dynamic_bitset<>;
 
 
-        std::vector<Row> X_error_;
-        std::vector<Row> Y_error_;
-        std::vector<Row> Z_error_;
-
+        std::vector<Row> detectorMatrix_;
 
         
 };

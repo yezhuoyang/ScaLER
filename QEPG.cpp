@@ -1,6 +1,5 @@
 #include "QEPG.hpp"
-
-
+#include <iostream>
 
 namespace QEPG{
 
@@ -14,9 +13,7 @@ QEPG::QEPG(clifford::cliffordcircuit othercircuit, size_t total_detectors, size_
                     circuit(othercircuit),
                     total_detectors_(total_detectors),
                     total_noise_(total_noise),
-                    X_error_(total_detectors,Row(3*total_noise)),
-                    Y_error_(total_detectors,Row(3*total_noise)), 
-                    Z_error_(total_detectors,Row(3*total_noise))                   
+                    detectorMatrix_(total_detectors,Row(3*total_noise))                   
                     {
 
 }
@@ -57,7 +54,52 @@ void print_bit_matrix(const std::vector<BitRow>& rows,
 
 
 void QEPG::backward_graph_construction(){
-    
+    size_t gate_size=circuit.get_gate_num();
+
+    std::vector<Row> current_x_prop(circuit.get_num_qubit(),Row(3* total_noise_));
+    std::vector<Row> current_y_prop(circuit.get_num_qubit(),Row(3* total_noise_));
+    std::vector<Row> current_z_prop(circuit.get_num_qubit(),Row(3* total_noise_));
+
+
+
+    for(int t=gate_size;t>=0;t--){
+        const auto& gate=circuit.get_gate(t);
+
+
+        std::string name=gate.name;
+        /*
+        *   First case, when the gate is a depolarization noise
+        */
+        if(name=="DEPOLARIZE1"){
+                std::cout<<"Find depolarization noise!";
+        }
+        /*
+        *   When the gate is a measurement
+        */
+        if(name=="M"){
+
+        }
+        /*
+        *   When the gate is a reset
+        */
+        if(name=="R"){
+
+
+        }
+        /*
+        *   When the gate is a CNOT
+        */
+        if(name=="cnot"){
+
+
+        }
+
+        if(name=="h"){
+
+        }
+
+    }
+
 } 
 
 
