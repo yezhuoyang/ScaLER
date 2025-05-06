@@ -62,11 +62,12 @@ void QEPG::backward_graph_construction(){
 
 
 
-    for(int t=gate_size;t>=0;t--){
+    for(int t=gate_size-1;t>=0;t--){
         const auto& gate=circuit.get_gate(t);
 
 
         std::string name=gate.name;
+        std::cout<<name<<"\n";
         /*
         *   First case, when the gate is a depolarization noise
         */

@@ -54,11 +54,13 @@ public:
     const Gate& get_gate(size_t gateindex) const;
 
     /*Setter/Getter of class members-------------------------------------------*/
-    int get_num_qubit() const;
+    size_t get_num_qubit() const;
     void set_num_qubit(size_t num_qubit);
-    int get_gate_num() const;
-    int get_num_meas() const;
-    int get_num_noise() const;
+    size_t get_gate_num() const;
+    size_t get_num_meas() const;
+    size_t get_num_noise() const;
+    size_t get_num_detector() const;
+
 
     /*compile from stim string---------------------------------------------------*/
     void compile_from_rewrited_stim_string(std::string stim_str);
@@ -76,7 +78,7 @@ private:
     double  error_rate_{0.0};
 
     std::vector<Gate> circuit_;
-    std::vector<size_t> measureindexList;
+    std::vector<size_t> measureindexList_;
 
     std::vector<paritygroup> detectors_;
     paritygroup observable_;

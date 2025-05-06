@@ -36,6 +36,7 @@ void cliffordcircuit::add_ZError(size_t qindex) {
 
 void cliffordcircuit::add_depolarize1(size_t qindex) {
     circuit_.push_back({"DEPOLARIZE1", {qindex}});
+    num_noise_++;
     num_qubit_=std::max(num_qubit_,qindex+1);
 }
 
@@ -45,26 +46,31 @@ void cliffordcircuit::add_depolarize1(size_t qindex) {
 
 
 void cliffordcircuit::add_hadamard(size_t qindex){
+    add_depolarize1(qindex);
     circuit_.push_back({"h", {qindex}});
     num_qubit_=std::max(num_qubit_,qindex+1);
 }
 
 void cliffordcircuit::add_phase(size_t qindex){
+    add_depolarize1(qindex);
     circuit_.push_back({"p", {qindex}});
     num_qubit_=std::max(num_qubit_,qindex+1);
 }
 
 void cliffordcircuit::add_pauliX(size_t qindex){
+    add_depolarize1(qindex);
     circuit_.push_back({"x", {qindex}});
     num_qubit_=std::max(num_qubit_,qindex+1);
 }
 
 void cliffordcircuit::add_pauliy(size_t qindex){
+    add_depolarize1(qindex);
     circuit_.push_back({"y", {qindex}});
     num_qubit_=std::max(num_qubit_,qindex+1);
 }
 
 void cliffordcircuit::add_pauliz(size_t qindex){
+    add_depolarize1(qindex);
     circuit_.push_back({"z", {qindex}});
     num_qubit_=std::max(num_qubit_,qindex+1);
 }
@@ -74,6 +80,8 @@ void cliffordcircuit::add_pauliz(size_t qindex){
 
 
 void cliffordcircuit::add_cnot(size_t qcontrol, size_t qtarget){
+    add_depolarize1(qcontrol);
+    add_depolarize1(qtarget);   
     circuit_.push_back({"cnot", {qcontrol,qtarget}});
     num_qubit_=std::max(num_qubit_,qcontrol+1);
     num_qubit_=std::max(num_qubit_,qtarget+1);    
@@ -83,12 +91,14 @@ void cliffordcircuit::add_cnot(size_t qcontrol, size_t qtarget){
 /*--------------------------------------------Reset/Measurement gadget---------------*/
 
 void cliffordcircuit::add_reset(size_t qindex){
+    add_depolarize1(qindex);
     circuit_.push_back({"R", {qindex}});
     num_qubit_=std::max(num_qubit_,qindex+1);
 }
 
 void cliffordcircuit::add_measurement(size_t qindex){
-    measureindexList.push_back(circuit_.size());
+    add_depolarize1(qindex);
+    measureindexList_.push_back(circuit_.size());
     circuit_.push_back({"M", {qindex}});
     num_meas_++;
     num_qubit_=std::max(num_qubit_,qindex+1);
@@ -99,14 +109,51 @@ void cliffordcircuit::add_measurement(size_t qindex){
 
 
 void cliffordcircuit::print_circuit() const{
-    std::cout<<"\n--- Clifford circuit ("<<num_qubit_<<" qubits, p= "<< std::setprecision(4)<< error_rate_<<")-------\n";
+    std::cout << '\n'
+              << "----------------------- Clifford circuit-----------------------\n"
+              << "    qubits      : " << num_qubit_      << '\n'
+              << "    error rate  : " << std::fixed << std::setprecision(4)
+                                          << error_rate_    << '\n'
+              << "    noise terms : " << num_noise_      << '\n'
+              << "    num measures  : " << num_meas_ << '\n'              
+              << "    detectors   : " << num_detectors_  << '\n'
+              << "-------------------------------------------------------------\n";
 
-    for(std::size_t i=0; i< circuit_.size(); ++i){
-        std::cout<<std::setw(4)<<i << ":"<<std::left<<std::setw(10)<<circuit_[i].name <<" ";
-        for(auto q: circuit_[i].qubits) std::cout<<"q"<<q<<" ";
+    const std::size_t n = circuit_.size();
+    const int width = static_cast<int>(std::to_string(n - 1).size());  // digits
+
+    for (std::size_t i = 0; i < n; ++i) {
+        const auto& g = circuit_[i];
+
+        std::cout << std::setw(width) << i << ": "
+                << std::left << std::setw(11) << g.name  // longest = "DEPOLARIZE1"
+                << ' ';
+
+        for (auto q : g.qubits)
+            std::cout << 'q' << q << ' ';
         std::cout << '\n';
     }
-    std::cout<<"-------------------------------------------------------------\n";
+    std::cout<<"----------------------Detector measurements---------------------------------------\n";
+    int index=0;
+    for(const auto& paritygroup : detectors_){
+        std::cout<<"Detector["<<index<<"]: ";
+        for(const auto& index: paritygroup.indexlist)
+             std::cout<<index<<" ";
+        std::cout<<"\n";        
+        index++;
+    }
+    std::cout<<"----------------------Observable measurements---------------------------------------\n";
+    std::cout<<"Observable[0]: ";
+    for(const auto& index: observable_.indexlist)
+        std::cout<<index<<" ";
+    std::cout<<"\n";    
+    std::cout<<"----------------------Measurement to gate index---------------------------------------\n";
+    index=0;
+    for(const auto& Mindex:measureindexList_){
+        std::cout<<"M["<<index<<"]: "<<Mindex<<"\n";
+        index++;
+    }
+
 }
 
 
@@ -115,17 +162,21 @@ void cliffordcircuit::print_circuit() const{
 const Gate& cliffordcircuit::get_gate(size_t gateindex) const{return circuit_.at(gateindex);}
 
 /*Get member-------------------------------------------*/
-int cliffordcircuit::get_num_qubit() const{return num_qubit_;}
-int cliffordcircuit::get_gate_num() const{return circuit_.size();}
+size_t cliffordcircuit::get_num_qubit() const{return num_qubit_;}
+size_t cliffordcircuit::get_gate_num() const{return circuit_.size();}
 
 void cliffordcircuit::set_num_qubit(size_t num_qubit) {num_qubit_=num_qubit;}
 
-int cliffordcircuit::get_num_meas() const{
+size_t cliffordcircuit::get_num_meas() const{
     return num_meas_;
 }
 
-int cliffordcircuit::get_num_noise() const{
+size_t cliffordcircuit::get_num_noise() const{
     return num_noise_;
+}
+
+size_t cliffordcircuit::get_num_detector() const{
+    return num_detectors_;
 }
 
 

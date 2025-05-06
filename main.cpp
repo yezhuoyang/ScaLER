@@ -118,15 +118,18 @@ int main()
     clifford::cliffordcircuit c(3);
 
     try{
-        std::string stim_str=read_file_to_string("C:/Users/yezhu/OneDrive/Documents/GitHub/Sampling/stimprograms/surface3");
+        std::string stim_str=read_file_to_string("C:/Users/yezhu/OneDrive/Documents/GitHub/Sampling/stimprograms/simple");
         c.compile_from_rewrited_stim_string(stim_str);
     } catch(const std::exception& e){
         std::cerr<<e.what()<<'\n';
     }
 
+    c.print_circuit();
+
+    // QEPG::QEPG graph(c,c.get_num_detector(),c.get_num_noise());
 
 
-
+    // graph.backward_graph_construction();
 
 }
 
