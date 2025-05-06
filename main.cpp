@@ -126,10 +126,10 @@ int main()
 
     c.print_circuit();
 
-    // QEPG::QEPG graph(c,c.get_num_detector(),c.get_num_noise());
+    QEPG::QEPG graph(c,c.get_num_detector(),c.get_num_noise());
 
 
-    // graph.backward_graph_construction();
+    graph.backward_graph_construction();
 
 }
 

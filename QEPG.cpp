@@ -13,7 +13,7 @@ QEPG::QEPG(clifford::cliffordcircuit othercircuit, size_t total_detectors, size_
                     circuit(othercircuit),
                     total_detectors_(total_detectors),
                     total_noise_(total_noise),
-                    detectorMatrix_(total_detectors,Row(3*total_noise))                   
+                    detectorMatrix_(othercircuit.get_num_meas(),Row(3*total_noise))                   
                     {
 
 }
@@ -55,50 +55,67 @@ void print_bit_matrix(const std::vector<BitRow>& rows,
 
 void QEPG::backward_graph_construction(){
     size_t gate_size=circuit.get_gate_num();
-
     std::vector<Row> current_x_prop(circuit.get_num_qubit(),Row(3* total_noise_));
     std::vector<Row> current_y_prop(circuit.get_num_qubit(),Row(3* total_noise_));
     std::vector<Row> current_z_prop(circuit.get_num_qubit(),Row(3* total_noise_));
 
-
-
+    size_t total_meas=circuit.get_num_meas();
+    size_t current_meas_index=circuit.get_num_meas()-1;
+    size_t current_noise_index=total_noise_-1;
     for(int t=gate_size-1;t>=0;t--){
         const auto& gate=circuit.get_gate(t);
-
-
         std::string name=gate.name;
-        std::cout<<name<<"\n";
         /*
         *   First case, when the gate is a depolarization noise
         */
         if(name=="DEPOLARIZE1"){
-                std::cout<<"Find depolarization noise!";
+                size_t qindex=gate.qubits[0];
+                for(size_t j=0;j<total_meas;j++){
+                        detectorMatrix_[j].set(current_noise_index,current_x_prop[qindex].test(j));
+                        detectorMatrix_[j].set(total_noise_+current_noise_index,current_y_prop[qindex].test(j));
+                        detectorMatrix_[j].set(total_noise_*2+current_noise_index,current_z_prop[qindex].test(j));        
+                }
+                current_noise_index--;
+                continue;
         }
         /*
         *   When the gate is a measurement
         */
         if(name=="M"){
-
+            size_t qindex=gate.qubits[0];
+            current_x_prop[qindex].set(current_meas_index);
+            current_y_prop[qindex].set(current_meas_index);
+            current_meas_index--;
+            continue;
         }
         /*
         *   When the gate is a reset
         */
         if(name=="R"){
-
-
+            size_t qindex=gate.qubits[0];
+            for(size_t j=0;j<total_meas;j++){
+                    current_x_prop[qindex].set(j,false);
+                    current_y_prop[qindex].set(j,false);   
+                    current_z_prop[qindex].set(j,false);       
+            }
         }
         /*
         *   When the gate is a CNOT
         */
         if(name=="cnot"){
-
-
+            size_t qcontrol=gate.qubits[0];           
+            size_t qtarget=gate.qubits[1];
+            current_x_prop[qcontrol]^=current_x_prop[qtarget];
+            current_z_prop[qtarget]^=current_z_prop[qcontrol];        
+            current_y_prop[qcontrol]^=current_x_prop[qtarget];           
+            current_y_prop[qtarget]^=current_z_prop[qcontrol];               
+            continue;
         }
 
         if(name=="h"){
-
+            size_t qindex=gate.qubits[0];
+            current_x_prop[qindex].swap(current_z_prop[qindex]);   // fast, no copy
         }
-
     }
 
 } 
