@@ -7,8 +7,21 @@
 #include <ostream>
 #include <string>
 #include <vector>
+#include <random>
+#include <unordered_set>  
 
 namespace SAMPLE{
+
+
+
+const size_t PAULIX = 1;
+const size_t PAULIY = 2;
+const size_t PAULIZ = 3;
+
+struct singlePauli{
+    size_t qindex;
+    size_t type;
+};
 
 
 
@@ -25,6 +38,15 @@ class sampler{
 
     /*---------------------------------------Sample one vector with fixed weight----------*/        
         std::vector<size_t> sample_fixed_one_two_three(size_t weight);
+
+
+        /*
+        Generate a single sample with weight error by Floyd method. 
+        
+        */
+        std::vector<singlePauli> generate_sample_Floyd(size_t weight);
+
+
 
 
     private:
