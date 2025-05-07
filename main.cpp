@@ -134,7 +134,7 @@ void store_outputt_to_file(std::string filepath){
 
     clifford::cliffordcircuit c;
     try{
-        std::string stim_str=read_file_to_string("C:/Users/yezhu/OneDrive/Documents/GitHub/Sampling/stimprograms/simple");
+        std::string stim_str=read_file_to_string("C:/Users/yezhu/OneDrive/Documents/GitHub/Sampling/stimprograms/surface3");
         c.compile_from_rewrited_stim_string(stim_str);
     } catch(const std::exception& e){
         std::cerr<<e.what()<<'\n';
@@ -147,7 +147,7 @@ void store_outputt_to_file(std::string filepath){
 
 
     std::vector<QEPG::Row> samplecontainer;
-    sampler.generate_many_output_samples(graph,samplecontainer,1,5);
+    sampler.generate_many_output_samples(graph,samplecontainer,2,100);
 
 
     /*--------------------------------------------------------------------
@@ -239,7 +239,7 @@ int main()
     // std::cout<<"\n";
 
     //benchmark_surface_million_sample();
-    store_outputt_to_file("output");
+    store_outputt_to_file("output.txt");
 }
 
 
