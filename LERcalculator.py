@@ -2,6 +2,8 @@ import stim
 import pymatching
 from interface import *
 from pathlib import Path
+import numpy as np
+
 
 def rewrite_stim_code(code: str) -> str:
     """
@@ -647,9 +649,32 @@ class CliffordCircuit:
 
 
 
+import subprocess
 
 
-distance=3
+proc = subprocess.Popen(
+    ["./demo.exe"],   # or full path
+    stdout=subprocess.PIPE,
+    text=True,           # => str lines not bytes
+    encoding="ascii"
+)
+
+index=0
+
+states, observables = [], []
+for line in proc.stdout:
+    bits = line.rstrip("\n")             # drop newline
+    if(bits[0]=='['):
+        continue
+    state_bits = bits[:-1]              # all but last char
+    obs_bit    = bits[-1]               # last char only
+    states.append([b == "1" for b in state_bits])
+    observables.append([obs_bit == "1"])
+
+
+proc.wait()
+
+distance=11
 circuit=CliffordCircuit(2)
 circuit.set_error_rate(0.0005)
 stim_circuit=stim.Circuit.generated("surface_code:rotated_memory_z",rounds=distance*3,distance=distance).flattened()
@@ -664,11 +689,28 @@ detector_error_model = new_stim_circuit.detector_error_model(decompose_errors=Fa
 matcher = pymatching.Matching.from_detector_error_model(detector_error_model)
 
 
-filepath=Path("output.txt")
-detection_events,observable_flips=read_file(filepath)
 
+# print("Start reading!")
+
+# filepath=Path("output.txt")
+# detection_events,observable_flips=read_file(filepath)
+
+# print("Reading done!")
+
+shots=len(states)
 
 # Run the decoder.
-predictions = matcher.decode_batch(detection_events)
+predictions = matcher.decode_batch(states)
 
-print(predictions)
+
+#print(predictions)
+
+num_errors = 0
+for shot in range(shots):
+    actual_for_shot = observables[shot]
+    predicted_for_shot = predictions[shot]
+    if not np.array_equal(actual_for_shot, predicted_for_shot):
+        num_errors += 1
+
+print("Logical error rate")
+print(num_errors/shots)

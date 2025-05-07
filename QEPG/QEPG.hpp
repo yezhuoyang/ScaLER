@@ -39,7 +39,7 @@ void inline print_bit_row(const BitRow& row,
 
 template<class BitRow>
 inline void print_bit_row(const BitRow& row,
-                          std::ostream& out = std::cout,   // default = console
+                          std::ostream& out,   // default = console
                           char zero = '0', char one = '1')
 {
     const std::size_t cols = row.size();

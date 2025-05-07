@@ -9,6 +9,8 @@
 #include <fstream>
 #include <sstream>
 #include <chrono>
+//  g++ -O3 -std=c++20 -I/path/to/eigen  main.cpp
+
 
 std::string read_file_to_string(const std::string& path)
 {
@@ -134,7 +136,7 @@ void store_outputt_to_file(std::string filepath){
 
     clifford::cliffordcircuit c;
     try{
-        std::string stim_str=read_file_to_string("C:/Users/yezhu/OneDrive/Documents/GitHub/Sampling/stimprograms/surface3");
+        std::string stim_str=read_file_to_string("C:/Users/yezhu/OneDrive/Documents/GitHub/Sampling/stimprograms/surface9");
         c.compile_from_rewrited_stim_string(stim_str);
     } catch(const std::exception& e){
         std::cerr<<e.what()<<'\n';
@@ -147,7 +149,7 @@ void store_outputt_to_file(std::string filepath){
 
 
     std::vector<QEPG::Row> samplecontainer;
-    sampler.generate_many_output_samples(graph,samplecontainer,2,100);
+    sampler.generate_many_output_samples(graph,samplecontainer,8,1000000);
 
 
     /*--------------------------------------------------------------------
@@ -173,6 +175,49 @@ void store_outputt_to_file(std::string filepath){
 
 }
 
+
+
+
+
+
+
+
+
+
+/*
+Benchmard the running time of generating 1 million surface code
+sample
+*/
+void print_surface_output(){
+
+
+
+    clifford::cliffordcircuit c;
+    try{
+        std::string stim_str=read_file_to_string("C:/Users/yezhu/OneDrive/Documents/GitHub/Sampling/stimprograms/surface11");
+        c.compile_from_rewrited_stim_string(stim_str);
+    } catch(const std::exception& e){
+        std::cerr<<e.what()<<'\n';
+    }
+
+    QEPG::QEPG graph(c,c.get_num_detector(),c.get_num_noise());
+    graph.backward_graph_construction();
+
+    size_t qubitnum=c.get_num_qubit();
+
+    SAMPLE::sampler sampler(qubitnum);
+
+
+
+    std::vector<QEPG::Row> samplecontainer;
+    sampler.generate_many_output_samples(graph,samplecontainer,2,1000000);
+
+
+    for(QEPG::Row parityresult: samplecontainer){
+        QEPG::print_bit_row(parityresult);
+    }
+
+}
 
 
 
@@ -239,7 +284,8 @@ int main()
     // std::cout<<"\n";
 
     //benchmark_surface_million_sample();
-    store_outputt_to_file("output.txt");
+    //store_outputt_to_file("output.txt");
+    print_surface_output();
 }
 
 
