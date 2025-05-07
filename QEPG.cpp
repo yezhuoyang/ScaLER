@@ -10,7 +10,7 @@ QEPG::QEPG(){
 }
 
 QEPG::QEPG(clifford::cliffordcircuit othercircuit, size_t total_detectors, size_t total_noise):
-                    circuit(othercircuit),
+                    circuit_(othercircuit),
                     total_detectors_(total_detectors),
                     total_noise_(total_noise),
                     detectorMatrix_(othercircuit.get_num_meas(),Row(3*total_noise))                   
@@ -27,25 +27,6 @@ QEPG::~QEPG(){
 
 /*--------------------print QEPG graph---------------------------------------*/
 
-
-template<class BitRow>
-void print_bit_matrix(const std::vector<BitRow>& rows,
-                      char zero = '0', char one='1')
-{
-    if(rows.empty()) return;
-
-    const std::size_t cols= rows.front().size();
-    for(const auto& r: rows){
-        if(r.size()!=cols){
-            std::cerr<<"[print_bit_matrix] row width mismatach\n";
-            return;
-        }
-        for(std::size_t c=0; c<cols;++c){
-            std::cout<<(r.test(c)? one: zero);
-        }
-        std::cout<<"\n";
-    }
-}
 
 
 void QEPG::print_detectorMatrix(char zero, char one) const{
@@ -73,18 +54,18 @@ void QEPG::print_detectorMatrix(char zero, char one) const{
 
 
 void QEPG::backward_graph_construction(){
-    size_t gate_size=circuit.get_gate_num();
-    std::vector<Row> current_x_prop(circuit.get_num_qubit(),Row(3* total_noise_));
-    std::vector<Row> current_y_prop(circuit.get_num_qubit(),Row(3* total_noise_));
-    std::vector<Row> current_z_prop(circuit.get_num_qubit(),Row(3* total_noise_));
+    size_t gate_size=circuit_.get_gate_num();
+    std::vector<Row> current_x_prop(circuit_.get_num_qubit(),Row(3* total_noise_));
+    std::vector<Row> current_y_prop(circuit_.get_num_qubit(),Row(3* total_noise_));
+    std::vector<Row> current_z_prop(circuit_.get_num_qubit(),Row(3* total_noise_));
 
-    size_t total_meas=circuit.get_num_meas();
-    size_t current_meas_index=circuit.get_num_meas()-1;
+    size_t total_meas=circuit_.get_num_meas();
+    size_t current_meas_index=circuit_.get_num_meas()-1;
     size_t current_noise_index=total_noise_-1;
 
 
     for(int t=gate_size-1;t>=0;t--){
-        const auto& gate=circuit.get_gate(t);
+        const auto& gate=circuit_.get_gate(t);
         std::string name=gate.name;
         /*
         *   First case, when the gate is a depolarization noise
@@ -158,6 +139,23 @@ void QEPG::backward_graph_construction(){
 
 
 
+
+inline void transpose_matrix(const std::vector<Row>& mat,std::vector<Row>& matTrans){
+    const std::size_t n_rows=mat.size();
+    const std::size_t n_cols=n_rows ? mat[0].size():0;
+    matTrans.assign(n_cols, Row(n_rows));  
+    for(std::size_t r=0; r<n_rows; ++r){
+        const Row& src= mat[r];
+        for(std::size_t c=src.find_first();c!=Row::npos; c=src.find_next(c)){
+            matTrans[c].set(r);
+        }
+    }    
+}
+
+
+
+
+
 const std::vector<Row>& QEPG::get_detectorMatrix() const noexcept{
     return detectorMatrix_;
 } 
@@ -171,8 +169,53 @@ const std::vector<Row>& QEPG::get_parityPropMatrix() const noexcept{
 }
 
 
-void compute_parityPropMatrix(){
 
+
+
+
+
+/*
+Return the matrix multiplication result of two bitset matrix on Field F2
+*/
+std::vector<Row> bitset_matrix_multiplication(const std::vector<Row>& mat1,const std::vector<Row>& mat2){
+    const size_t row1=mat1.size();
+    const size_t col1=row1? mat1[0].size():0;
+    const size_t row2=mat2.size();
+    const size_t col2=row1? mat2[0].size():0;    
+    std::vector<Row> result(row1,Row(col2));
+    std::vector<Row> mat2transpose;
+    transpose_matrix(mat2,mat2transpose);
+    for(size_t i=0;i<row1;i++){
+        for(size_t j=0;j<col2;j++){
+            result[i][j]=and_popcount(mat1[i],mat2transpose[j])%2? true:false;
+        }
+    }
+    return result;
+}
+
+
+/*
+Now we know the propagation of Pauli error to all measurements, we still need to calculate the 
+propagation of all pauli error to all detector measurement result
+*/
+void QEPG::compute_parityPropMatrix(){
+    const std::vector<clifford::paritygroup>& detector_parity_group=circuit_.get_detector_parity_group();
+    const clifford::paritygroup& observable_group=circuit_.get_observable_parity_group();
+    const size_t row_size=detector_parity_group.size()+1;
+    const size_t col_size=circuit_.get_num_meas();
+
+    std::vector<Row> paritygroupMatrix(row_size,Row(col_size));
+
+    for(size_t i=0; i<detector_parity_group.size();i++){
+        for(size_t index: detector_parity_group[i].indexlist){
+            paritygroupMatrix[i][index]=true;
+        }
+    }
+    for(size_t index: observable_group.indexlist){
+        paritygroupMatrix[detector_parity_group.size()][index]=true;
+    }
+
+    parityPropMatrix_=bitset_matrix_multiplication(paritygroupMatrix,detectorMatrix_);
 }
 
 }

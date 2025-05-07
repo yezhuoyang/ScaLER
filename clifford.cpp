@@ -179,6 +179,13 @@ size_t cliffordcircuit::get_num_detector() const{
     return num_detectors_;
 }
 
+const std::vector<paritygroup>& cliffordcircuit::get_detector_parity_group() const{
+    return detectors_;
+}
+
+const paritygroup& cliffordcircuit::get_observable_parity_group() const{
+    return observable_;
+}
 
 /*Helper functions for parsing------------------------------------------------------------*/
 

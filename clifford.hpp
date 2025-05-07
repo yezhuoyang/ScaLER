@@ -61,6 +61,9 @@ public:
     size_t get_num_noise() const;
     size_t get_num_detector() const;
 
+    const std::vector<paritygroup>& get_detector_parity_group() const;
+    const paritygroup& get_observable_parity_group() const;
+
 
     /*compile from stim string---------------------------------------------------*/
     void compile_from_rewrited_stim_string(std::string stim_str);

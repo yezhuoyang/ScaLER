@@ -9,10 +9,41 @@
 #include <bitset>  
 #include <boost/dynamic_bitset.hpp>
 #include "clifford.hpp"
-
+#include <iostream>
 namespace QEPG{
 
 using Row=boost::dynamic_bitset<>;
+
+std::vector<Row> bitset_matrix_multiplication(const std::vector<Row>& mat1,const std::vector<Row>& mat2);
+
+
+template <typename Bitset>
+inline std::size_t and_popcount(const Bitset& a, const Bitset&b)
+{
+    return (a&b).count();
+}
+
+
+template<class BitRow>
+void print_bit_matrix(const std::vector<BitRow>& rows,
+                      char zero = '0', char one='1')
+{
+    if(rows.empty()) return;
+
+    const std::size_t cols= rows.front().size();
+    for(const auto& r: rows){
+        if(r.size()!=cols){
+            std::cerr<<"[print_bit_matrix] row width mismatach\n";
+            return;
+        }
+        for(std::size_t c=0; c<cols;++c){
+            std::cout<<(r.test(c)? one: zero);
+        }
+        std::cout<<"\n";
+    }
+}
+
+
 
 class QEPG{
 
@@ -35,7 +66,7 @@ class QEPG{
 
     private:
 
-        clifford::cliffordcircuit circuit;
+        clifford::cliffordcircuit circuit_;
         std::size_t total_detectors_ = 0;
         std::size_t total_noise_=0;
 

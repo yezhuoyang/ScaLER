@@ -67,29 +67,54 @@ std::string read_file_to_string(const std::string& path)
 #include "QEPG.hpp"
 #include "sampler.hpp"
 
-template<class BitRow>
-void print_bit_matrix(const std::vector<BitRow>& rows,
-                      char zero = '0', char one='1')
-{
-    if(rows.empty()) return;
 
-    const std::size_t cols= rows.front().size();
-    for(const auto& r: rows){
-        if(r.size()!=cols){
-            std::cerr<<"[print_bit_matrix] row width mismatach\n";
-            return;
-        }
-        for(std::size_t c=0; c<cols;++c){
-            std::cout<<(r.test(c)? one: zero);
-        }
-        std::cout<<"\n";
-    }
+
+
+void test_bitset_pop_count(){
+        std::bitset<8> x("11001110");
+        std::bitset<8> y("01100100");
+        std::cout<<(x^y)<<"\n";
+        size_t pop_count=QEPG::and_popcount(x,y);
+        std::cout<<pop_count<<"\n";
 }
+
+
+QEPG::Row make_row(std::initializer_list<int> bits) {
+    QEPG::Row r(bits.size());
+    std::size_t idx = 0;
+    for (int bit : bits) r[idx++] = (bit != 0);
+    return r;
+}
+
+
+
+
+void test_matrix_multiplication(){
+    // Test 1: Identity × A
+    std::vector<QEPG::Row> I = {
+        make_row({1,0,0}),
+        make_row({0,1,0}),
+        make_row({0,0,1})
+    };
+    std::vector<QEPG::Row> A = {
+        make_row({1,0,1}),
+        make_row({0,1,1}),
+        make_row({1,1,0})
+    };
+
+    auto C = QEPG::bitset_matrix_multiplication(I, A);
+    QEPG::print_bit_matrix(C);
+    assert(C == A);                // passes if implementation is correct
+}
+
+
+
 
 int main()
 {
+    //test_matrix_multiplication();
 
-    
+    //test_bitset_pop_count();
     // clifford::cliffordcircuit* c=new clifford::cliffordcircuit(3);
 
     // try{
@@ -115,22 +140,22 @@ int main()
     // print_bit_matrix(M);       // default '0'/'1'
     // std::cout << '\n';
     
-    clifford::cliffordcircuit c(3);
+    // clifford::cliffordcircuit c(3);
 
-    try{
-        std::string stim_str=read_file_to_string("C:/Users/yezhu/OneDrive/Documents/GitHub/Sampling/stimprograms/cnot01");
-        c.compile_from_rewrited_stim_string(stim_str);
-    } catch(const std::exception& e){
-        std::cerr<<e.what()<<'\n';
-    }
+    // try{
+    //     std::string stim_str=read_file_to_string("C:/Users/yezhu/OneDrive/Documents/GitHub/Sampling/stimprograms/cnot01");
+    //     c.compile_from_rewrited_stim_string(stim_str);
+    // } catch(const std::exception& e){
+    //     std::cerr<<e.what()<<'\n';
+    // }
 
-    c.print_circuit();
+    // c.print_circuit();
 
-    QEPG::QEPG graph(c,c.get_num_detector(),c.get_num_noise());
+    // QEPG::QEPG graph(c,c.get_num_detector(),c.get_num_noise());
 
 
-    graph.backward_graph_construction();
-    graph.print_detectorMatrix('0','1');
+    // graph.backward_graph_construction();
+    // graph.print_detectorMatrix('0','1');
 
     // SAMPLE::sampler sampler(100);
 
