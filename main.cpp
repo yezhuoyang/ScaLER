@@ -4,53 +4,11 @@
 
 
 
-
-using Matrix = std::vector<std::vector<int>>;
-using Row=std::vector<int>;
-using size_type=std::size_t;
-
-
-bool dimensions_match(const Matrix& A, const Matrix& B){
-    return !A.empty() && !B.empty() && A.front().size()==B.size();
-}
-
-void print_matrix(const Matrix& M, const std::string& name= "M"){
-    std::cout<<name<<"("<<M.size()<<" x "<<M.front().size()<<"):\n";
-    constexpr int width=6;
-    for(const Row& r: M){
-        for(int x: r) std::cout << std::setw(width)<<x;
-        std::cout << '\n';
-    }
-    std::cout << "\n";
-}
-
-
-Matrix multiply(const Matrix& A, const Matrix& B){
-
-    if(!dimensions_match(A,B))
-        throw std::invalid_argument("incompatible dimensions for A * B");
-
-
-    size_type R=A.size(),
-              C=B.front().size(),
-              K=B.size();  
-
-    Matrix Cmat(R,Row(C,0));
-
-
-    for(size_type i=0; i<R;++i)
-        for (size_type k=0; k<K; ++k)
-            for (size_type j=0; j<C; ++j)
-                Cmat[i][j]+=A[i][k]*B[k][j];
-
-    return Cmat;
-}
-
-
 #include "clifford.hpp"
 #include <stdexcept>
 #include <fstream>
 #include <sstream>
+
 
 std::string read_file_to_string(const std::string& path)
 {
@@ -109,6 +67,40 @@ void test_matrix_multiplication(){
 
 
 
+/*
+Benchmard the running time of generating 1 million surface code
+sample
+*/
+void benchmark_surface_million_sample(){
+    clifford::cliffordcircuit c;
+    try{
+        std::string stim_str=read_file_to_string("C:/Users/yezhu/OneDrive/Documents/GitHub/Sampling/stimprograms/surface3");
+        c.compile_from_rewrited_stim_string(stim_str);
+    } catch(const std::exception& e){
+        std::cerr<<e.what()<<'\n';
+    }
+    QEPG::QEPG graph(c,c.get_num_detector(),c.get_num_noise());
+    graph.backward_graph_construction();
+    size_t qubitnum=c.get_num_qubit();
+
+    SAMPLE::sampler sampler(qubitnum);
+
+    // std::vector<SAMPLE::singlePauli> result=sampler.generate_sample_Floyd(50);
+    // QEPG::Row parityresult=sampler.calculate_parity_output_from_one_sample(graph,result);
+    // std::cout<<"Sample parity outcome:"<<"\n";
+
+    std::vector<QEPG::Row> samplecontainer;
+    sampler.generate_many_output_samples(graph,samplecontainer,2,100);
+    size_t index=0;
+    for(QEPG::Row parityresult: samplecontainer){
+        std::cout<<index<<":";
+        QEPG::print_bit_row(parityresult);
+        index++;
+    }
+
+}
+
+
 
 int main()
 {
@@ -140,37 +132,37 @@ int main()
     // print_bit_matrix(M);       // default '0'/'1'
     // std::cout << '\n';
     
-    clifford::cliffordcircuit c(3);
+    clifford::cliffordcircuit c;
 
     try{
-        std::string stim_str=read_file_to_string("C:/Users/yezhu/OneDrive/Documents/GitHub/Sampling/stimprograms/cnot01");
+        std::string stim_str=read_file_to_string("C:/Users/yezhu/OneDrive/Documents/GitHub/Sampling/stimprograms/surface9");
         c.compile_from_rewrited_stim_string(stim_str);
     } catch(const std::exception& e){
         std::cerr<<e.what()<<'\n';
     }
 
-    c.print_circuit();
+    //c.print_circuit();
 
-    QEPG::QEPG graph(c,c.get_num_detector(),c.get_num_noise());
+    // QEPG::QEPG graph(c,c.get_num_detector(),c.get_num_noise());
     
 
 
-    graph.backward_graph_construction();
-    graph.print_detectorMatrix('0','1');
+    // graph.backward_graph_construction();
+    // //graph.print_detectorMatrix('0','1');
 
-    size_t qubitnum=c.get_num_qubit();
+    // size_t qubitnum=c.get_num_qubit();
 
-    SAMPLE::sampler sampler(qubitnum);
+    // SAMPLE::sampler sampler(qubitnum);
 
-    std::cout<<"Sampling!!"<<"\n";
-    std::vector<SAMPLE::singlePauli> result=sampler.generate_sample_Floyd(2);
-    for(SAMPLE::singlePauli sample:result){
-        std::cout<<"("<<sample.qindex<<","<<sample.type<<") ";
-    }
-    std::cout<<"\n";
-    QEPG::Row parityresult=sampler.calculate_parity_output_from_one_sample(graph,result);
-    std::cout<<"Sample parity outcome:"<<"\n";
-    QEPG::print_bit_row(parityresult);
+   
+    // std::vector<SAMPLE::singlePauli> result=sampler.generate_sample_Floyd(50);
+    // // for(SAMPLE::singlePauli sample:result){
+    // //     std::cout<<"("<<sample.qindex<<","<<sample.type<<") ";
+    // // }
+    // // std::cout<<"\n";
+    // QEPG::Row parityresult=sampler.calculate_parity_output_from_one_sample(graph,result);
+    // // std::cout<<"Sample parity outcome:"<<"\n";
+    // QEPG::print_bit_row(parityresult);
 
 
     // std::vector<SAMPLE::singlePauli> result=sampler.generate_sample_Floyd(10);
@@ -180,7 +172,7 @@ int main()
     // }
     // std::cout<<"\n";
 
-
+    benchmark_surface_million_sample();
 }
 
 

@@ -49,10 +49,14 @@ class sampler{
         std::vector<singlePauli> generate_sample_Floyd(size_t weight);
 
 
-        QEPG::Row calculate_output_from_one_sample(const QEPG::QEPG& graph,std::vector<singlePauli> sample);
+        inline QEPG::Row calculate_output_from_one_sample(const QEPG::QEPG& graph,std::vector<singlePauli> sample);
 
 
-        QEPG::Row calculate_parity_output_from_one_sample(const QEPG::QEPG& graph,std::vector<singlePauli> sample);
+        inline QEPG::Row calculate_parity_output_from_one_sample(const QEPG::QEPG& graph,const std::vector<singlePauli>& sample);
+
+
+        void generate_many_output_samples(const QEPG::QEPG& graph,std::vector<QEPG::Row>& samplecontainer,size_t pauliweight , size_t samplenumber);
+
 
     private:
 

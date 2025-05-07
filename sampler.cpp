@@ -35,7 +35,6 @@ std::vector<singlePauli> sampler::generate_sample_Floyd(size_t weight){
 
 
     while(result.size()<weight){
-        std::cout<<result.size()<<"\n";
         size_t newpos=(size_t)posdistrib(gen);
         if(usedpos.insert(newpos).second){
             result.emplace_back( singlePauli{ newpos, (size_t)typedistrib(gen)} );  // OK
@@ -45,7 +44,7 @@ std::vector<singlePauli> sampler::generate_sample_Floyd(size_t weight){
 }
 
 
-QEPG::Row sampler::calculate_output_from_one_sample(const QEPG::QEPG& graph,std::vector<singlePauli> sample){
+inline QEPG::Row sampler::calculate_output_from_one_sample(const QEPG::QEPG& graph,std::vector<singlePauli> sample){
 
     const auto&dm=graph.get_dectorMatrixTrans();
 
@@ -74,7 +73,7 @@ QEPG::Row sampler::calculate_output_from_one_sample(const QEPG::QEPG& graph,std:
 
 
 
-QEPG::Row sampler::calculate_parity_output_from_one_sample(const QEPG::QEPG& graph,std::vector<singlePauli> sample){
+inline QEPG::Row sampler::calculate_parity_output_from_one_sample(const QEPG::QEPG& graph,const std::vector<singlePauli>& sample){
     const auto&dm=graph.get_parityPropMatrixTrans();
 
     const std::size_t n_rows=dm.size();
@@ -98,5 +97,21 @@ QEPG::Row sampler::calculate_parity_output_from_one_sample(const QEPG::QEPG& gra
 
     return result;
 }
+
+
+
+
+
+void sampler::generate_many_output_samples(const QEPG::QEPG& graph,std::vector<QEPG::Row>& samplecontainer, size_t pauliweight, size_t samplenumber){
+    samplecontainer.reserve(samplenumber);
+    for(size_t i=0;i<samplenumber;i++){
+        sampler sampler_instance;
+        std::vector<singlePauli> sample = generate_sample_Floyd(pauliweight);
+        samplecontainer.emplace_back(calculate_parity_output_from_one_sample(graph,sample));
+    }
+}
+
+
+
 
 }
