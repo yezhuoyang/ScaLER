@@ -73,7 +73,8 @@ class QEPG{
         std::size_t COLS = 3*total_noise_;
 
         std::vector<Row> parityPropMatrix_;        
-
+        std::vector<Row> parityPropMatrixTranspose_;     
+        
         std::vector<Row> detectorMatrix_;
 
         std::vector<Row> detectorMatrixTranspose_;

@@ -45,6 +45,20 @@ void QEPG::print_detectorMatrix(char zero, char one) const{
         }
         std::cout<<"\n";
     }
+    std::cout<<"-----------ParitygroupMatrix:----------------------\n";
+    for(const auto& row:parityPropMatrix_){
+        for(std::size_t c=0;c<row.size();++c){
+            std::cout<<(row.test(c)? one:zero);
+        }
+        std::cout<<"\n";
+    }
+    std::cout<<"-----------ParitygroupMatrixTranspose:----------------------\n";
+    for(const auto& row:parityPropMatrixTranspose_){
+        for(std::size_t c=0;c<row.size();++c){
+            std::cout<<(row.test(c)? one:zero);
+        }
+        std::cout<<"\n";
+    }        
 }
 
 
@@ -123,18 +137,8 @@ void QEPG::backward_graph_construction(){
     /*
     Compute the transpose of detectorMatrix for future calculation
     */
-    const std::size_t n_rows=detectorMatrix_.size();
-    const std::size_t n_cols=n_rows ? detectorMatrix_[0].size():0;
-    detectorMatrixTranspose_.assign(n_cols, Row(n_rows));
-    
-    for(std::size_t r=0; r<n_rows; ++r){
-        const Row& src= detectorMatrix_[r];
-        for(std::size_t c=src.find_first();c!=Row::npos; c=src.find_next(c)){
-            detectorMatrixTranspose_[c].set(r);
-        }
-    }
-
-
+    transpose_matrix(detectorMatrix_,detectorMatrixTranspose_);
+    compute_parityPropMatrix();
 } 
 
 
@@ -216,6 +220,7 @@ void QEPG::compute_parityPropMatrix(){
     }
 
     parityPropMatrix_=bitset_matrix_multiplication(paritygroupMatrix,detectorMatrix_);
+    transpose_matrix(parityPropMatrix_,parityPropMatrixTranspose_);
 }
 
 }
