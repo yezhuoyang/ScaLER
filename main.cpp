@@ -4,7 +4,7 @@
 
 
 
-#include "clifford.hpp"
+#include "QEPG/clifford.hpp"
 #include <stdexcept>
 #include <fstream>
 #include <sstream>
@@ -22,8 +22,8 @@ std::string read_file_to_string(const std::string& path)
 
 
 
-#include "QEPG.hpp"
-#include "sampler.hpp"
+#include "QEPG/QEPG.hpp"
+#include "QEPG/sampler.hpp"
 
 
 
@@ -80,17 +80,23 @@ void benchmark_surface_million_sample(){
     auto t0 = clock::now();                               // start timer
     clifford::cliffordcircuit c;
     try{
-        std::string stim_str=read_file_to_string("C:/Users/yezhu/OneDrive/Documents/GitHub/Sampling/stimprograms/surface7");
+        std::string stim_str=read_file_to_string("C:/Users/yezhu/OneDrive/Documents/GitHub/Sampling/stimprograms/surface3");
         c.compile_from_rewrited_stim_string(stim_str);
     } catch(const std::exception& e){
         std::cerr<<e.what()<<'\n';
     }
-    QEPG::QEPG graph(c,c.get_num_detector(),c.get_num_noise());
-    graph.backward_graph_construction();
-
     auto t1 = clock::now();                               // stop section‑1
     auto compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
-    std::cout << "[Time to construct QEPG graph:] " << compile_us / 1'000.0 << "ms\n";
+    std::cout << "[Time to read, compile circuit from STIM file:] " << compile_us / 1'000.0 << "ms\n";
+
+
+    t0 = clock::now();       
+    QEPG::QEPG graph(c,c.get_num_detector(),c.get_num_noise());
+    graph.backward_graph_construction();
+    t1 = clock::now();                               // stop section‑1
+    compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
+    std::cout << "[Time to construct QEPG:] " << compile_us / 1'000.0 << "ms\n";
+
 
     size_t qubitnum=c.get_num_qubit();
 
@@ -103,7 +109,7 @@ void benchmark_surface_million_sample(){
     t0 = clock::now();                               // start timer
 
     std::vector<QEPG::Row> samplecontainer;
-    sampler.generate_many_output_samples(graph,samplecontainer,2,1000000);
+    sampler.generate_many_output_samples(graph,samplecontainer,10,1000000);
 
     t1 = clock::now();                               // stop section‑1
     compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
@@ -149,15 +155,7 @@ int main()
 
     // print_bit_matrix(M);       // default '0'/'1'
     // std::cout << '\n';
-    
-    clifford::cliffordcircuit c;
 
-    try{
-        std::string stim_str=read_file_to_string("C:/Users/yezhu/OneDrive/Documents/GitHub/Sampling/stimprograms/surface9");
-        c.compile_from_rewrited_stim_string(stim_str);
-    } catch(const std::exception& e){
-        std::cerr<<e.what()<<'\n';
-    }
 
     //c.print_circuit();
 
