@@ -1,5 +1,7 @@
 #include "QEPG.hpp"
 #include <iostream>
+#include <chrono>
+
 
 namespace QEPG{
 
@@ -84,7 +86,13 @@ inline void transpose_matrix(const std::vector<Row>& mat,std::vector<Row>& matTr
 }
 
 void QEPG::backward_graph_construction(){
+
+    using clock     = std::chrono::steady_clock;          // monotonic, good for benchmarking
+    using microsec  = std::chrono::microseconds;
+    auto t0 = clock::now();                               // start timer
+
     size_t gate_size=circuit_.get_gate_num();
+
     std::vector<Row> current_x_prop(circuit_.get_num_qubit(),Row(3* total_noise_));
     std::vector<Row> current_y_prop(circuit_.get_num_qubit(),Row(3* total_noise_));
     std::vector<Row> current_z_prop(circuit_.get_num_qubit(),Row(3* total_noise_));
@@ -149,12 +157,22 @@ void QEPG::backward_graph_construction(){
             current_x_prop[qindex].swap(current_z_prop[qindex]);   // fast, no copy
         }
     }
-
+    auto t1 = clock::now();                               // stop section‑1
+    auto compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
+    std::cout << "[Backword detector matrix construction:] " << compile_us / 1'000.0 << "ms\n";
     /*
     Compute the transpose of detectorMatrix for future calculation
     */
+    t0 = clock::now();                               // start timer
     transpose_matrix(detectorMatrix_,detectorMatrixTranspose_);
+    t1 = clock::now();                               // stop section‑1
+    compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
+    std::cout << "[Transpose matrix:] " << compile_us / 1'000.0 << "ms\n";
+    t0 = clock::now();                               // start timer
     compute_parityPropMatrix();
+    t1 = clock::now();                               // stop section‑1
+    compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
+    std::cout << "[ compute_parityPropMatrix:] " << compile_us / 1'000.0 << "ms\n";
 } 
 
 
@@ -207,6 +225,11 @@ Now we know the propagation of Pauli error to all measurements, we still need to
 propagation of all pauli error to all detector measurement result
 */
 void QEPG::compute_parityPropMatrix(){
+
+    using clock     = std::chrono::steady_clock;          // monotonic, good for benchmarking
+    using microsec  = std::chrono::microseconds;
+    auto t0 = clock::now();                               // start timer
+
     const std::vector<clifford::paritygroup>& detector_parity_group=circuit_.get_detector_parity_group();
     const clifford::paritygroup& observable_group=circuit_.get_observable_parity_group();
     const size_t row_size=detector_parity_group.size()+1;
@@ -222,9 +245,21 @@ void QEPG::compute_parityPropMatrix(){
     for(size_t index: observable_group.indexlist){
         paritygroupMatrix[detector_parity_group.size()][index]=true;
     }
+    auto t1 = clock::now();                               // stop section‑1
+    auto compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
+    std::cout << "[Set up parity group:] " << compile_us / 1'000.0 << "ms\n";
 
+
+    t0 = clock::now();                               // start timer
     parityPropMatrix_=bitset_matrix_multiplication(paritygroupMatrix,detectorMatrix_);
+    t1 = clock::now();                               // stop section‑1
+    compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
+    std::cout << "[bitset_matrix_multiplication(paritygroupMatrix,detectorMatrix_):] " << compile_us / 1'000.0 << "ms\n";
+    t0 = clock::now();                               // start timer
     transpose_matrix(parityPropMatrix_,parityPropMatrixTranspose_);
+    t1 = clock::now();                               // stop section‑1
+    compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
+    std::cout << "[transpose_matrix(parityPropMatrix_,parityPropMatrixTranspose_):] " << compile_us / 1'000.0 << "ms\n";
 }
 
 }

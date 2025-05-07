@@ -36,6 +36,23 @@ void inline print_bit_row(const BitRow& row,
     std::cout<<"\n";
 }
 
+
+template<class BitRow>
+inline void print_bit_row(const BitRow& row,
+                          std::ostream& out = std::cout,   // default = console
+                          char zero = '0', char one = '1')
+{
+    const std::size_t cols = row.size();
+    for (std::size_t c = 0; c < cols; ++c) {
+        out << (row.test(c) ? one : zero);
+    }
+    out.put('\n');
+}
+
+
+
+
+
 template<class BitRow>
 void print_bit_matrix(const std::vector<BitRow>& rows,
                       char zero = '0', char one='1')

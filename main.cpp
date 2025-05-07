@@ -80,7 +80,7 @@ void benchmark_surface_million_sample(){
     auto t0 = clock::now();                               // start timer
     clifford::cliffordcircuit c;
     try{
-        std::string stim_str=read_file_to_string("C:/Users/yezhu/OneDrive/Documents/GitHub/Sampling/stimprograms/surface3");
+        std::string stim_str=read_file_to_string("C:/Users/yezhu/OneDrive/Documents/GitHub/Sampling/stimprograms/surface11");
         c.compile_from_rewrited_stim_string(stim_str);
     } catch(const std::exception& e){
         std::cerr<<e.what()<<'\n';
@@ -123,6 +123,56 @@ void benchmark_surface_million_sample(){
     // }
 
 }
+
+
+
+
+/*
+Generate samples, and store output to file path
+*/
+void store_outputt_to_file(std::string filepath){
+
+    clifford::cliffordcircuit c;
+    try{
+        std::string stim_str=read_file_to_string("C:/Users/yezhu/OneDrive/Documents/GitHub/Sampling/stimprograms/simple");
+        c.compile_from_rewrited_stim_string(stim_str);
+    } catch(const std::exception& e){
+        std::cerr<<e.what()<<'\n';
+    }
+
+    QEPG::QEPG graph(c,c.get_num_detector(),c.get_num_noise());
+    graph.backward_graph_construction();
+    size_t qubitnum=c.get_num_qubit();
+    SAMPLE::sampler sampler(qubitnum);
+
+
+    std::vector<QEPG::Row> samplecontainer;
+    sampler.generate_many_output_samples(graph,samplecontainer,1,5);
+
+
+    /*--------------------------------------------------------------------
+      1.  Create / overwrite the output file.
+          std::ofstream flushes and closes automatically on destruction.
+     -------------------------------------------------------------------*/
+     std::ofstream ofs(filepath, std::ios::out | std::ios::trunc);
+     if (!ofs) {
+         std::cerr << "Cannot open \"" << filepath << "\" for writing.\n";
+         return;
+     }
+
+    for(QEPG::Row parityresult: samplecontainer){
+        QEPG::print_bit_row(parityresult, ofs);   // overload that accepts std::ostream&
+    }
+
+    /*--------------------------------------------------------------------
+      3.  Check for write errors (optional but helpful).
+    -------------------------------------------------------------------*/
+     if (!ofs) {
+        std::cerr << "I/O error while writing \"" << filepath << "\"\n";
+    }
+
+}
+
 
 
 
@@ -188,7 +238,8 @@ int main()
     // }
     // std::cout<<"\n";
 
-    benchmark_surface_million_sample();
+    //benchmark_surface_million_sample();
+    store_outputt_to_file("output");
 }
 
 
