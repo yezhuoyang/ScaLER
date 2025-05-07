@@ -52,6 +52,8 @@ class sampler{
         QEPG::Row calculate_output_from_one_sample(const QEPG::QEPG& graph,std::vector<singlePauli> sample);
 
 
+        QEPG::Row calculate_parity_output_from_one_sample(const QEPG::QEPG& graph,std::vector<singlePauli> sample);
+
     private:
 
 

@@ -24,6 +24,18 @@ inline std::size_t and_popcount(const Bitset& a, const Bitset&b)
 }
 
 
+
+template<class BitRow>
+void inline print_bit_row(const BitRow& row,
+                      char zero = '0', char one='1')
+{
+    const std::size_t cols= row.size();
+    for(std::size_t c=0; c<cols;++c){
+        std::cout<<(row.test(c)? one: zero);
+    } 
+    std::cout<<"\n";
+}
+
 template<class BitRow>
 void print_bit_matrix(const std::vector<BitRow>& rows,
                       char zero = '0', char one='1')
@@ -64,6 +76,8 @@ class QEPG{
 
         const std::vector<Row>& get_parityPropMatrix() const noexcept; 
 
+        const std::vector<Row>& get_parityPropMatrixTrans() const noexcept; 
+
     private:
 
         clifford::cliffordcircuit circuit_;
@@ -74,7 +88,7 @@ class QEPG{
 
         std::vector<Row> parityPropMatrix_;        
         std::vector<Row> parityPropMatrixTranspose_;     
-        
+
         std::vector<Row> detectorMatrix_;
 
         std::vector<Row> detectorMatrixTranspose_;

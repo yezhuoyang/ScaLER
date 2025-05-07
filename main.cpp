@@ -158,10 +158,19 @@ int main()
     graph.backward_graph_construction();
     graph.print_detectorMatrix('0','1');
 
+    size_t qubitnum=c.get_num_qubit();
 
+    SAMPLE::sampler sampler(qubitnum);
 
-
-    // SAMPLE::sampler sampler(100);
+    std::cout<<"Sampling!!"<<"\n";
+    std::vector<SAMPLE::singlePauli> result=sampler.generate_sample_Floyd(2);
+    for(SAMPLE::singlePauli sample:result){
+        std::cout<<"("<<sample.qindex<<","<<sample.type<<") ";
+    }
+    std::cout<<"\n";
+    QEPG::Row parityresult=sampler.calculate_parity_output_from_one_sample(graph,result);
+    std::cout<<"Sample parity outcome:"<<"\n";
+    QEPG::print_bit_row(parityresult);
 
 
     // std::vector<SAMPLE::singlePauli> result=sampler.generate_sample_Floyd(10);

@@ -29,6 +29,7 @@ QEPG::~QEPG(){
 
 
 
+
 void QEPG::print_detectorMatrix(char zero, char one) const{
 
     std::cout<<"-----------detectorMatrix:----------------------\n";
@@ -66,6 +67,21 @@ void QEPG::print_detectorMatrix(char zero, char one) const{
 
 /*---------------Construction of the QEPG graph-------------------------------*/
 
+
+
+
+
+inline void transpose_matrix(const std::vector<Row>& mat,std::vector<Row>& matTrans){
+    const std::size_t n_rows=mat.size();
+    const std::size_t n_cols=n_rows ? mat[0].size():0;
+    matTrans.assign(n_cols, Row(n_rows));  
+    for(std::size_t r=0; r<n_rows; ++r){
+        const Row& src= mat[r];
+        for(std::size_t c=src.find_first();c!=Row::npos; c=src.find_next(c)){
+            matTrans[c].set(r);
+        }
+    }    
+}
 
 void QEPG::backward_graph_construction(){
     size_t gate_size=circuit_.get_gate_num();
@@ -144,19 +160,6 @@ void QEPG::backward_graph_construction(){
 
 
 
-inline void transpose_matrix(const std::vector<Row>& mat,std::vector<Row>& matTrans){
-    const std::size_t n_rows=mat.size();
-    const std::size_t n_cols=n_rows ? mat[0].size():0;
-    matTrans.assign(n_cols, Row(n_rows));  
-    for(std::size_t r=0; r<n_rows; ++r){
-        const Row& src= mat[r];
-        for(std::size_t c=src.find_first();c!=Row::npos; c=src.find_next(c)){
-            matTrans[c].set(r);
-        }
-    }    
-}
-
-
 
 
 
@@ -174,8 +177,9 @@ const std::vector<Row>& QEPG::get_parityPropMatrix() const noexcept{
 
 
 
-
-
+const std::vector<Row>& QEPG::get_parityPropMatrixTrans() const noexcept{
+    return parityPropMatrixTranspose_;
+}
 
 
 /*
