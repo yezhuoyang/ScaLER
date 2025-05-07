@@ -8,7 +8,7 @@
 #include <stdexcept>
 #include <fstream>
 #include <sstream>
-
+#include <chrono>
 
 std::string read_file_to_string(const std::string& path)
 {
@@ -72,31 +72,49 @@ Benchmard the running time of generating 1 million surface code
 sample
 */
 void benchmark_surface_million_sample(){
+
+    using clock     = std::chrono::steady_clock;          // monotonic, good for benchmarking
+    using microsec  = std::chrono::microseconds;
+
+
+    auto t0 = clock::now();                               // start timer
     clifford::cliffordcircuit c;
     try{
-        std::string stim_str=read_file_to_string("C:/Users/yezhu/OneDrive/Documents/GitHub/Sampling/stimprograms/surface3");
+        std::string stim_str=read_file_to_string("C:/Users/yezhu/OneDrive/Documents/GitHub/Sampling/stimprograms/surface7");
         c.compile_from_rewrited_stim_string(stim_str);
     } catch(const std::exception& e){
         std::cerr<<e.what()<<'\n';
     }
     QEPG::QEPG graph(c,c.get_num_detector(),c.get_num_noise());
     graph.backward_graph_construction();
+
+    auto t1 = clock::now();                               // stop section‑1
+    auto compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
+    std::cout << "[Time to construct QEPG graph:] " << compile_us / 1'000.0 << "ms\n";
+
     size_t qubitnum=c.get_num_qubit();
 
     SAMPLE::sampler sampler(qubitnum);
 
-    // std::vector<SAMPLE::singlePauli> result=sampler.generate_sample_Floyd(50);
-    // QEPG::Row parityresult=sampler.calculate_parity_output_from_one_sample(graph,result);
-    // std::cout<<"Sample parity outcome:"<<"\n";
+
+    //----------------------------------------------------
+    // 1 . Compile circuit + build graph
+    //----------------------------------------------------
+    t0 = clock::now();                               // start timer
 
     std::vector<QEPG::Row> samplecontainer;
-    sampler.generate_many_output_samples(graph,samplecontainer,2,100);
-    size_t index=0;
-    for(QEPG::Row parityresult: samplecontainer){
-        std::cout<<index<<":";
-        QEPG::print_bit_row(parityresult);
-        index++;
-    }
+    sampler.generate_many_output_samples(graph,samplecontainer,2,1000000);
+
+    t1 = clock::now();                               // stop section‑1
+    compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
+    std::cout << "[Time to generate samples:] " << compile_us / 1'000.0 << "ms\n";
+
+    // size_t index=0;
+    // for(QEPG::Row parityresult: samplecontainer){
+    //     std::cout<<index<<":";
+    //     QEPG::print_bit_row(parityresult);
+    //     index++;
+    // }
 
 }
 
