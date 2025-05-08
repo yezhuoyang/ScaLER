@@ -11,10 +11,13 @@
 #include "clifford.hpp"
 #include <iostream>
 #include <Eigen/Dense>
+#include <Eigen/Sparse>
 
 namespace QEPG{
 
 using Row=boost::dynamic_bitset<>;
+using SpMat = Eigen::SparseMatrix<bool,Eigen::RowMajor>;
+using SpVec = Eigen::SparseVector<bool>;
 
 std::vector<Row> bitset_matrix_multiplication(const std::vector<Row>& mat1,const std::vector<Row>& mat2);
 
@@ -100,13 +103,13 @@ class QEPG{
         const std::vector<Row>& get_parityPropMatrixTrans() const noexcept; 
 
 
-        const Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic>& get_detectorMatrix_Eigen() const noexcept; 
+        const SpMat& get_detectorMatrix_Eigen() const noexcept; 
 
-        const Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic>& get_dectorMatrixTrans_Eigen() const noexcept;
+        const SpMat& get_dectorMatrixTrans_Eigen() const noexcept;
 
-        const Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic>& get_parityPropMatrix_Eigen() const noexcept; 
+        const SpMat& get_parityPropMatrix_Eigen() const noexcept; 
 
-        const Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic>& get_parityPropMatrixTrans_Eigen() const noexcept; 
+        const SpMat& get_parityPropMatrixTrans_Eigen() const noexcept; 
 
 
     private:
@@ -119,19 +122,19 @@ class QEPG{
 
         std::vector<Row> parityPropMatrix_;    
 
-        Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> parityPropMatrixEigen_;
+        SpMat parityPropMatrixEigen_;
         
         std::vector<Row> parityPropMatrixTranspose_;     
 
-        Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> parityPropMatrixTransposeEigen_;
+        SpMat parityPropMatrixTransposeEigen_;
 
         std::vector<Row> detectorMatrix_;
 
-        Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> detectorMatrixEigen_;
+        SpMat detectorMatrixEigen_;
 
         std::vector<Row> detectorMatrixTranspose_;
         
-        Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> detectorMatrixTransposeEigen_;
+        SpMat detectorMatrixTransposeEigen_;
 
 
         void compute_parityPropMatrix();
