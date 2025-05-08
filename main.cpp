@@ -9,6 +9,7 @@
 #include <fstream>
 #include <sstream>
 #include <chrono>
+#include <Eigen/Dense>
 //  g++ -O3 -std=c++20 -I/path/to/eigen  main.cpp
 
 
@@ -221,6 +222,26 @@ void print_surface_output(){
 
 
 
+
+void test_eigen_QEPG(){
+ 
+    clifford::cliffordcircuit c;
+    try{
+        std::string stim_str=read_file_to_string("C:/Users/yezhu/OneDrive/Documents/GitHub/Sampling/stimprograms/surface9");
+        c.compile_from_rewrited_stim_string(stim_str);
+    } catch(const std::exception& e){
+        std::cerr<<e.what()<<'\n';
+    }
+
+    QEPG::QEPG graph(c,c.get_num_detector(),c.get_num_noise());
+    graph.backward_graph_construction_Eigen();
+
+    size_t qubitnum=c.get_num_qubit();
+
+}
+
+
+
 int main()
 {
     //test_matrix_multiplication();
@@ -285,7 +306,32 @@ int main()
 
     //benchmark_surface_million_sample();
     //store_outputt_to_file("output.txt");
-    print_surface_output();
+    //print_surface_output();
+
+    // using namespace Eigen;
+    // Matrix<bool,Dynamic,Dynamic> A(4,6);
+    // A.setZero();
+    // A(1,2)=true;
+    // A(0,4)=true;
+    // A(3,3)=true;
+
+    // RowVectorX<bool> r0=A.row(0);
+    // RowVectorX<bool> xor01=(A.row(0).array()^A.row(1).array()).matrix();
+    // A.row(2)=xor01;
+
+
+    // RowVectorX<bool> xor23=(A.col(2).array()^A.col(3).array()).matrix();
+    // A.col(5)=xor23;
+
+    // IOFormat cleanFmt(StreamPrecision,DontAlignCols," ","\n","","");
+
+
+    // std::cout<<"A.row(2)=\n"<<(A.row(2).array().matrix()).cast<int>().format(cleanFmt)<<"\n\n";
+
+
+    // std::cout<<"A=\n"<<A.cast<int>().format(cleanFmt)<<"\n\n";
+
+    test_eigen_QEPG();
 }
 
 

@@ -18,4 +18,7 @@ choco install   boost-msvc-14.3 -y
 The boost header file will be stored under the path "C:\local\boost_1_87_0\boost". Add this path into VScode cpp include path. 
 
 
+We also use vcpkg and install the Eigen3 library for matrix operations:
 
+
+https://chatgpt.com/share/681cbfa0-f8d8-8005-9878-a8798ff9a88a

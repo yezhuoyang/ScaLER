@@ -10,6 +10,8 @@
 #include <boost/dynamic_bitset.hpp>
 #include "clifford.hpp"
 #include <iostream>
+#include <Eigen/Dense>
+
 namespace QEPG{
 
 using Row=boost::dynamic_bitset<>;
@@ -85,6 +87,8 @@ class QEPG{
 
         void backward_graph_construction();
 
+        void backward_graph_construction_Eigen();
+
         void print_detectorMatrix(char zero = '0', char one='1') const;
 
         const std::vector<Row>& get_detectorMatrix() const noexcept; 
@@ -95,6 +99,16 @@ class QEPG{
 
         const std::vector<Row>& get_parityPropMatrixTrans() const noexcept; 
 
+
+        const Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic>& get_detectorMatrix_Eigen() const noexcept; 
+
+        const Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic>& get_dectorMatrixTrans_Eigen() const noexcept;
+
+        const Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic>& get_parityPropMatrix_Eigen() const noexcept; 
+
+        const Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic>& get_parityPropMatrixTrans_Eigen() const noexcept; 
+
+
     private:
 
         clifford::cliffordcircuit circuit_;
@@ -103,14 +117,26 @@ class QEPG{
 
         std::size_t COLS = 3*total_noise_;
 
-        std::vector<Row> parityPropMatrix_;        
+        std::vector<Row> parityPropMatrix_;    
+
+        Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> parityPropMatrixEigen_;
+        
         std::vector<Row> parityPropMatrixTranspose_;     
+
+        Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> parityPropMatrixTransposeEigen_;
 
         std::vector<Row> detectorMatrix_;
 
+        Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> detectorMatrixEigen_;
+
         std::vector<Row> detectorMatrixTranspose_;
         
+        Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> detectorMatrixTransposeEigen_;
+
+
         void compute_parityPropMatrix();
+
+        void compute_parityPropMatrix_Eigen();
 };
 }
 

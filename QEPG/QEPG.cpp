@@ -15,7 +15,8 @@ QEPG::QEPG(clifford::cliffordcircuit othercircuit, size_t total_detectors, size_
                     circuit_(othercircuit),
                     total_detectors_(total_detectors),
                     total_noise_(total_noise),
-                    detectorMatrix_(othercircuit.get_num_meas(),Row(3*total_noise))                   
+                    detectorMatrix_(othercircuit.get_num_meas(),Row(3*total_noise)),
+                    detectorMatrixEigen_(othercircuit.get_num_meas(),3*total_noise)                   
                     {
 
 }
@@ -177,13 +178,108 @@ void QEPG::backward_graph_construction(){
 
 
 
+void QEPG::backward_graph_construction_Eigen(){
+
+    using clock     = std::chrono::steady_clock;          // monotonic, good for benchmarking
+    using microsec  = std::chrono::microseconds;
+    auto t0 = clock::now();                               // start timer
+
+    detectorMatrixEigen_.setZero();
+    size_t gate_size=circuit_.get_gate_num();
+    Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> current_x_prop(circuit_.get_num_qubit(),3*total_noise_);
+    Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> current_y_prop(circuit_.get_num_qubit(),3*total_noise_);
+    Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> current_z_prop(circuit_.get_num_qubit(),3*total_noise_);
+    current_x_prop.setZero();
+    current_y_prop.setZero();
+    current_z_prop.setZero();
+
+    size_t total_meas=circuit_.get_num_meas();
+    size_t current_meas_index=circuit_.get_num_meas()-1;
+    size_t current_noise_index=total_noise_-1;
+    
+    for(int t=gate_size-1;t>=0;t--){
+        const auto& gate=circuit_.get_gate(t);
+        std::string name=gate.name;
+        /*
+        *   First case, when the gate is a depolarization noise
+        */
+        if(name=="DEPOLARIZE1"){
+                size_t qindex=gate.qubits[0];
+                for(size_t j=0;j<total_meas;j++){
+                    detectorMatrixEigen_(j,current_noise_index)=current_x_prop(qindex,j);
+                    detectorMatrixEigen_(j,total_noise_+current_noise_index)=current_x_prop(qindex,j);
+                    detectorMatrixEigen_(j,total_noise_*2+current_noise_index)=current_x_prop(qindex,j);                    
+                }
+                current_noise_index--;
+                continue;
+        }
+        /*
+        *   When the gate is a measurement
+        */
+        if(name=="M"){
+            size_t qindex=gate.qubits[0];
+            current_x_prop(qindex,current_meas_index)=true;
+            current_y_prop(qindex,current_meas_index)=true;
+            current_meas_index--;
+            continue;
+        }
+        /*
+        *   When the gate is a reset
+        */
+        if(name=="R"){
+            size_t qindex=gate.qubits[0];
+            for(size_t j=0;j<total_meas;j++){
+                current_x_prop(qindex,j)=false;
+                current_y_prop(qindex,j)=false;
+                current_z_prop(qindex,j)=false;
+            }
+        }
+        /*
+        *   When the gate is a CNOT
+        */
+        if(name=="cnot"){
+            size_t qcontrol=gate.qubits[0];           
+            size_t qtarget=gate.qubits[1];
+            current_x_prop.row(qcontrol)=(current_x_prop.row(qcontrol).array()^current_x_prop.row(qtarget).array()).matrix();
+            current_z_prop.row(qtarget)=(current_z_prop.row(qtarget).array()^current_z_prop.row(qcontrol).array()).matrix();
+            current_y_prop.row(qcontrol)=(current_y_prop.row(qcontrol).array()^current_x_prop.row(qtarget).array()).matrix();
+            current_y_prop.row(qtarget)=(current_y_prop.row(qtarget).array()^current_z_prop.row(qcontrol).array()).matrix();
+            continue;
+        }
+        if(name=="h"){
+            size_t qindex=gate.qubits[0];
+            current_x_prop.row(qindex).swap(current_z_prop.row(qindex));
+        }
+    }
+    auto t1 = clock::now();                               // stop section‑1
+    auto compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
+    std::cout << "[Backword detector matrix construction:] " << compile_us / 1'000.0 << "ms\n";
+    /*
+    Compute the transpose of detectorMatrix for future calculation
+    */
+    t0 = clock::now();                               // start timer
+
+    //transpose_matrix(detectorMatrix_,detectorMatrixTranspose_);
+    detectorMatrixTransposeEigen_=detectorMatrixEigen_.transpose();
+
+    t1 = clock::now();                               // stop section‑1
+    compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
+    std::cout << "[Transpose matrix:] " << compile_us / 1'000.0 << "ms\n";
+    t0 = clock::now();                               // start timer
+    
+    compute_parityPropMatrix_Eigen();
+    t1 = clock::now();                               // stop section‑1
+    compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
+    std::cout << "[ compute_parityPropMatrix:] " << compile_us / 1'000.0 << "ms\n";    
 
 
+}
 
 
 const std::vector<Row>& QEPG::get_detectorMatrix() const noexcept{
     return detectorMatrix_;
 } 
+
 
 const std::vector<Row>& QEPG::get_dectorMatrixTrans() const noexcept{
     return detectorMatrixTranspose_;
@@ -197,6 +293,24 @@ const std::vector<Row>& QEPG::get_parityPropMatrix() const noexcept{
 
 const std::vector<Row>& QEPG::get_parityPropMatrixTrans() const noexcept{
     return parityPropMatrixTranspose_;
+}
+
+
+
+const Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic>& QEPG::get_detectorMatrix_Eigen() const noexcept{
+    return detectorMatrixEigen_;
+} 
+
+const Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic>& QEPG::get_dectorMatrixTrans_Eigen() const noexcept{
+    return detectorMatrixTransposeEigen_;
+}
+
+const Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic>& QEPG::get_parityPropMatrix_Eigen() const noexcept{
+    return parityPropMatrixEigen_;
+}
+
+const Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic>& QEPG::get_parityPropMatrixTrans_Eigen() const noexcept{
+    return parityPropMatrixTransposeEigen_;
 }
 
 
@@ -261,5 +375,55 @@ void QEPG::compute_parityPropMatrix(){
     compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
     std::cout << "[transpose_matrix(parityPropMatrix_,parityPropMatrixTranspose_):] " << compile_us / 1'000.0 << "ms\n";
 }
+
+
+
+void QEPG::compute_parityPropMatrix_Eigen(){
+    using clock     = std::chrono::steady_clock;          // monotonic, good for benchmarking
+    using microsec  = std::chrono::microseconds;
+    auto t0 = clock::now();                               // start timer
+
+    const std::vector<clifford::paritygroup>& detector_parity_group=circuit_.get_detector_parity_group();
+    const clifford::paritygroup& observable_group=circuit_.get_observable_parity_group();
+    const size_t row_size=detector_parity_group.size()+1;
+    const size_t col_size=circuit_.get_num_meas();
+
+    Eigen::Matrix<uint8_t,Eigen::Dynamic,Eigen::Dynamic> paritygroupMatrix(row_size,col_size);
+
+    for(size_t i=0; i<detector_parity_group.size();i++){
+        for(size_t index: detector_parity_group[i].indexlist){
+            paritygroupMatrix(i,index)=1;
+        }
+    }
+    for(size_t index: observable_group.indexlist){
+        paritygroupMatrix(detector_parity_group.size(),index)=1;
+    }
+    auto t1 = clock::now();                               // stop section‑1
+    auto compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
+    std::cout << "[Set up parity group:] " << compile_us / 1'000.0 << "ms\n";
+
+
+
+    Eigen::Matrix<uint8_t,Eigen::Dynamic,Eigen::Dynamic>  tmpdetectorMatrixEigen  =
+            detectorMatrixEigen_.cast<uint8_t>();                 // 0/1 → 0/1 as bytes
+
+
+    t0 = clock::now();                               // start timer
+    parityPropMatrixEigen_ =
+    ( (paritygroupMatrix * tmpdetectorMatrixEigen)      // uint8 product
+      .array()                                          //  ⟶ Array<uint8>
+      .template cast<bool>() )                          //  ⟶ Array<bool>
+    .matrix();                                          //  ⟶ Matrix<bool>
+    t1 = clock::now();                               // stop section‑1
+    compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
+    std::cout << "[Eigen3_matrix_multiplication(paritygroupMatrix,detectorMatrix_):] " << compile_us / 1'000.0 << "ms\n";
+    t0 = clock::now();                               // start timer
+    parityPropMatrixTransposeEigen_=parityPropMatrixEigen_.transpose();
+    t1 = clock::now();                               // stop section‑1
+    compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
+    std::cout << "[transpose_matrix(parityPropMatrix_,parityPropMatrixTranspose_):] " << compile_us / 1'000.0 << "ms\n";
+}
+
+
 
 }
