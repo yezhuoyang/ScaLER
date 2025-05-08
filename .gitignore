@@ -1,3 +1,5 @@
 *.exe
 .vscode/*
 __pycache__/*
+output
+output.txt

@@ -22,3 +22,13 @@ We also use vcpkg and install the Eigen3 library for matrix operations:
 
 
 https://chatgpt.com/share/681cbfa0-f8d8-8005-9878-a8798ff9a88a
+
+
+# Plan of development
+
+
+[ ] Add pybinding, so python can directly call the C++ function
+[ ] Check the correctness of QEPG at small scale
+[ ] In the construction of detectormatrix, ditectly construct the parityprop matrix
+[ ] Check the correctness of QEPG at larger scale: Compare the simulation result with STIM
+[ ] Optimize the speed by parallism

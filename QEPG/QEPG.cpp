@@ -344,6 +344,133 @@ void QEPG::backward_graph_construction_Eigen(){
 }
 
 
+/*
+In this implementation, we directly construct the parity group matrix
+by the backward algorithm. This implementation avoid large sparse matrix multiplication.
+*/
+void QEPG::backward_parity_matrix_construction_Eigen(){
+
+    using clock     = std::chrono::steady_clock;          // monotonic, good for benchmarking
+    using microsec  = std::chrono::microseconds;
+    auto t0 = clock::now();                               // start timer
+
+    const std::vector<clifford::paritygroup>& detector_parity_group=circuit_.get_detector_parity_group();
+    const clifford::paritygroup& observable_group=circuit_.get_observable_parity_group();
+    
+    const size_t row_size=3*circuit_.get_num_noise();
+    const size_t col_size=detector_parity_group.size()+1;
+
+    SpMat parityPropMatrixEigen_(row_size,col_size);
+
+
+    SpMat current_x_prop(circuit_.get_num_qubit(),3*total_noise_);
+    SpMat current_y_prop(circuit_.get_num_qubit(),3*total_noise_);
+    SpMat current_z_prop(circuit_.get_num_qubit(),3*total_noise_);
+
+
+    /*
+    Problem now: Current_xyz_prop are essential for resursive algorithm to work, so 
+    we cannot directly change the first dimension to be detector_parity_group.size()+1.   
+    What can we do then? There must be similar but different induction/resursive rule
+    */
+
+    current_x_prop.setZero();
+    current_y_prop.setZero();
+    current_z_prop.setZero();    
+    
+
+
+    size_t total_meas=circuit_.get_num_meas();
+    size_t current_meas_index=circuit_.get_num_meas()-1;
+    size_t current_noise_index=total_noise_-1;
+    
+    SpMat detectorMatrixTransposeEigen_(3*total_noise_,circuit_.get_num_meas());
+    detectorMatrixTransposeEigen_.setZero();
+
+
+    size_t gate_size=circuit_.get_gate_num();
+    for(int t=gate_size-1;t>=0;t--){
+
+        const auto& gate=circuit_.get_gate(t);
+        std::string name=gate.name;
+        //std::cout<<t<<" "<<name<<"\n";
+        /*
+        *   First case, when the gate is a depolarization noise
+        */
+        if(name=="DEPOLARIZE1"){
+                size_t qindex=gate.qubits[0];
+
+
+                
+                // detectorMatrixTransposeEigen_.row(current_noise_index)=current_x_prop.row(qindex);
+                // detectorMatrixTransposeEigen_.row(total_noise_+current_noise_index)=current_y_prop.row(qindex);
+                // detectorMatrixTransposeEigen_.row(total_noise_*2+current_noise_index)=current_z_prop.row(qindex);
+
+                current_noise_index--;
+                continue;
+        }
+        /*
+        *   When the gate is a measurement
+        */
+        if(name=="M"){
+            size_t qindex=gate.qubits[0];
+            current_x_prop.insert(qindex,current_meas_index)=true;
+            current_y_prop.insert(qindex,current_meas_index)=true;
+            current_meas_index--;
+            continue;
+        }
+        /*
+        *   When the gate is a reset
+        */
+        if(name=="R"){
+            size_t qindex=gate.qubits[0];
+            Eigen::SparseVector<bool> empty_rowx(current_x_prop.cols()); // nnz = 0
+            current_x_prop.row(qindex) = empty_rowx;                          
+            Eigen::SparseVector<bool> empty_rowy(current_y_prop.cols()); // nnz = 0
+            current_y_prop.row(qindex) = empty_rowy;    
+            Eigen::SparseVector<bool> empty_rowz(current_z_prop.cols()); // nnz = 0
+            current_z_prop.row(qindex) = empty_rowz;    
+        }
+        /*
+        *   When the gate is a CNOT
+        */
+        if(name=="cnot"){
+            size_t qcontrol=gate.qubits[0];           
+            size_t qtarget=gate.qubits[1];
+        // XOR control ← control ⊕ target
+        
+        xorRow(current_x_prop, qcontrol,
+            current_x_prop, qtarget);
+
+        // XOR target ← target ⊕ control
+        xorRow(current_z_prop, qtarget,
+                current_z_prop, qcontrol);
+
+        // update Y-propagations similarly
+        xorRow(current_y_prop, qcontrol,
+                current_x_prop, qtarget);
+
+        xorRow(current_y_prop, qtarget,
+                current_z_prop, qcontrol);
+        continue;
+        }
+        if(name=="h"){
+            size_t qindex=gate.qubits[0];
+            SpVec rowx=current_x_prop.innerVector(qindex);
+            SpVec rowz=current_z_prop.innerVector(qindex);
+            rowx.swap(rowz);
+        }
+    }
+    auto t1 = clock::now();                               // stop section‑1
+    auto compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
+    std::cout << "[Backword detector matrix construction:] " << compile_us / 1'000.0 << "ms\n";
+
+
+
+}
+
+
+
 const std::vector<Row>& QEPG::get_detectorMatrix() const noexcept{
     return detectorMatrix_;
 } 

@@ -92,6 +92,10 @@ class QEPG{
 
         void backward_graph_construction_Eigen();
 
+
+        void backward_parity_matrix_construction_Eigen();
+
+
         void print_detectorMatrix(char zero = '0', char one='1') const;
 
         const std::vector<Row>& get_detectorMatrix() const noexcept; 
