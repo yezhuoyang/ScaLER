@@ -6,6 +6,9 @@ This is the compiler implemented in C++ that sampling and calculate logical erro
 # Environment and compilation
 
 
+> [!IMPORTANT]
+> Be careful about setting up environment
+
 The code is developed in C++17. 
 
 
@@ -18,6 +21,11 @@ choco install   boost-msvc-14.3 -y
 The boost header file will be stored under the path "C:\local\boost_1_87_0\boost". Add this path into VScode cpp include path. 
 
 
+
+> [!TIP]
+> Avoid using dense matrix!
+
+
 We also use vcpkg and install the Eigen3 library for matrix operations:
 
 
@@ -27,8 +35,8 @@ https://chatgpt.com/share/681cbfa0-f8d8-8005-9878-a8798ff9a88a
 # Plan of development
 
 
-[ ] Add pybinding, so python can directly call the C++ function
-[ ] Check the correctness of QEPG at small scale
-[ ] In the construction of detectormatrix, ditectly construct the parityprop matrix
-[ ] Check the correctness of QEPG at larger scale: Compare the simulation result with STIM
-[ ] Optimize the speed by parallism
+- [ ] **Integrate pybind11**: Enable Python to directly call C++ functions  
+- [ ] **Verify QEPG correctness on small-scale examples**  
+- [ ] **Construct the parity propagation matrix directly** during detector matrix construction  
+- [ ] **Validate QEPG at larger scale** by comparing simulation results with STIM  
+- [ ] **Optimize performance** using multithreading or other parallelism strategies  
