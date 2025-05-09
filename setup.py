@@ -1,6 +1,16 @@
 import setuptools
 import pybind11
 from pybind11.setup_helpers import Pybind11Extension
+import sys
+
+
+
+# pick the right “O3”‑style flag
+extra_compile_args = ['/std:c++20', '/EHsc']
+if sys.platform == 'win32':
+    extra_compile_args.append('/O2')    # MSVC “optimize for speed”
+else:
+    extra_compile_args.append('-O3')    # GCC/Clang “optimize even more”
 
 
 ext_modules=[
@@ -12,9 +22,11 @@ ext_modules=[
             '.',
             'C:/local/boost_1_87_0/',
             'C:/Users/yezhu/OneDrive/Documents/GitHub/vcpkg/installed/x64-windows/include',
-            'C:/Users/yezhu/AppData/Local/Programs/Python/Python311/Include'
+            'C:/vcpkg/installed/x64-windows/include',
+            'C:/Users/yezhu/AppData/Local/Programs/Python/Python311/Include',
+            'C:/Users/yezhu/miniconda3/Include',
         ],
-        extra_compile_args=['/std:c++20', '/O', '/EHsc'],
+        extra_compile_args=extra_compile_args,
         language='c++'
     ),
 ]
