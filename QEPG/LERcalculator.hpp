@@ -9,7 +9,7 @@
 
 namespace LERcalculator{
 
-std::vector<QEPG::Row> return_samples(std::string prog_str,size_t weight, size_t shots);
+ std::vector<std::vector<bool>> return_samples(std::string prog_str,size_t weight, size_t shots);
 
 
 }
