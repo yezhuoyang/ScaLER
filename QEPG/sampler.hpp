@@ -26,7 +26,6 @@ struct singlePauli{
 };
 
 
-
 class sampler{
 
 
@@ -66,9 +65,11 @@ class sampler{
 
 
 };
+
+
+
+
 }
-
-
 #endif
 
 
