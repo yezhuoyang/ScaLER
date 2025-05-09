@@ -20,16 +20,12 @@ choco install   boost-msvc-14.3 -y
 
 The boost header file will be stored under the path "C:\local\boost_1_87_0\boost". Add this path into VScode cpp include path. 
 
-<<<<<<< HEAD
-The matrix size turn out to be the bottleneck. 
-=======
 
 
 > [!TIP]
 > Avoid using dense matrix!
 
 
->>>>>>> bb98f20e0fdc7bfccc5a908c8dd02c3bbbe337fe
 We also use vcpkg and install the Eigen3 library for matrix operations:
 
 
@@ -49,11 +45,24 @@ Also need to add the path of the python header file
 py -c "from sysconfig import get_paths as gp; print(gp()['include'])"
 ```
 
+Run the following command to build the QEPG package with pybinding:
+
+```bash
+py setup.py build_ext --inplace
+```
+
+Run the following command to clear the previously compiled output:
+
+```bind
+py setup.py clean --all    
+```
+
+
 
 # Plan of development
 
 
-- [ ] **Integrate pybind11**: Enable Python to directly call C++ functions  
+- [*] **Integrate pybind11**: Enable Python to directly call C++ functions  
 - [ ] **Verify QEPG correctness on small-scale examples**  
 - [ ] **Construct the parity propagation matrix directly** during detector matrix construction  
 - [ ] **Validate QEPG at larger scale** by comparing simulation results with STIM  
