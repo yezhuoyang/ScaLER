@@ -279,19 +279,31 @@ int main()
     //test_matrix_multiplication();
 
     //test_bitset_pop_count();
-    // clifford::cliffordcircuit* c=new clifford::cliffordcircuit(3);
+    clifford::cliffordcircuit c(3);
 
-    // try{
-    //     std::string stim_str=read_file_to_string("C:/Users/yezhu/OneDrive/Documents/GitHub/Sampling/stimprograms/surface3");
-    //     c->compile_from_rewrited_stim_string(stim_str);
-    // } catch(const std::exception& e){
-    //     std::cerr<<e.what()<<'\n';
-    // }
+    std::cout<<"Start compilation!"<<"\n";
+    try{
+        std::string stim_str=read_file_to_string("C:/Users/yezhu/Documents/Sampling/stimprograms/cnot01");
+        c.compile_from_rewrited_stim_string(stim_str);
+    } catch(const std::exception& e){
+        std::cerr<<e.what()<<'\n';
+    }
 
-    // c->print_circuit();
-    // delete c;
+    std::cout<<"Start printing"<<"\n";
+    c.print_circuit();
 
+
+    QEPG::QEPG graph(c,c.get_num_detector(),c.get_num_noise());
     
+
+    graph.backward_graph_construction();
+    graph.print_detectorMatrix('0','1');
+
+    //size_t qubitnum=c.get_num_qubit();
+
+    //SAMPLE::sampler sampler(qubitnum);
+
+
     // std::size_t rows = 4, cols = 8;
     // std::vector<boost::dynamic_bitset<>> M(rows, boost::dynamic_bitset<>(cols));
 
@@ -305,18 +317,7 @@ int main()
     // std::cout << '\n';
 
 
-    //c.print_circuit();
 
-    // QEPG::QEPG graph(c,c.get_num_detector(),c.get_num_noise());
-    
-
-
-    // graph.backward_graph_construction();
-    // //graph.print_detectorMatrix('0','1');
-
-    // size_t qubitnum=c.get_num_qubit();
-
-    // SAMPLE::sampler sampler(qubitnum);
 
    
     // std::vector<SAMPLE::singlePauli> result=sampler.generate_sample_Floyd(50);
@@ -408,7 +409,7 @@ int main()
     // std::cout << "row-2 indices: ";
     // for(SpMat::InnerIterator it(M,2); it; ++it) std::cout<<it.index()<<' ';
     // std::cout << '\n';   // → 1 7
-    test_eigen_QEPG();
+    // test_eigen_QEPG();
 }
 
 

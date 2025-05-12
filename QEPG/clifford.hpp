@@ -19,6 +19,10 @@ struct paritygroup{
     std::vector<size_t> indexlist;
 };
 
+struct parityIndexgroup{
+    std::vector<size_t> indexlist;
+};
+
 
 class cliffordcircuit{
 
@@ -64,6 +68,7 @@ public:
     const std::vector<paritygroup>& get_detector_parity_group() const;
     const paritygroup& get_observable_parity_group() const;
 
+    const parityIndexgroup& get_measure_to_parity_index(const size_t& mindex) const;
 
     /*compile from stim string---------------------------------------------------*/
     void compile_from_rewrited_stim_string(std::string stim_str);
@@ -84,6 +89,13 @@ private:
     std::vector<size_t> measureindexList_;
 
     std::vector<paritygroup> detectors_;
+
+    /*
+    Store the mapping from the measurement index to all 
+    relelated index of parity/detectors
+    */    
+    std::vector<parityIndexgroup> measure_to_parity_index_;
+
     paritygroup observable_;
 
 };

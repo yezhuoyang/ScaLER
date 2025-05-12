@@ -650,51 +650,110 @@ class CliffordCircuit:
 
 
 
-from QEPG import return_samples
+from QEPG import return_samples,return_samples_many_weights
+
+
+import math
+
+
+def binomial_weight(N, W, p):
+    if N<200:
+        return math.comb(N, W) * (p**W) * ((1 - p)**(N - W))
+    else:
+        lam = N * p
+        # PMF(X=W) = e^-lam * lam^W / W!
+        # Evaluate in logs to avoid overflow for large W, then exponentiate
+        log_pmf = (-lam) + W*math.log(lam) - math.lgamma(W+1)
+        return math.exp(log_pmf)
 
 
 
-index=0
 
 
 
 
-shots=5000
+
+import time
 
 
-distance=3
-circuit=CliffordCircuit(2)
-circuit.set_error_rate(0.00001)
-stim_circuit=stim.Circuit.generated("surface_code:rotated_memory_z",rounds=distance*3,distance=distance).flattened()
-stim_circuit=rewrite_stim_code(str(stim_circuit))
-circuit.set_stim_str(stim_circuit)
-circuit.compile_from_stim_circuit_str(stim_circuit)           
-new_stim_circuit=circuit.get_stim_circuit()      
+def sample_time():
+    distance=30
+    p=0.0001
+    circuit=CliffordCircuit(2)
+    circuit.set_error_rate(p)
+    stim_circuit=stim.Circuit.generated("surface_code:rotated_memory_z",rounds=distance*3,distance=distance).flattened()
+    stim_circuit=rewrite_stim_code(str(stim_circuit))
+    circuit.set_stim_str(stim_circuit)
+    circuit.compile_from_stim_circuit_str(stim_circuit)           
+    new_stim_circuit=circuit.get_stim_circuit()    
+    start = time.perf_counter()      # high‑resolution timer
+    result=return_samples(str(new_stim_circuit),10,10000)
+    end = time.perf_counter()
+    print(f"Elapsed wall‑clock time: {end - start:.4f} seconds")
 
 
-# Configure a decoder using the circuit.
-detector_error_model = new_stim_circuit.detector_error_model(decompose_errors=False)
-matcher = pymatching.Matching.from_detector_error_model(detector_error_model)
+def stratified_sampling():
+    index=0
 
 
-for w in range(2,10):
-    states, observables = [], []
-    result=return_samples(str(new_stim_circuit),w,shots)
+    distance=13
+    p=0.0001
+    circuit=CliffordCircuit(2)
+    circuit.set_error_rate(p)
+    stim_circuit=stim.Circuit.generated("surface_code:rotated_memory_z",rounds=distance*3,distance=distance).flattened()
+    stim_circuit=rewrite_stim_code(str(stim_circuit))
+    circuit.set_stim_str(stim_circuit)
+    circuit.compile_from_stim_circuit_str(stim_circuit)           
+    new_stim_circuit=circuit.get_stim_circuit()      
+
+    total_noise=circuit.get_totalnoise()
 
 
-    for i in range(0,shots):
-        states.append(result[i][:-1])
-        observables.append([result[i][-1]])
+    # Configure a decoder using the circuit.
+    detector_error_model = new_stim_circuit.detector_error_model(decompose_errors=False)
+    matcher = pymatching.Matching.from_detector_error_model(detector_error_model)
 
 
-    shots=len(states)
-    predictions = matcher.decode_batch(states)
-    num_errors = 0
-    for shot in range(shots):
-        actual_for_shot = observables[shot]
-        predicted_for_shot = predictions[shot]
-        if not np.array_equal(actual_for_shot, predicted_for_shot):
-            num_errors += 1
 
-    print("Logical error rate when w="+str(w))
-    print(num_errors/shots)
+    wlist = list(range(7, 10))        # [2, 3, ..., 20]
+    shotlist = [100000] * len(wlist)   # repeat 10000 same number of times
+
+    result=return_samples_many_weights(str(new_stim_circuit),wlist,shotlist)
+
+
+
+    LER=0
+ 
+
+    for i in range(len(wlist)):
+        states, observables = [], []
+
+        for j in range(0,shotlist[i]):
+            states.append(result[i][j][:-1])
+            observables.append([result[i][j][-1]])
+
+
+        shots=len(states)
+        predictions = matcher.decode_batch(states)
+        num_errors = 0
+        for shot in range(shots):
+            actual_for_shot = observables[shot]
+            predicted_for_shot = predictions[shot]
+            if not np.array_equal(actual_for_shot, predicted_for_shot):
+                num_errors += 1
+
+
+        print("Logical error rate when w="+str(wlist[i]))
+        print(num_errors/shots)
+        LER+=binomial_weight(total_noise, wlist[i], p)*(num_errors/shots)
+
+    
+    print(LER)
+
+
+
+
+
+
+stratified_sampling()
+#sample_time()

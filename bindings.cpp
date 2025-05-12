@@ -33,7 +33,8 @@ namespace QEPG {
 
 
 namespace LERcalculator{
-    std::vector<std::vector<bool>> return_samples(std::string prog_str, size_t weight, size_t shots);
+    std::vector<std::vector<bool>> return_samples(const std::string& prog_str, size_t weight, size_t shots);
+    std::vector<std::vector<std::vector<bool>>> return_samples_many_weights(const std::string& prog_str,const std::vector<size_t>& weight, const std::vector<size_t>& shots);
 }
    
 
@@ -113,5 +114,12 @@ PYBIND11_MODULE(QEPG, m) { // Use the module name 'QEPG' as seen in your build o
     m.def("return_samples", &LERcalculator::return_samples, // Use &SAMPLE::return_samples
           py::arg("prog_str"), py::arg("weight"), py::arg("shots"),
           "Function that returns samples based on a circuit and parameters");
+
+
+    m.def("return_samples_many_weights", &LERcalculator::return_samples_many_weights, // Use &SAMPLE::return_samples
+        py::arg("prog_str"), py::arg("weight"), py::arg("shots"),
+        "Function that returns samples of a list of weights based on a circuit and parameters");
+
+
 
 }

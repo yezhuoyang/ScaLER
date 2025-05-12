@@ -99,6 +99,7 @@ void cliffordcircuit::add_reset(size_t qindex){
 void cliffordcircuit::add_measurement(size_t qindex){
     add_depolarize1(qindex);
     measureindexList_.push_back(circuit_.size());
+    measure_to_parity_index_.emplace_back(parityIndexgroup{{}});
     circuit_.push_back({"M", {qindex}});
     num_meas_++;
     num_qubit_=std::max(num_qubit_,qindex+1);
@@ -142,6 +143,15 @@ void cliffordcircuit::print_circuit() const{
         std::cout<<"\n";        
         index++;
     }
+    std::cout<<"----------------------Measure index to Detector measurements---------------------------------------\n";
+    index=0;
+    for(const auto& mgroup : measure_to_parity_index_){
+        std::cout<<"M["<<index<<"]: ";
+        for(const auto& index: mgroup.indexlist)
+             std::cout<<index<<" ";
+        std::cout<<"\n";        
+        index++;
+    }    
     std::cout<<"----------------------Observable measurements---------------------------------------\n";
     std::cout<<"Observable[0]: ";
     for(const auto& index: observable_.indexlist)
@@ -185,6 +195,11 @@ const std::vector<paritygroup>& cliffordcircuit::get_detector_parity_group() con
 
 const paritygroup& cliffordcircuit::get_observable_parity_group() const{
     return observable_;
+}
+
+
+const parityIndexgroup& cliffordcircuit::get_measure_to_parity_index(const size_t& mindex) const{
+    return measure_to_parity_index_[mindex];
 }
 
 /*Helper functions for parsing------------------------------------------------------------*/
@@ -337,11 +352,18 @@ void cliffordcircuit::compile_from_rewrited_stim_string(std::string stim_str){
         }
         else if(op.substr(0,8)=="DETECTOR"){
            std::vector<int> intlist= parse_detector_recs(rest);
-           num_detectors_++; 
+           /*
+           We keep track of two mapping: The first mapping is from detector index to all 
+           measurement indices it contains. The second mapping is the inverse of this mapping:
+           from measurement indices to all detector index it affects.
+           */
            paritygroup measuregroup;
-           for(int index: intlist)
+           for(int index: intlist){
                 measuregroup.indexlist.push_back((size_t)((int)num_meas_+index));
+                measure_to_parity_index_[(int)num_meas_+index].indexlist.emplace_back(num_detectors_);
+           }
            detectors_.push_back(measuregroup);
+           num_detectors_++; 
         }
         else if(op.substr(0,10)=="OBSERVABLE"){
             std::vector<int> intlist= parse_detector_recs(rest);

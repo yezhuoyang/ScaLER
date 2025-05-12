@@ -1,7 +1,7 @@
 #include "QEPG.hpp"
 #include <iostream>
 #include <chrono>
-
+#include <algorithm>      // <algorithm> also works but <ranges> is canonical
 
 namespace QEPG{
 
@@ -18,7 +18,7 @@ QEPG::QEPG(clifford::cliffordcircuit othercircuit, size_t total_detectors, size_
                     detectorMatrix_(othercircuit.get_num_meas(),Row(3*total_noise)),
                     detectorMatrixEigen_(othercircuit.get_num_meas(),3*total_noise)                   
                     {
-
+                        
 }
 
 
@@ -49,13 +49,15 @@ void QEPG::print_detectorMatrix(char zero, char one) const{
         }
         std::cout<<"\n";
     }
-    std::cout<<"-----------ParitygroupMatrix:----------------------\n";
-    for(const auto& row:parityPropMatrix_){
-        for(std::size_t c=0;c<row.size();++c){
-            std::cout<<(row.test(c)? one:zero);
-        }
-        std::cout<<"\n";
-    }
+    
+    // std::cout<<"-----------ParitygroupMatrix:----------------------\n";
+    // for(const auto& row:parityPropMatrix_){
+    //     for(std::size_t c=0;c<row.size();++c){
+    //         std::cout<<(row.test(c)? one:zero);
+    //     }
+    //     std::cout<<"\n";
+    // }
+    
     std::cout<<"-----------ParitygroupMatrixTranspose:----------------------\n";
     for(const auto& row:parityPropMatrixTranspose_){
         for(std::size_t c=0;c<row.size();++c){
@@ -94,28 +96,61 @@ void QEPG::backward_graph_construction(){
 
     size_t gate_size=circuit_.get_gate_num();
 
-    std::vector<Row> current_x_prop(circuit_.get_num_qubit(),Row(3* total_noise_));
-    std::vector<Row> current_y_prop(circuit_.get_num_qubit(),Row(3* total_noise_));
-    std::vector<Row> current_z_prop(circuit_.get_num_qubit(),Row(3* total_noise_));
+    /*
+    Store the propagation from pauli noise to qubits
+    */
+    const size_t total_meas=circuit_.get_num_meas();
+    // std::vector<Row> current_x_prop(circuit_.get_num_qubit(),Row(total_meas));
+    // std::vector<Row> current_y_prop(circuit_.get_num_qubit(),Row(total_meas));
+    // std::vector<Row> current_z_prop(circuit_.get_num_qubit(),Row(total_meas));
 
-    size_t total_meas=circuit_.get_num_meas();
+
+    /*
+    Directly store the propagation from pauli noise to qubits
+    */
+    const size_t num_detectors=circuit_.get_detector_parity_group().size();
+    std::vector<Row> parity_prop(3* total_noise_,Row(num_detectors+1));
+
+    
+    std::vector<Row> current_x_parity_prop(circuit_.get_num_qubit(),Row(num_detectors+1));
+    std::vector<Row> current_y_parity_prop(circuit_.get_num_qubit(),Row(num_detectors+1));
+    std::vector<Row> current_z_parity_prop(circuit_.get_num_qubit(),Row(num_detectors+1));
+
+
     size_t current_meas_index=circuit_.get_num_meas()-1;
     size_t current_noise_index=total_noise_-1;
 
+    const clifford::paritygroup& observable=circuit_.get_observable_parity_group();
 
     for(int t=gate_size-1;t>=0;t--){
+
         const auto& gate=circuit_.get_gate(t);
         std::string name=gate.name;
+
         /*
         *   First case, when the gate is a depolarization noise
         */
         if(name=="DEPOLARIZE1"){
                 size_t qindex=gate.qubits[0];
-                for(size_t j=0;j<total_meas;j++){
-                        detectorMatrix_[j].set(current_noise_index,current_x_prop[qindex].test(j));
-                        detectorMatrix_[j].set(total_noise_+current_noise_index,current_y_prop[qindex].test(j));
-                        detectorMatrix_[j].set(total_noise_*2+current_noise_index,current_z_prop[qindex].test(j));        
-                }
+                //TODO: Is there any way to avoid the nested for loop? 
+                // detectorMatrixTranspose_[current_noise_index]=current_x_prop[qindex];
+                // detectorMatrixTranspose_[total_noise_+current_noise_index]=current_y_prop[qindex];
+                // detectorMatrixTranspose_[total_noise_*2+current_noise_index]=current_z_prop[qindex];
+                
+                // for(size_t j=0;j<total_meas;j++){
+                //         detectorMatrix_[j].set(current_noise_index,current_x_prop[qindex].test(j));
+                //         detectorMatrix_[j].set(total_noise_+current_noise_index,current_y_prop[qindex].test(j));
+                //         detectorMatrix_[j].set(total_noise_*2+current_noise_index,current_z_prop[qindex].test(j));        
+                // }
+                
+                /*
+                Uptill now, the fate of this noise is determined
+                So in priciple, we can update the parity propagation
+                */
+                parity_prop[current_noise_index]=current_x_parity_prop[qindex];   //current_x_prop(circuit_.get_num_qubit(),Row(3* total_noise_))
+                parity_prop[total_noise_+current_noise_index]=current_y_parity_prop[qindex];
+                parity_prop[total_noise_*2+current_noise_index]=current_z_parity_prop[qindex];      
+
                 current_noise_index--;
                 continue;
         }
@@ -124,8 +159,26 @@ void QEPG::backward_graph_construction(){
         */
         if(name=="M"){
             size_t qindex=gate.qubits[0];
-            current_x_prop[qindex].set(current_meas_index);
-            current_y_prop[qindex].set(current_meas_index);
+            // current_x_prop[qindex].set(current_meas_index);
+            // current_y_prop[qindex].set(current_meas_index);
+
+            /*
+            Update all affected parity/detector measurement
+            */
+            const clifford::parityIndexgroup& tmpmeasuregroup=circuit_.get_measure_to_parity_index(current_meas_index);
+            for(size_t parityindex: tmpmeasuregroup.indexlist){
+                    current_x_parity_prop[qindex].set(parityindex);
+                    current_y_parity_prop[qindex].set(parityindex);
+            }
+            /*
+            This measurement will flip the observable
+            */
+            if(std::find(observable.indexlist.begin(), observable.indexlist.end(), current_meas_index) != observable.indexlist.end()){
+                    current_x_parity_prop[qindex].set(num_detectors);
+                    current_y_parity_prop[qindex].set(num_detectors);
+            }
+
+
             current_meas_index--;
             continue;
         }
@@ -134,11 +187,19 @@ void QEPG::backward_graph_construction(){
         */
         if(name=="R"){
             size_t qindex=gate.qubits[0];
-            for(size_t j=0;j<total_meas;j++){
-                    current_x_prop[qindex].set(j,false);
-                    current_y_prop[qindex].set(j,false);   
-                    current_z_prop[qindex].set(j,false);       
-            }
+            // current_x_prop[qindex].reset();
+            // current_y_prop[qindex].reset();
+            // current_z_prop[qindex].reset();     
+
+            current_x_parity_prop[qindex].reset();
+            current_y_parity_prop[qindex].reset();  
+            current_z_parity_prop[qindex].reset();                      
+
+            // for(size_t j=0;j<total_meas;j++){
+            //         current_x_prop[qindex].set(j,false);
+            //         current_y_prop[qindex].set(j,false);   
+            //         current_z_prop[qindex].set(j,false);       
+            // }
         }
         /*
         *   When the gate is a CNOT
@@ -146,16 +207,23 @@ void QEPG::backward_graph_construction(){
         if(name=="cnot"){
             size_t qcontrol=gate.qubits[0];           
             size_t qtarget=gate.qubits[1];
-            current_x_prop[qcontrol]^=current_x_prop[qtarget];
-            current_z_prop[qtarget]^=current_z_prop[qcontrol];        
-            current_y_prop[qcontrol]^=current_x_prop[qtarget];           
-            current_y_prop[qtarget]^=current_z_prop[qcontrol];               
+            // current_x_prop[qcontrol]^=current_x_prop[qtarget];
+            // current_z_prop[qtarget]^=current_z_prop[qcontrol];        
+            // current_y_prop[qcontrol]^=current_x_prop[qtarget];           
+            // current_y_prop[qtarget]^=current_z_prop[qcontrol];     
+            
+            current_x_parity_prop[qcontrol]^=current_x_parity_prop[qtarget];
+            current_z_parity_prop[qtarget]^=current_z_parity_prop[qcontrol];
+            current_y_parity_prop[qcontrol]^=current_x_parity_prop[qtarget];
+            current_y_parity_prop[qtarget]^=current_x_parity_prop[qcontrol];            
             continue;
         }
 
         if(name=="h"){
             size_t qindex=gate.qubits[0];
-            current_x_prop[qindex].swap(current_z_prop[qindex]);   // fast, no copy
+            // current_x_prop[qindex].swap(current_z_prop[qindex]);   // fast, no copy
+
+            current_x_parity_prop[qindex].swap(current_z_parity_prop[qindex]);
         }
     }
     auto t1 = clock::now();                               // stop section‑1
@@ -165,12 +233,13 @@ void QEPG::backward_graph_construction(){
     Compute the transpose of detectorMatrix for future calculation
     */
     t0 = clock::now();                               // start timer
-    transpose_matrix(detectorMatrix_,detectorMatrixTranspose_);
+    //transpose_matrix(detectorMatrix_,detectorMatrixTranspose_);
     t1 = clock::now();                               // stop section‑1
     compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
     std::cout << "[Transpose matrix:] " << compile_us / 1'000.0 << "ms\n";
     t0 = clock::now();                               // start timer
-    compute_parityPropMatrix();
+    //compute_parityPropMatrix();
+    parityPropMatrixTranspose_=parity_prop;
     t1 = clock::now();                               // stop section‑1
     compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
     std::cout << "[ compute_parityPropMatrix:] " << compile_us / 1'000.0 << "ms\n";
@@ -546,6 +615,7 @@ void QEPG::compute_parityPropMatrix(){
 
     std::vector<Row> paritygroupMatrix(row_size,Row(col_size));
 
+    
     for(size_t i=0; i<detector_parity_group.size();i++){
         for(size_t index: detector_parity_group[i].indexlist){
             paritygroupMatrix[i][index]=true;
@@ -560,7 +630,8 @@ void QEPG::compute_parityPropMatrix(){
 
 
 
-    std::cout << "[dectector matrix size:] " << detectorMatrix_.size()<<","<<detectorMatrix_[0].size()<< "ms\n";
+    std::cout << "[dectector matrix size:] " << detectorMatrix_.size()<<","<<detectorMatrix_[0].size()<< "\n";
+    std::cout << "[dectector matrix transpose size:] " <<detectorMatrixTranspose_.size()<<","<<detectorMatrixTranspose_[0].size()<< "\n";
     t0 = clock::now();                               // start timer
     parityPropMatrix_=bitset_matrix_multiplication(paritygroupMatrix,detectorMatrix_);
     t1 = clock::now();                               // stop section‑1
@@ -571,6 +642,7 @@ void QEPG::compute_parityPropMatrix(){
     t1 = clock::now();                               // stop section‑1
     compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
     std::cout << "[transpose_matrix(parityPropMatrix_,parityPropMatrixTranspose_):] " << compile_us / 1'000.0 << "ms\n";
+    
 }
 
 

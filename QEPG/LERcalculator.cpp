@@ -23,7 +23,7 @@ void convert_bitset_row_to_boolean(std::vector<std::vector<bool>>& result,const 
 
 
 
- std::vector<std::vector<bool>> return_samples(std::string prog_str,size_t weight, size_t shots){
+ std::vector<std::vector<bool>> return_samples(const std::string& prog_str,size_t weight, size_t shots){
     clifford::cliffordcircuit c;
     c.compile_from_rewrited_stim_string(prog_str);
 
@@ -35,7 +35,15 @@ void convert_bitset_row_to_boolean(std::vector<std::vector<bool>>& result,const 
     SAMPLE::sampler sampler(qubitnum);
 
     std::vector<QEPG::Row> samplecontainer;
+
+    using clock     = std::chrono::steady_clock;          // monotonic, good for benchmarking
+    using microsec  = std::chrono::microseconds;
+    auto t0 = clock::now();                               // start timer
     sampler.generate_many_output_samples(graph,samplecontainer,weight,shots);
+    auto t1 = clock::now();                               // stop section‑1
+    auto compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
+    std::cout << "[Time to generate these samples:] " << compile_us / 1'000.0 << "ms\n";
+
 
     std::vector<std::vector<bool>> result;
     convert_bitset_row_to_boolean(result,samplecontainer);
@@ -45,5 +53,38 @@ void convert_bitset_row_to_boolean(std::vector<std::vector<bool>>& result,const 
     // }
     return result;
 }
+
+
+
+std::vector<std::vector<std::vector<bool>>> return_samples_many_weights(const std::string& prog_str,const std::vector<size_t>& weight, const std::vector<size_t>& shots){
+    clifford::cliffordcircuit c;
+    c.compile_from_rewrited_stim_string(prog_str);
+
+    QEPG::QEPG graph(c,c.get_num_detector(),c.get_num_noise());
+    graph.backward_graph_construction();
+
+    size_t qubitnum=c.get_num_qubit();
+
+    SAMPLE::sampler sampler(qubitnum);
+
+
+    std::vector<QEPG::Row> samplecontainer;
+    std::vector<std::vector<bool>> tmpresult;
+    std::vector<std::vector<std::vector<bool>>> result;
+
+    for(size_t i=0;i<weight.size();++i){
+        samplecontainer.clear();
+        tmpresult.clear();
+        sampler.generate_many_output_samples(graph,samplecontainer,weight[i],shots[i]);
+        convert_bitset_row_to_boolean(tmpresult,samplecontainer);
+        result.emplace_back(tmpresult);
+    }
+    // for(QEPG::Row parityresult: samplecontainer){
+    //     QEPG::print_bit_row(parityresult);
+    // }
+    return result;
+}
+
+
 
 }
