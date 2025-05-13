@@ -30,9 +30,8 @@ void convert_bitset_row_to_boolean(std::vector<std::vector<bool>>& result,const 
     QEPG::QEPG graph(c,c.get_num_detector(),c.get_num_noise());
     graph.backward_graph_construction();
 
-    size_t qubitnum=c.get_num_qubit();
 
-    SAMPLE::sampler sampler(qubitnum);
+    SAMPLE::sampler sampler(c.get_num_noise());
 
     std::vector<QEPG::Row> samplecontainer;
 
@@ -40,6 +39,9 @@ void convert_bitset_row_to_boolean(std::vector<std::vector<bool>>& result,const 
     using microsec  = std::chrono::microseconds;
     auto t0 = clock::now();                               // start timer
     sampler.generate_many_output_samples(graph,samplecontainer,weight,shots);
+
+
+
     auto t1 = clock::now();                               // stop section‑1
     auto compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
     std::cout << "[Time to generate these samples:] " << compile_us / 1'000.0 << "ms\n";
@@ -63,9 +65,7 @@ std::vector<std::vector<std::vector<bool>>> return_samples_many_weights(const st
     QEPG::QEPG graph(c,c.get_num_detector(),c.get_num_noise());
     graph.backward_graph_construction();
 
-    size_t qubitnum=c.get_num_qubit();
-
-    SAMPLE::sampler sampler(qubitnum);
+    SAMPLE::sampler sampler(c.get_num_noise());
 
 
     std::vector<QEPG::Row> samplecontainer;

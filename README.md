@@ -73,13 +73,25 @@ The python code is divided into different modules. For example, to run the test_
 (Under Sampling folder)py -m test.test_by_stim   
 ```
 
+# How to run tests
+
+
+# How to run benchmark
+
+
 
 
 # Plan of development
 
 
 - [X] **Integrate pybind11**: Enable Python to directly call C++ functions  
-- [ ] **Verify QEPG correctness on small-scale examples**  
+- [ ] **Optimize python interface**: Optimize the interface which convert C++ generated samples to python samples
+- [X] **Verify QEPG correctness on small-scale examples**  
 - [X] **Construct the parity propagation matrix directly** during detector matrix construction  
-- [ ] **Validate QEPG at larger scale** by comparing simulation results with STIM  
+- [X] **Validate QEPG at larger scale** by comparing simulation results with STIM  
 - [ ] **Optimize performance** using multithreading or other parallelism strategies  
+- [ ] **LER symbolic calculator** Calculate logical error rate(of small circuit) by dynamic algorithm
+- [ ] **LER calculation benchmark(Exact)** Set up a benchmark of small circuit with known logical error rate
+- [ ] **LER calculation benchmark(Compare with STIM)** Set up a benchmark of surface code/repetition code
+- [ ] **QEPG generating speed benchmark** Set up a benchmark comparing the time used to generate the QEPG graph
+- [ ] **Sampling rate benchmark** Set up a benchmark comparing the time used to get 1 million samples

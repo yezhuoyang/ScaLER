@@ -44,70 +44,12 @@ std::vector<singlePauli> sampler::generate_sample_Floyd(size_t weight){
 }
 
 
-inline QEPG::Row sampler::calculate_output_from_one_sample(const QEPG::QEPG& graph,std::vector<singlePauli> sample){
-
-    const auto&dm=graph.get_dectorMatrixTrans();
-
-    const std::size_t n_rows=dm.size();
-    const std::size_t n_cols=n_rows ? dm[0].size():0;
-
-    QEPG::Row result(n_cols);
-
-    for(singlePauli noise: sample){
-        size_t pos=noise.qindex;
-        size_t type=noise.type;
-        if(type==SAMPLE::PAULIX){
-            result^=dm[3*pos];
-        }
-        else if(type==SAMPLE::PAULIY){
-            result^=dm[3*pos+1];
-        }
-        else if(type==SAMPLE::PAULIZ){
-            result^=dm[3*pos+2];
-        }
-    }
-
-    return result;
-}
-
-
-
-
-inline QEPG::Row sampler::calculate_parity_output_from_one_sample(const QEPG::QEPG& graph,const std::vector<singlePauli>& sample){
-    const auto&dm=graph.get_parityPropMatrixTrans();
-
-    const std::size_t n_rows=dm.size();
-    const std::size_t n_cols=n_rows ? dm[0].size():0;
-
-    QEPG::Row result(n_cols);
-
-    for(singlePauli noise: sample){
-        size_t pos=noise.qindex;
-        size_t type=noise.type;
-        if(type==SAMPLE::PAULIX){
-            result^=dm[3*pos];
-        }
-        else if(type==SAMPLE::PAULIY){
-            result^=dm[3*pos+1];
-        }
-        else if(type==SAMPLE::PAULIZ){
-            result^=dm[3*pos+2];
-        }
-    }
-
-    return result;
-}
-
-
-
-
 
 void sampler::generate_many_output_samples(const QEPG::QEPG& graph,std::vector<QEPG::Row>& samplecontainer, size_t pauliweight, size_t samplenumber){
     samplecontainer.reserve(samplenumber);
     for(size_t i=0;i<samplenumber;i++){
-        sampler sampler_instance;
         std::vector<singlePauli> sample = generate_sample_Floyd(pauliweight);
-        samplecontainer.emplace_back(calculate_parity_output_from_one_sample(graph,sample));
+        samplecontainer.push_back(calculate_parity_output_from_one_sample(graph,sample));
     }
 }
 

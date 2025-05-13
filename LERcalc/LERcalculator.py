@@ -716,7 +716,7 @@ def stratified_sampling():
 
 
     distance=3
-    p=0.01
+    p=0.001
     circuit=CliffordCircuit(2)
     circuit.set_error_rate(p)
     stim_circuit=stim.Circuit.generated("surface_code:rotated_memory_z",rounds=distance*3,distance=distance).flattened()
@@ -733,8 +733,8 @@ def stratified_sampling():
     matcher = pymatching.Matching.from_detector_error_model(detector_error_model)
 
 
-    wlist = [2,3,4]        # [2, 3, ..., 20]
-    shotlist = [10000] * len(wlist)   # repeat 10000 same number of times
+    wlist = [2,3,4,5,6,7]        # [2, 3, ..., 20]
+    shotlist = [100000] * len(wlist)   # repeat 10000 same number of times
 
     print("Average number of noise: ")
     print(total_noise*p)
@@ -810,5 +810,8 @@ def get_circuit():
 
 #get_circuit()
 
-stratified_sampling()
+
+
+if __name__ == "__main__":
+    stratified_sampling()
 #sample_time()
