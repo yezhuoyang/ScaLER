@@ -92,9 +92,9 @@ std::vector<std::vector<bool>> return_detector_matrix(const std::string& prog_st
     c.compile_from_rewrited_stim_string(prog_str);
 
     QEPG::QEPG graph(c,c.get_num_detector(),c.get_num_noise());
-
+    c.print_circuit();
     graph.backward_graph_construction();
-
+    graph.print_detectorMatrix();
     const std::vector<QEPG::Row>& parityMtrans=graph.get_parityPropMatrixTrans();
     const size_t row_size=parityMtrans.size();
     const size_t col_size=parityMtrans[0].size();

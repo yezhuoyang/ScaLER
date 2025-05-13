@@ -649,8 +649,8 @@ def transpile_stim_with_noise_vector(stimString,noise_vector,totalnoise):
                 current_noise_index+=1
 
 
-    #print("-----------------------------New stim circuit:---------------------------------")
-    #print(newstimstr)
+    print("-----------------------------New stim circuit:---------------------------------")
+    print(newstimstr)
 
     measurement_result=s.current_measurement_record()
 
@@ -860,5 +860,70 @@ def test_with_stim_tableau():
 
 
 
+def test_small_circuit(circuit_file_path):
+    stim_str=""
+    with open(circuit_file_path, "r", encoding="utf-8") as f:
+        stim_str = f.read()
+    
+    circuit=CliffordCircuit(4)     
+    circuit.compile_from_stim_circuit_str(stim_str)
+    stimcircuit=circuit.get_stim_circuit()
+    print("----------------- Original circuit-----------------------------")
+    print(stimcircuit)
+
+    print("Total detectors: ", len(circuit.get_parityMatchGroup())+1)
+    print("Total noise: ", 3*circuit.get_totalnoise())
+
+    detectorMatrix=np.array(return_detector_matrix(str(stimcircuit)))
+    detectorMatrix = detectorMatrix.T          # or: np.transpose(detector_matrix)
+    
+    print("Detector matrix: ", detectorMatrix)
+    print("Detector matrix shape: ", detectorMatrix.shape)
+
+    '''
+    First step, sample a noise
+    '''
+    totalnoise=circuit.get_totalnoise()
+    print("Total noise: ", totalnoise)
+
+
+    for W in range(1,totalnoise):
+        for i in range(0,40):
+            random_index=python_sample_fixed_one_two_three(totalnoise,W)
+            noise_vector=np.array([0]*3*totalnoise)
+            for i in range(totalnoise):
+                if random_index[i]==1:
+                    noise_vector[i]=1
+                elif random_index[i]==2:
+                    noise_vector[i+totalnoise]=1
+                elif random_index[i]==3:
+                    noise_vector[i+2*totalnoise]=1    
+
+            print("Noise vector: ", noise_vector)
+
+
+
+            detector_result=transpile_stim_with_noise_vector(str(stimcircuit),noise_vector,totalnoise)
+
+            print("-------------Detector result from stim: -------------")
+            print(detector_result)
+
+
+            #print(dectectorMatrix.shape, noise_vector.shape)
+            mydetectorresult=np.matmul(detectorMatrix, noise_vector)%2    
+
+
+            print("-------------My Detector result: -------------")
+            print(list(mydetectorresult))
+
+            assert((detector_result==list(mydetectorresult)))    
+
+
+
+
+
+
 if __name__ == "__main__":
-    test_with_stim_tableau()
+    #test_small_circuit("C:/Users/yezhu/GitRepos/Sampling/stimprograms/cnoth0")
+
+    test_with_stim_tableau()    

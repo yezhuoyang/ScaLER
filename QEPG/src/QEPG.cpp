@@ -209,7 +209,7 @@ void QEPG::backward_graph_construction(){
             current_x_parity_prop[qcontrol]^=current_x_parity_prop[qtarget];
             current_z_parity_prop[qtarget]^=current_z_parity_prop[qcontrol];
             current_y_parity_prop[qcontrol]^=current_x_parity_prop[qtarget];
-            current_y_parity_prop[qtarget]^=current_x_parity_prop[qcontrol];            
+            current_y_parity_prop[qtarget]^=current_z_parity_prop[qcontrol];            
             continue;
         }
 
