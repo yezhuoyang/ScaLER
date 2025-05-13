@@ -91,7 +91,7 @@ void cliffordcircuit::add_cnot(size_t qcontrol, size_t qtarget){
 /*--------------------------------------------Reset/Measurement gadget---------------*/
 
 void cliffordcircuit::add_reset(size_t qindex){
-    add_depolarize1(qindex);
+    //add_depolarize1(qindex);
     circuit_.push_back({"R", {qindex}});
     num_qubit_=std::max(num_qubit_,qindex+1);
 }

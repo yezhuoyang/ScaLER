@@ -58,6 +58,22 @@ py setup.py clean --all
 ```
 
 
+# How to compile run python script
+
+
+To compile QEPG python package by pybind11:
+
+```bash
+(Under QEPG folder)./compilepybind.ps1
+```
+
+The python code is divided into different modules. For example, to run the test_by_stim.py file under test module, stay at the root folder and execute:
+
+```bash
+(Under Sampling folder)py -m test.test_by_stim   
+```
+
+
 
 # Plan of development
 

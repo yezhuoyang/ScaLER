@@ -649,8 +649,8 @@ def transpile_stim_with_noise_vector(stimString,noise_vector,totalnoise):
                 current_noise_index+=1
 
 
-    print("-----------------------------New stim circuit:---------------------------------")
-    print(newstimstr)
+    #print("-----------------------------New stim circuit:---------------------------------")
+    #print(newstimstr)
 
     measurement_result=s.current_measurement_record()
 
@@ -803,16 +803,21 @@ def test_with_stim_tableau():
     circuit.set_error_rate(0.0001)  
     stim_circuit=stim.Circuit.generated("surface_code:rotated_memory_z",rounds=3*distance,distance=distance).flattened()
     stim_circuit=rewrite_stim_code(str(stim_circuit))
-    print(stim_circuit)
+    #print(stim_circuit)
     circuit.set_stim_str(stim_circuit)
     circuit.compile_from_stim_circuit_str(stim_circuit)
     stimcircuit=circuit.get_stim_circuit()
     print("----------------- Original circuit-----------------------------")
-    print(stimcircuit)
+    #print(stimcircuit)
 
+    print("Total detectors: ", len(circuit.get_parityMatchGroup())+1)
+    print("Total noise: ", 3*circuit.get_totalnoise())
 
     detectorMatrix=np.array(return_detector_matrix(str(stimcircuit)))
-
+    detectorMatrix = detectorMatrix.T          # or: np.transpose(detector_matrix)
+    
+    print("Detector matrix: ", detectorMatrix)
+    print("Detector matrix shape: ", detectorMatrix.shape)
 
     '''
     First step, sample a noise
