@@ -16,7 +16,7 @@ else:
 ext_modules=[
     setuptools.Extension(
         'QEPG',
-        ['bindings.cpp','QEPG/QEPG.cpp','QEPG/clifford.cpp','QEPG/sampler.cpp','QEPG/LERcalculator.cpp'],
+        ['bindings.cpp','src/QEPG.cpp','src/clifford.cpp','src/sampler.cpp','src/LERcalculator.cpp'],
         include_dirs=[
             pybind11.get_include(),
             '.',

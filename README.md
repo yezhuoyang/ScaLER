@@ -64,6 +64,6 @@ py setup.py clean --all
 
 - [X] **Integrate pybind11**: Enable Python to directly call C++ functions  
 - [ ] **Verify QEPG correctness on small-scale examples**  
-- [ ] **Construct the parity propagation matrix directly** during detector matrix construction  
+- [X] **Construct the parity propagation matrix directly** during detector matrix construction  
 - [ ] **Validate QEPG at larger scale** by comparing simulation results with STIM  
 - [ ] **Optimize performance** using multithreading or other parallelism strategies  

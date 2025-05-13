@@ -87,4 +87,31 @@ std::vector<std::vector<std::vector<bool>>> return_samples_many_weights(const st
 
 
 
+std::vector<std::vector<bool>> return_detector_matrix(const std::string& prog_str){
+    clifford::cliffordcircuit c;
+    c.compile_from_rewrited_stim_string(prog_str);
+
+    QEPG::QEPG graph(c,c.get_num_detector(),c.get_num_noise());
+
+    graph.backward_graph_construction();
+
+    const std::vector<QEPG::Row>& parityMtrans=graph.get_parityPropMatrixTrans();
+    const size_t row_size=parityMtrans.size();
+    const size_t col_size=parityMtrans[0].size();
+
+
+    // 2. Allocate the whole target matrix in one go
+    std::vector<std::vector<bool>> result(row_size,std::vector<bool>(col_size));
+
+    for(size_t row=0;row<row_size;row++){
+        for(size_t column=0;column<col_size;column++){
+            result[row][column]=parityMtrans[row][column];
+        }
+    }
+    return result;
+}
+
+
+
+
 }

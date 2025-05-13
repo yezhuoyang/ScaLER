@@ -650,7 +650,7 @@ class CliffordCircuit:
 
 
 
-from QEPG import return_samples,return_samples_many_weights
+from QEPG import return_samples,return_samples_many_weights,return_detector_matrix
 
 
 import math
@@ -670,9 +670,6 @@ def binomial_weight(N, W, p):
 
 
 
-
-
-
 import time
 
 
@@ -681,13 +678,13 @@ def sample_time():
     p=0.0001
     circuit=CliffordCircuit(2)
     circuit.set_error_rate(p)
-    stim_circuit=stim.Circuit.generated("surface_code:rotated_memory_z",rounds=distance*3,distance=distance).flattened()
+    stim_circuit=stim.Circuit.generated("surface_code:rotated_memory_z",rounds=distance,distance=distance).flattened()
     stim_circuit=rewrite_stim_code(str(stim_circuit))
     circuit.set_stim_str(stim_circuit)
     circuit.compile_from_stim_circuit_str(stim_circuit)           
     new_stim_circuit=circuit.get_stim_circuit()    
     start = time.perf_counter()      # high‑resolution timer
-    result=return_samples(str(new_stim_circuit),10,10000)
+    result=return_samples(str(new_stim_circuit),100,10000)
     end = time.perf_counter()
     print(f"Elapsed wall‑clock time: {end - start:.4f} seconds")
 
@@ -696,11 +693,11 @@ def stratified_sampling():
     index=0
 
 
-    distance=13
+    distance=50
     p=0.0001
     circuit=CliffordCircuit(2)
     circuit.set_error_rate(p)
-    stim_circuit=stim.Circuit.generated("surface_code:rotated_memory_z",rounds=distance*3,distance=distance).flattened()
+    stim_circuit=stim.Circuit.generated("surface_code:rotated_memory_z",rounds=distance,distance=distance).flattened()
     stim_circuit=rewrite_stim_code(str(stim_circuit))
     circuit.set_stim_str(stim_circuit)
     circuit.compile_from_stim_circuit_str(stim_circuit)           
@@ -714,9 +711,11 @@ def stratified_sampling():
     matcher = pymatching.Matching.from_detector_error_model(detector_error_model)
 
 
+    wlist = [77,78,79]        # [2, 3, ..., 20]
+    shotlist = [100] * len(wlist)   # repeat 10000 same number of times
 
-    wlist = list(range(7, 10))        # [2, 3, ..., 20]
-    shotlist = [100000] * len(wlist)   # repeat 10000 same number of times
+    print("Average number of noise: ")
+    print(total_noise*p)
 
     result=return_samples_many_weights(str(new_stim_circuit),wlist,shotlist)
 
@@ -752,8 +751,42 @@ def stratified_sampling():
 
 
 
+def read_file(path: str | Path) -> str:
+    """Return the entire contents of *path* as a single string."""
+    path = Path(path)
+    try:
+        # `with` closes the file automatically, even on errors
+        with path.open("r", encoding="utf-8") as f:
+            data = f.read()           # read the whole file at once
+        return data
+    except FileNotFoundError:
+        print(f"File {path} not found.")
+        raise
+    except UnicodeDecodeError:
+        print(f"Could not decode {path}; try a different encoding.")
+        raise
 
 
+def get_circuit():
+    index=0
 
-stratified_sampling()
+    distance=50
+    p=0.0001
+    circuit=CliffordCircuit(2)
+    circuit.set_error_rate(p)
+
+    stim_circuit_str=read_file("stimprograms\cnot0")
+
+    circuitmatrix=return_detector_matrix(stim_circuit_str)
+
+    print("Circuit matrix:")
+
+    print(circuitmatrix)
+
+ 
+
+
+get_circuit()
+
+#stratified_sampling()
 #sample_time()

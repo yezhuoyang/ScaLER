@@ -7,3 +7,6 @@ example.cpp
 *.pyd
 build/*
 test.py
+QEPG/__pycache__/*
+QEPG/*.pyd
+test/__pycache__/*

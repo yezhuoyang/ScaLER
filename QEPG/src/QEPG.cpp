@@ -15,8 +15,7 @@ QEPG::QEPG(clifford::cliffordcircuit othercircuit, size_t total_detectors, size_
                     circuit_(othercircuit),
                     total_detectors_(total_detectors),
                     total_noise_(total_noise),
-                    detectorMatrix_(othercircuit.get_num_meas(),Row(3*total_noise)),
-                    detectorMatrixEigen_(othercircuit.get_num_meas(),3*total_noise)                   
+                    parityPropMatrixTranspose_(3* total_noise_,Row(total_detectors+1))             
                     {
                         
 }
@@ -109,8 +108,6 @@ void QEPG::backward_graph_construction(){
     Directly store the propagation from pauli noise to qubits
     */
     const size_t num_detectors=circuit_.get_detector_parity_group().size();
-    std::vector<Row> parity_prop(3* total_noise_,Row(num_detectors+1));
-
     
     std::vector<Row> current_x_parity_prop(circuit_.get_num_qubit(),Row(num_detectors+1));
     std::vector<Row> current_y_parity_prop(circuit_.get_num_qubit(),Row(num_detectors+1));
@@ -147,10 +144,10 @@ void QEPG::backward_graph_construction(){
                 Uptill now, the fate of this noise is determined
                 So in priciple, we can update the parity propagation
                 */
-                parity_prop[current_noise_index]=current_x_parity_prop[qindex];   //current_x_prop(circuit_.get_num_qubit(),Row(3* total_noise_))
-                parity_prop[total_noise_+current_noise_index]=current_y_parity_prop[qindex];
-                parity_prop[total_noise_*2+current_noise_index]=current_z_parity_prop[qindex];      
-
+                parityPropMatrixTranspose_[current_noise_index]=current_x_parity_prop[qindex];   //current_x_prop(circuit_.get_num_qubit(),Row(3* total_noise_))
+                parityPropMatrixTranspose_[total_noise_+current_noise_index]=current_y_parity_prop[qindex];
+                parityPropMatrixTranspose_[total_noise_*2+current_noise_index]=current_z_parity_prop[qindex];      
+                
                 current_noise_index--;
                 continue;
         }
@@ -177,8 +174,6 @@ void QEPG::backward_graph_construction(){
                     current_x_parity_prop[qindex].set(num_detectors);
                     current_y_parity_prop[qindex].set(num_detectors);
             }
-
-
             current_meas_index--;
             continue;
         }
@@ -211,7 +206,6 @@ void QEPG::backward_graph_construction(){
             // current_z_prop[qtarget]^=current_z_prop[qcontrol];        
             // current_y_prop[qcontrol]^=current_x_prop[qtarget];           
             // current_y_prop[qtarget]^=current_z_prop[qcontrol];     
-            
             current_x_parity_prop[qcontrol]^=current_x_parity_prop[qtarget];
             current_z_parity_prop[qtarget]^=current_z_parity_prop[qcontrol];
             current_y_parity_prop[qcontrol]^=current_x_parity_prop[qtarget];
@@ -222,27 +216,12 @@ void QEPG::backward_graph_construction(){
         if(name=="h"){
             size_t qindex=gate.qubits[0];
             // current_x_prop[qindex].swap(current_z_prop[qindex]);   // fast, no copy
-
             current_x_parity_prop[qindex].swap(current_z_parity_prop[qindex]);
         }
     }
     auto t1 = clock::now();                               // stop section‑1
     auto compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
     std::cout << "[Backword detector matrix construction:] " << compile_us / 1'000.0 << "ms\n";
-    /*
-    Compute the transpose of detectorMatrix for future calculation
-    */
-    t0 = clock::now();                               // start timer
-    //transpose_matrix(detectorMatrix_,detectorMatrixTranspose_);
-    t1 = clock::now();                               // stop section‑1
-    compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
-    std::cout << "[Transpose matrix:] " << compile_us / 1'000.0 << "ms\n";
-    t0 = clock::now();                               // start timer
-    //compute_parityPropMatrix();
-    parityPropMatrixTranspose_=parity_prop;
-    t1 = clock::now();                               // stop section‑1
-    compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
-    std::cout << "[ compute_parityPropMatrix:] " << compile_us / 1'000.0 << "ms\n";
 } 
 
 

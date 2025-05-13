@@ -16,6 +16,9 @@ namespace LERcalculator{
 
 
 
+ std::vector<std::vector<bool>> return_detector_matrix(const std::string& prog_str);
+
+
 }
 
 

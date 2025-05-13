@@ -5,10 +5,10 @@
 
 // Include headers for your C++ types
 // Adjust paths if your .hpp files are in a subdirectory (e.g., QEPG/clifford.hpp)
-#include "QEPG/clifford.hpp"
-#include "QEPG/QEPG.hpp"
-#include "QEPG/sampler.hpp"
-#include "QEPG/LERcalculator.hpp"
+#include "src/clifford.hpp"
+#include "src/QEPG.hpp"
+#include "src/sampler.hpp"
+#include "src/LERcalculator.hpp"
 // Include stimparser.hpp if needed by the bindings or types
 // #include "QEPG/stimparser.hpp"
 
@@ -35,6 +35,7 @@ namespace QEPG {
 namespace LERcalculator{
     std::vector<std::vector<bool>> return_samples(const std::string& prog_str, size_t weight, size_t shots);
     std::vector<std::vector<std::vector<bool>>> return_samples_many_weights(const std::string& prog_str,const std::vector<size_t>& weight, const std::vector<size_t>& shots);
+    std::vector<std::vector<bool>> return_detector_matrix(const std::string& prog_str);
 }
    
 
@@ -119,6 +120,11 @@ PYBIND11_MODULE(QEPG, m) { // Use the module name 'QEPG' as seen in your build o
     m.def("return_samples_many_weights", &LERcalculator::return_samples_many_weights, // Use &SAMPLE::return_samples
         py::arg("prog_str"), py::arg("weight"), py::arg("shots"),
         "Function that returns samples of a list of weights based on a circuit and parameters");
+
+
+    m.def("return_detector_matrix", &LERcalculator::return_detector_matrix, // Use &SAMPLE::return_detector_matrix
+          py::arg("prog_str"),
+          "Function that returns the detector matrix");
 
 
 
