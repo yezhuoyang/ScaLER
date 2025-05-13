@@ -10,3 +10,6 @@ test.py
 QEPG/__pycache__/*
 QEPG/*.pyd
 test/__pycache__/*
+QEPG/build/*
+LERcalc/build/*
+
