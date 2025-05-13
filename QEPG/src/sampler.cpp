@@ -1,5 +1,5 @@
 #include "sampler.hpp"
-
+#include "chrono";
 
 
 namespace SAMPLE{
@@ -23,9 +23,9 @@ std::vector<singlePauli> sampler::generate_sample_Floyd(size_t weight){
 
     // Seed source for the random number engine
     std::random_device rd;
-
+    auto seed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
     // Mersenne Twister engine seeded with rd()
-    std::mt19937 gen(rd());
+    std::mt19937 gen(seed);
 
     // Uniform distribution in the range [1, 6]
     std::uniform_int_distribution<> posdistrib(0, num_total_pauliError_-1);

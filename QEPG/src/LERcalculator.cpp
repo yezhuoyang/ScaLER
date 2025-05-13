@@ -72,7 +72,9 @@ std::vector<std::vector<std::vector<bool>>> return_samples_many_weights(const st
     std::vector<std::vector<bool>> tmpresult;
     std::vector<std::vector<std::vector<bool>>> result;
 
+
     for(size_t i=0;i<weight.size();++i){
+        std::cout<<"Weight="<<weight[i]<<"\n";
         samplecontainer.clear();
         tmpresult.clear();
         sampler.generate_many_output_samples(graph,samplecontainer,weight[i],shots[i]);

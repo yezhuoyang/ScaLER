@@ -1,6 +1,6 @@
 import stim
 import pymatching
-from interface import *
+from LERcalc.interface import *
 from pathlib import Path
 import numpy as np
 
@@ -650,7 +650,7 @@ class CliffordCircuit:
 
 
 
-from QEPG import return_samples,return_samples_many_weights,return_detector_matrix
+from QEPG.QEPG import return_samples,return_samples_many_weights,return_detector_matrix
 
 
 import math
@@ -674,30 +674,52 @@ import time
 
 
 def sample_time():
-    distance=30
-    p=0.0001
+    distance=3
+    p=0.00001
     circuit=CliffordCircuit(2)
     circuit.set_error_rate(p)
-    stim_circuit=stim.Circuit.generated("surface_code:rotated_memory_z",rounds=distance,distance=distance).flattened()
+    stim_circuit=stim.Circuit.generated("surface_code:rotated_memory_z",rounds=distance*3,distance=distance).flattened()
     stim_circuit=rewrite_stim_code(str(stim_circuit))
     circuit.set_stim_str(stim_circuit)
     circuit.compile_from_stim_circuit_str(stim_circuit)           
     new_stim_circuit=circuit.get_stim_circuit()    
     start = time.perf_counter()      # high‑resolution timer
-    result=return_samples(str(new_stim_circuit),100,10000)
+    result=return_samples(str(new_stim_circuit),2,10000)
     end = time.perf_counter()
     print(f"Elapsed wall‑clock time: {end - start:.4f} seconds")
 
+    states, observables = [], []
+
+    for j in range(0,10000):
+        states.append(result[j][:-1])
+        observables.append([result[j][-1]])
+
+    # Configure a decoder using the circuit.
+    detector_error_model = new_stim_circuit.detector_error_model(decompose_errors=False)
+    matcher = pymatching.Matching.from_detector_error_model(detector_error_model)
+
+    shots=10000
+    predictions = matcher.decode_batch(states)
+    num_errors = 0
+    for shot in range(shots):
+        actual_for_shot = observables[shot]
+        predicted_for_shot = predictions[shot]
+        if not np.array_equal(actual_for_shot, predicted_for_shot):
+            num_errors += 1
+
+
+    print("Logical error rate when w=3")
+    print(num_errors/shots)
 
 def stratified_sampling():
     index=0
 
 
-    distance=50
-    p=0.0001
+    distance=3
+    p=0.01
     circuit=CliffordCircuit(2)
     circuit.set_error_rate(p)
-    stim_circuit=stim.Circuit.generated("surface_code:rotated_memory_z",rounds=distance,distance=distance).flattened()
+    stim_circuit=stim.Circuit.generated("surface_code:rotated_memory_z",rounds=distance*3,distance=distance).flattened()
     stim_circuit=rewrite_stim_code(str(stim_circuit))
     circuit.set_stim_str(stim_circuit)
     circuit.compile_from_stim_circuit_str(stim_circuit)           
@@ -711,8 +733,8 @@ def stratified_sampling():
     matcher = pymatching.Matching.from_detector_error_model(detector_error_model)
 
 
-    wlist = [77,78,79]        # [2, 3, ..., 20]
-    shotlist = [100] * len(wlist)   # repeat 10000 same number of times
+    wlist = [2,3,4]        # [2, 3, ..., 20]
+    shotlist = [10000] * len(wlist)   # repeat 10000 same number of times
 
     print("Average number of noise: ")
     print(total_noise*p)
@@ -786,7 +808,7 @@ def get_circuit():
  
 
 
-get_circuit()
+#get_circuit()
 
-#stratified_sampling()
+stratified_sampling()
 #sample_time()

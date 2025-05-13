@@ -12,4 +12,5 @@ QEPG/*.pyd
 test/__pycache__/*
 QEPG/build/*
 LERcalc/build/*
+LERcalc/__pycache__/*
 

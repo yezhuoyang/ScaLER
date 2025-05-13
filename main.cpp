@@ -4,7 +4,7 @@
 
 
 
-#include "QEPG/clifford.hpp"
+#include "QEPG/src/clifford.hpp"
 #include <stdexcept>
 #include <fstream>
 #include <sstream>
@@ -25,8 +25,8 @@ std::string read_file_to_string(const std::string& path)
 
 
 
-#include "QEPG/QEPG.hpp"
-#include "QEPG/sampler.hpp"
+#include "QEPG/src/QEPG.hpp"
+#include "QEPG/src/sampler.hpp"
 
 
 
