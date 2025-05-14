@@ -63,8 +63,8 @@ def LER_small_circuit(circuit_file_path):
 
 
 
-    wlist = [0,1,2]        # [2, 3, ..., 20]
-    shotlist = [500000] * len(wlist)   # repeat 10000 same number of times
+    wlist = [0,1,2,3,4]        # [2, 3, ..., 20]
+    shotlist = [5000000] * len(wlist)   # repeat 10000 same number of times
 
 
     result=return_samples_many_weights(str(stimcircuit),wlist,shotlist)
