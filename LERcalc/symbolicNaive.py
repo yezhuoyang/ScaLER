@@ -42,7 +42,7 @@ PROPAGATORS = (PROP_X, PROP_Y, PROP_Z)
 
 
 
-MAX_degree=3
+MAX_degree=100
 
 
 LER=p*0

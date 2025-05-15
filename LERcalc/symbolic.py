@@ -34,7 +34,7 @@ PROP_Z  =[(0, 0),(0, 0),(0, 0),(0, 0)]
 PROPAGATORS = (PROP_X, PROP_Y, PROP_Z)
 
 
-MAX_degree=3
+MAX_degree=200
 
 
 def xor_vec(a, b):
@@ -43,13 +43,14 @@ def xor_vec(a, b):
 
 # ----------------------------------------------------------------------
 # Check if all row elements sum up to 1
-def verity_table(i,j):
+def verity_table(i):
     sum=0
-    for vec_index in range(4):
-        sum+=dp[i][j][vec_index]
-       #print(dp[i][j][vec_index])
+    for j in range(0,i+1):
+        for vec_index in range(4):
+            sum+=dp[i][j][vec_index]
+        #print(dp[i][j][vec_index])
     sum=simplify(sum)
-    print(i,j,sum)
+    print(i,sum)
     assert sum==1
 
 
@@ -62,15 +63,12 @@ dp = [ [ [0]*4 for _ in range(MAX_I+1) ]          # dp[i][j][vecIdx]
 # Base:  i = 0, j = 0 ⇒ probability 1 at vec = (0,0)
 dp[0][0][ vec_to_idx((0,0)) ] = 1
 
-# “Impossible’’ rows (j > i) are δ(vec,0) by definition:
-for i in range(MAX_I+1):
-    for j in range(i+1, MAX_I+1):
-        dp[i][j][ vec_to_idx((0,0)) ] = 1
+
 
 # ----------------------------------------------------------------------
 # Fill   dp[i][j][·]   using the recurrence in Eq. (1)
 for i in range(1, MAX_I+1):
-    dp[i][0][0] = 1
+    dp[i][0][0] = (1-p)**i
 
     for j in range(1, i+1):           # j ≤ i
         for vec_idx in range(4):
@@ -90,14 +88,14 @@ for i in range(1, MAX_I+1):
 
             dp[i][j][vec_idx] = simplify(acc)
 
-            print(f"dp[{i}][{j}][{vec_idx}] = {dp[i][j][vec_idx]}")
-        verity_table(i,j)
+            #print(f"dp[{i}][{j}][{vec_idx}] = {dp[i][j][vec_idx].series(p, 0, MAX_degree).removeO()}")
+    verity_table(i)
 
 
 
 
 def binom(k):
-    binomweight=binomial(4,k)/(2**4)
+    binomweight=binomial(4,k)*p**k*q**(4-k)
     return simplify(binomweight)
 
 
@@ -110,10 +108,12 @@ def calculate_LER(error_row_indices):
         subLER=0
         for rowindex in error_row_indices:
             subLER+=dp[MAX_I][weight][rowindex]
-        LER+=binom(weight)*simplify(subLER)
-    LER=LER.series(p, 0, MAX_degree).removeO()    # no .expand()
-    return simplify(LER).expand()
+        print("Weight: {}".format(weight))
+        print(subLER.expand())
+        LER+=simplify(subLER)
 
+    #LER=LER.series(p, 0, MAX_degree).removeO()    # no .expand()
+    return simplify(LER).expand()
 
 
 
@@ -149,5 +149,5 @@ if __name__ == "__main__":
     print("------------------LER----------------------")
     sum=calculate_LER([1,3])
     print(sum)
-    print()
     print(sum.evalf(subs={p:0.0001}))
+
