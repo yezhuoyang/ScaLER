@@ -48,16 +48,18 @@ MAX_degree=3
 LER=p*0
 #We use an 4bit integer to represent the position of the pauli noise
 for n0 in range(0,4):
-    count=0
-    count+=(n0!=0)
+    n0count=(n0!=0)
     for n1 in range(0,4):
-        count+=(n1!=0)
+        n1count=(n1!=0)
         for n2 in range(0,4):
-            count+=(n2!=0)
+            n2count=(n2!=0)
             for n3 in range(0,4):     
-                print("{},{},{},{}".format(n0,n1,n2,n3))
 
-                count+=(n3!=0)  
+                n3count=(n3!=0)  
+                count=n0count+n1count+n2count+n3count
+
+                print("{},{},{},{}".format(n0,n1,n2,n3))             
+
                 init_vec=(0,0)
                 if(n0==1):
                     init_vec=xor_vec(init_vec, PROP_X[0])
@@ -87,6 +89,7 @@ for n0 in range(0,4):
                 elif(n3==3):
                     init_vec=xor_vec(init_vec, PROP_Z[3])  
 
+                print(init_vec)
 
                 if(init_vec[1]==1):
                     LER+=simplify((p/3)**count*(1-p)**(4-count))
