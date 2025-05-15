@@ -33,6 +33,10 @@ PROP_Y = [(1,1),(0,1),(1,0),(0,1)]
 PROP_Z  =[(0, 0),(0, 0),(0, 0),(0, 0)]
 PROPAGATORS = (PROP_X, PROP_Y, PROP_Z)
 
+
+MAX_degree=3
+
+
 def xor_vec(a, b):
     return (a[0] ^ b[0], a[1] ^ b[1])
 
@@ -107,7 +111,8 @@ def calculate_LER(error_row_indices):
         for rowindex in error_row_indices:
             subLER+=dp[MAX_I][weight][rowindex]
         LER+=binom(weight)*simplify(subLER)
-    return simplify(LER)
+    LER=LER.series(p, 0, MAX_degree).removeO()    # no .expand()
+    return simplify(LER).expand()
 
 
 
