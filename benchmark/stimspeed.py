@@ -1,6 +1,6 @@
 import stim
 import pymatching
-from LERcalculator import *
+from LERcalc.LERcalculator import *
 import time
 
 

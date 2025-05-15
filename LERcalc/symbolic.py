@@ -86,16 +86,15 @@ for i in range(1, MAX_I+1):
 
             dp[i][j][vec_idx] = simplify(acc)
 
-
+            print(f"dp[{i}][{j}][{vec_idx}] = {dp[i][j][vec_idx]}")
         verity_table(i,j)
 
 
 
 
 def binom(k):
-    binomweight=binomial(4,k)
-    poly=p**k*q**(4-k)
-    return simplify(binomweight*poly)
+    binomweight=binomial(4,k)/(2**4)
+    return simplify(binomweight)
 
 
 # ----------------------------------------------------------------------
@@ -104,11 +103,10 @@ def binom(k):
 def calculate_LER(error_row_indices):
     LER=0
     for weight in range(1,5):
-        subprob=1
         subLER=0
         for rowindex in error_row_indices:
             subLER+=dp[MAX_I][weight][rowindex]
-        LER+=binom(weight)*simplify(subprob*subLER)
+        LER+=binom(weight)*simplify(subLER)
     return simplify(LER)
 
 
@@ -144,4 +142,7 @@ if __name__ == "__main__":
     '''
     
     print("------------------LER----------------------")
-    print(calculate_LER([2,3]))
+    sum=calculate_LER([1,3])
+    print(sum)
+    print()
+    print(sum.evalf(subs={p:0.0001}))

@@ -19,6 +19,48 @@ def convert_int_to_bool_list(value, length):
     return [bool(value & (1 << i)) for i in reversed(range(length))]
 
 
+
+def count_logical_errors(circuit: stim.Circuit, num_shots: int) -> int:
+    # Sample the circuit.
+    sampler = circuit.compile_detector_sampler()
+    detection_events, observable_flips = sampler.sample(num_shots, separate_observables=True)
+
+    # Configure a decoder using the circuit.
+    detector_error_model = circuit.detector_error_model(decompose_errors=True)
+    matcher = pymatching.Matching.from_detector_error_model(detector_error_model)
+
+    # Run the decoder.
+    predictions = matcher.decode_batch(detection_events)
+
+    # Count the mistakes.
+    num_errors = 0
+    for shot in range(num_shots):
+        actual_for_shot = observable_flips[shot]
+        predicted_for_shot = predictions[shot]
+        if not np.array_equal(actual_for_shot, predicted_for_shot):
+            num_errors += 1
+    return num_errors
+
+
+def stim_ground_truth_LER(circuit_file_path):
+    stim_str=""
+    with open(circuit_file_path, "r", encoding="utf-8") as f:
+        stim_str = f.read()
+    
+
+    circuit=CliffordCircuit(4)   
+    circuit.set_error_rate(0.0001)  
+    circuit.compile_from_stim_circuit_str(stim_str)
+    stimcircuit=circuit.get_stim_circuit()
+
+    detector_error_model = stimcircuit.detector_error_model(decompose_errors=False)
+    shots=5000000
+    num_erros=count_logical_errors(stimcircuit, shots)
+    print(num_erros/shots)
+
+
+
+
 def LER_small_circuit(circuit_file_path):
 
     stim_str=""
@@ -106,7 +148,10 @@ def LER_small_circuit(circuit_file_path):
 if __name__ == "__main__":
     # Example usage
     circuit_file_path = "C:/Users/yezhu/Documents/Sampling/stimprograms/1cnot"
-    LER_small_circuit(circuit_file_path)
+    #LER_small_circuit(circuit_file_path)
+    stim_ground_truth_LER(circuit_file_path)
+
+
 
     #value=0b1101
     #length=4

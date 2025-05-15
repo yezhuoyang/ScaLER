@@ -1,4 +1,4 @@
-from LERcalculator import *
+from LERcalc.LERcalculator import *
 
 
 
