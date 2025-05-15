@@ -5,8 +5,8 @@ import numpy as np
 from QEPG.QEPG import return_samples,return_samples_many_weights,return_detector_matrix
 from .test_by_stim import *
 import pymatching
-
-
+from LERcalc.LERcalculator import *
+from LERcalc.clifford import *
 
 
 '''
@@ -49,12 +49,12 @@ def stim_ground_truth_LER(circuit_file_path):
     
 
     circuit=CliffordCircuit(4)   
-    circuit.set_error_rate(0.0001)  
+    circuit.set_error_rate(0.1)  
     circuit.compile_from_stim_circuit_str(stim_str)
     stimcircuit=circuit.get_stim_circuit()
 
     detector_error_model = stimcircuit.detector_error_model(decompose_errors=False)
-    shots=5000000
+    shots=50000000
     num_erros=count_logical_errors(stimcircuit, shots)
     print(num_erros/shots)
 
@@ -69,7 +69,7 @@ def LER_small_circuit(circuit_file_path):
     
 
     circuit=CliffordCircuit(4)   
-    circuit.set_error_rate(0.001)  
+    circuit.set_error_rate(0.1)  
     circuit.compile_from_stim_circuit_str(stim_str)
     stimcircuit=circuit.get_stim_circuit()
 
@@ -105,15 +105,15 @@ def LER_small_circuit(circuit_file_path):
 
 
 
-    wlist = [0,1,2,3,4]        # [2, 3, ..., 20]
-    shotlist = [5000000] * len(wlist)   # repeat 10000 same number of times
+    wlist = [0,1,2,3,4,5,6,7]        # [2, 3, ..., 20]
+    shotlist = [500000] * len(wlist)   # repeat 10000 same number of times
 
 
     result=return_samples_many_weights(str(stimcircuit),wlist,shotlist)
 
 
-    #LER=0
- 
+    LER=0
+    p=0.1
 
     for i in range(len(wlist)):
         states, observables = [], []
@@ -135,10 +135,10 @@ def LER_small_circuit(circuit_file_path):
 
         print("Logical error rate when w="+str(wlist[i]))
         print(num_errors/shots)
-        #LER+=binomial_weight(total_noise, wlist[i], p)*(num_errors/shots)
+        LER+=binomial_weight(total_noise, wlist[i], p)*(num_errors/shots)
 
     
-    #print(LER)    
+    print(LER)    
     
 
 
@@ -148,8 +148,8 @@ def LER_small_circuit(circuit_file_path):
 if __name__ == "__main__":
     # Example usage
     circuit_file_path = "C:/Users/yezhu/Documents/Sampling/stimprograms/1cnot"
-    #LER_small_circuit(circuit_file_path)
-    stim_ground_truth_LER(circuit_file_path)
+    LER_small_circuit(circuit_file_path)
+    #stim_ground_truth_LER(circuit_file_path)
 
 
 

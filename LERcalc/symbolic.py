@@ -149,5 +149,5 @@ if __name__ == "__main__":
     print("------------------LER----------------------")
     sum=calculate_LER([1,3])
     print(sum)
-    print(sum.evalf(subs={p:0.0001}))
+    print(sum.evalf(subs={p:0.1}))
 
