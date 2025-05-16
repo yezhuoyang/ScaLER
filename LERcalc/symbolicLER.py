@@ -2,6 +2,7 @@ import sys
 from sympy import symbols, binomial, Rational, simplify, latex
 from LERcalc.clifford import *
 from LERcalc.stimparser import *
+from LERcalc.QEPGpython import *
 import pymatching
 
 # ----------------------------------------------------------------------
@@ -103,11 +104,14 @@ class symbolicLER:
         self._error_rate=error_rate
         self._dp=None
         self._cliffordcircuit=CliffordCircuit(4)  
+        self._graph=None
         self._all_predictions=None
 
         self._PROP_X = None
         self._PROP_Y = None
         self._PROP_Z = None
+
+        self._error_row_indices = []
 
 
     def parse_from_file(self,filepath):
@@ -124,7 +128,10 @@ class symbolicLER:
         self._num_noise = self._cliffordcircuit.get_totalnoise()
         self._num_detector=len(self._cliffordcircuit.get_parityMatchGroup())
 
+        self._total_detector_outcome=(1<<(self._num_detector+1))
 
+        self._graph=QEPGpython(self._cliffordcircuit)
+        self._graph.backword_graph_construction()
 
 
     def generate_pymatching_table(self):
@@ -148,6 +155,15 @@ class symbolicLER:
         self._all_predictions = matcher.decode_batch(all_inputs)
 
 
+    
+    def calc_error_row_indices(self):
+        """
+        Based on the prediction result by pymatching of all possible input,
+        build a list including all row indices that cause logical error
+        """
+        self._error_row_indices = []
+
+
 
 
     def initialize_single_pauli_propagation(self):
@@ -157,19 +173,81 @@ class symbolicLER:
         self._PROP_X = []
         self._PROP_Y = []
         self._PROP_Z = []
-        for noiseidx in range(self.self._num_noise):
-            pass
+        for noiseidx in range(self._num_noise):
+            self._PROP_X.append(tuple(self._graph.sample_x_error(noiseidx)))
+            self._PROP_Y.append(tuple(self._graph.sample_y_error(noiseidx)))
+            self._PROP_Z.append(tuple(self._graph.sample_z_error(noiseidx)))
 
-
+    
 
     def initialize_dp(self):
         """
         Given the circuit information, initialize the dp table for running the algorithm
         """
-        pass
+        self._dp = [ [ [0]*self._total_detector_outcome for _ in range(self._num_noise+1) ]
+                                for _ in range(self._num_noise+1) ]
+        
+
+
+    def verify_table(self,i):
+        sum=0
+        for j in range(0,i+1):
+            for vec_index in range(4):
+                sum+=self._dp[i][j][vec_index]
+            #print(dp[i][j][vec_index])
+        sum=simplify(sum)
+        print(i,sum)
+        assert sum==1
+
+
+    def dynamic_calculation_of_dp(self):
+        # ----------------------------------------------------------------------
+        # DP tables
+        MAX_I = self._num_noise
+        self.initialize_dp()
+
+        # ----------------------------------------------------------------------
+        # Fill   dp[i][j][·]   using the recurrence in Eq. (1)
+        for i in range(1, MAX_I+1):
+            self._dp[i][0][0] = (1-p)**i
+
+            for j in range(1, i+1):           # j ≤ i
+                for vec_idx in range(4):
+
+                    vec = idx_to_vec(vec_idx)
+
+                    # 1) “no error’’ branch
+                    acc = q * self._dp[i-1][j][vec_idx]
+
+                    # 2) X, Y, Z branches  (need j-1 ≥ 0)
+                    if j >= 1:
+                        for (prob, prop) in ((Px, self._PROP_X[i-1]),
+                                            (Py, self._PROP_Y[i-1]),
+                                            (Pz, self._PROP_Z[i-1])):
+                            prev_vec = xor_vec(prop, vec)
+                            acc += prob * self._dp[i-1][j-1][ vec_to_idx(prev_vec) ]
+
+                    self._dp[i][j][vec_idx] = simplify(acc)
+
+                    #print(f"dp[{i}][{j}][{vec_idx}] = {dp[i][j][vec_idx].series(p, 0, MAX_degree).removeO()}")
+            self.verify_table(i)
 
 
 
+
+    # ----------------------------------------------------------------------
+    # Calculate logical error rate
+    # The input is a list of rows with logical errors
+    def calculate_LER(self):
+        self._LER=0
+        for weight in range(1,self._num_noise+1):
+            subLER=0
+            for rowindex in self._error_row_indices:
+                subLER+=self._dp[self._num_noise][weight][rowindex]
+            self._LER+=simplify(subLER)
+        self._LER=simplify(self._LER).expand()
+        #LER=LER.series(p, 0, MAX_degree).removeO()    # no .expand()
+        return self._LER
 
 
 if __name__=="__main__":
@@ -183,3 +261,7 @@ if __name__=="__main__":
     tmp.generate_pymatching_table()
 
     print(tmp._all_predictions)
+    
+
+    tmp.initialize_single_pauli_propagation()
+

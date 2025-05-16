@@ -23,7 +23,7 @@ class QEPGpython:
         #Keep track of the effect of X,Y,Z back propagation
 
 
-        column_size=self._circuit.get_parityMatchGroup()+1
+        column_size=len(self._circuit.get_parityMatchGroup())+1
         current_x_prop=np.zeros((nqubit,column_size), dtype='uint8')
         current_y_prop=np.zeros((nqubit,column_size), dtype='uint8')
         current_z_prop=np.zeros((nqubit,column_size), dtype='uint8')
@@ -108,12 +108,32 @@ class QEPGpython:
         return list(self._propMatrix[noise_index,:])
 
     def sample_y_error(self, noise_index):
-        return self._propMatrix[self._total_noise+noise_index:]
+        return list(self._propMatrix[self._total_noise+noise_index,:])
 
     def sample_z_error(self, noise_index):
-        return self._propMatrix[2*self._total_noise+noise_index,:]
+        return list(self._propMatrix[2*self._total_noise+noise_index,:])
 
 
     def sample_noise_vector(self,noise_vector):
         assert len(noise_vector)==3*self._total_noise
         return noise_vector@self._propMatrix  
+
+
+
+
+
+
+if __name__ == "__main__":
+        stim_str=""
+        filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/1cnot"
+        with open(filepath, "r", encoding="utf-8") as f:
+            stim_str = f.read()
+        circuit=CliffordCircuit(3)
+        circuit.set_error_rate(0.01)  
+        circuit.compile_from_stim_circuit_str(stim_str)    
+
+        graph=QEPGpython(circuit)
+        graph.backword_graph_construction()
+
+        print(graph.sample_noise_vector(np.array([1,0,0,0,0,0,0,0,0,0,0,0])))
+
