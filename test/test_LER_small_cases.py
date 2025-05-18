@@ -3,14 +3,14 @@ import numpy as np
 
 
 from QEPG.QEPG import return_samples,return_samples_many_weights,return_detector_matrix
-from .test_by_stim import *
+from .test_QEPG_by_stim import *
 import pymatching
 from LERcalc.LERcalculator import *
 from LERcalc.clifford import *
 
 
 '''
-Conver 
+Convert integer to bool list 
 '''
 def convert_int_to_bool_list(value, length):
     """

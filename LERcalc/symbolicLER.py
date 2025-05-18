@@ -112,7 +112,7 @@ class symbolicLER:
         self._PROP_Z = None
 
         self._error_row_indices = []
-
+        self._subspace_LER={}
 
     def parse_from_file(self,filepath):
         """
@@ -238,12 +238,6 @@ class symbolicLER:
                     # 1) “no error’’ branch
                     acc = q * self._dp[i-1][j][vec_idx]
 
-
-                    # print("i={}, j={}, vec={}".format(i,j,vec))
-                    # print("self._prop_X[i-1]={}".format(self._PROP_X[i-1]))
-                    # print("self._prop_Y[i-1]={}".format(self._PROP_Y[i-1]))
-                    # print("self._prop_Z[i-1]={}".format(self._PROP_Z[i-1]))
-                    # 2) X, Y, Z branches  (need j-1 ≥ 0)
                     if j >= 1:
                         for (prob, prop) in ((Px, self._PROP_X[i-1]),
                                             (Py, self._PROP_Y[i-1]),
@@ -251,13 +245,10 @@ class symbolicLER:
                             
 
                             prev_vec = xor_vec(prop, vec)
-                            # print("prev_vec",prev_vec)
-                            # print("self._dp[i-1][j-1][ vec_to_idx(prev_vec)]:{}".format(self._dp[i-1][j-1][vec_to_idx(prev_vec)]))
                             acc += prob * self._dp[i-1][j-1][ vec_to_idx(prev_vec) ]
 
                     self._dp[i][j][vec_idx] = simplify(acc)
 
-                    # print(f"dp[{i}][{j}][{vec_idx}] = {self._dp[i][j][vec_idx]}")
             self.verify_table(i)
 
 
@@ -272,10 +263,48 @@ class symbolicLER:
             subLER=0
             for rowindex in self._error_row_indices:
                 subLER+=self._dp[self._num_noise][weight][rowindex]
+
+            self._subspace_LER[weight]=simplify(subLER)
             self._LER+=simplify(subLER)
         self._LER=simplify(self._LER).expand()
         #LER=LER.series(p, 0, MAX_degree).removeO()    # no .expand()
         return self._LER
+
+
+    def evaluate_LER(self,pval):
+        return self._LER.evalf(subs={p:pval})
+
+
+    
+    def calculate_LER_from_file(self,filepath,pvalue):
+        """
+        The most import function. Read the stim circuit, calculate the exact polynomial 
+        of LER, and evaluate with the value of p(physical error rate).
+
+        Following steps are included:
+             Step1:   Parse the circuit from the file, inject depolarization noise
+             Step2:   Compile the STIM detector graph, generate the entire prediction table
+             Stem3:   Construct the QEPG graph
+             Step4:   Calculate all row indices in the table that will cause logical error
+             Step5:   Use dynamic algorithm to calculate the probability of measuring any possible outcomes
+             Step6:   Sum up all probability in the row with logical error
+
+        Args:
+             filepath: The path of the file with the STIM circuit
+             pvalue:   The physical error rate
+
+        Returns:
+             A floating value which store the final logical error rate
+        """
+        self._error_rate=pvalue
+        self.parse_from_file(filepath)
+        self.generate_pymatching_table()
+        self.initialize_single_pauli_propagation()
+        self.calc_error_row_indices()
+        self.dynamic_calculation_of_dp()
+        self.calculate_LER()
+        return self.evaluate_LER(pvalue)
+
 
 
 if __name__=="__main__":
@@ -283,20 +312,5 @@ if __name__=="__main__":
 
     #print(idx_to_bool_list(5, 3))
     tmp=symbolicLER(0.01)
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/1cnot"
-    tmp.parse_from_file(filepath)
-
-    tmp.generate_pymatching_table()
-    
-
-    tmp.initialize_single_pauli_propagation()
-
-
-    tmp.calc_error_row_indices()
-
-
-    tmp.dynamic_calculation_of_dp()
-
-    ler=tmp.calculate_LER()
-
-    print(ler)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/simple"
+    print(tmp.calculate_LER_from_file(filepath,0.01))

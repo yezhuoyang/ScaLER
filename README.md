@@ -90,7 +90,7 @@ The python code is divided into different modules. For example, to run the test_
 - [X] **Construct the parity propagation matrix directly** during detector matrix construction  
 - [X] **Validate QEPG at larger scale** by comparing simulation results with STIM  
 - [ ] **Optimize performance** using multithreading or other parallelism strategies  
-- [ ] **LER symbolic calculator** Calculate logical error rate(of small circuit) by dynamic algorithm
+- [X] **LER symbolic calculator** Calculate logical error rate(of small circuit) by dynamic algorithm
 - [ ] **LER calculation benchmark(Exact)** Set up a benchmark of small circuit with known logical error rate
 - [ ] **LER calculation benchmark(Compare with STIM)** Set up a benchmark of surface code/repetition code
 - [ ] **QEPG generating speed benchmark** Set up a benchmark comparing the time used to generate the QEPG graph
