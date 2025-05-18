@@ -5,6 +5,9 @@ import math
 import pymatching
 from scipy.optimize import curve_fit
 from scipy.stats import norm
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
+
 
 def binomial_weight(N, W, p):
     if N<200:
@@ -27,6 +30,7 @@ def scurve_function(x, mu, sigma):
 Use strafified sampling + Scurve fitting  algorithm to calculate the logical error rate
 '''
 class stratified_Scurve_LERcalc:
+
     def __init__(self, error_rate=0, sampleBudget=10000, num_subspace=5):
         self._num_detector=0
         self._num_noise=0
@@ -38,14 +42,18 @@ class stratified_Scurve_LERcalc:
         Use a dictionary to store the estimated subspace logical error rate
         """
         self._estimated_subspaceLER={}
+        self._estimated_subspaceLER_second={}
         self._sampleBudget=sampleBudget
         self._num_subspace=num_subspace
-        self._minw=0
-        self._maxw=0
+        self._minw=1
+        self._maxw=10000000000000
+        self._saturatew=10000000000000       
         self._estimated_wlist=[]
 
         self._stim_str_after_rewrite=""
 
+        self._mu=0
+        self._sigma=0
 
 
 
@@ -73,31 +81,11 @@ class stratified_Scurve_LERcalc:
 
 
     '''
-    Use binary search to determine the 
-    exact number of errors that give non-zero logical error rate
-    We just try 10 samples
-    '''
-    def binary_search_zero(self,low,high,shots):
-        left=low
-        right=high
-        while left<right:
-            print(left,right)
-            mid=(left+right)//2
-            er=self.calc_logical_error_rate_with_fixed_w(shots,mid)
-            print("er: ",er)
-            if er>0:
-                right=mid
-            else:
-                left=mid+1
-        return left
-
-
-    '''
     Use binary search to determine the exact number of errors 
     that give saturate logical error rate
     We just try 10 samples
     '''
-    def binary_search_half(self,low,high, shots, epsilon=0.05):
+    def binary_search_half(self,low,high, shots, epsilon=0.15):
         left=low
         right=high
         while left<right:
@@ -116,8 +104,9 @@ class stratified_Scurve_LERcalc:
         """
         Use binary search to determine the minw and maxw
         """
-        self._minw=0
-        self._maxw=self.binary_search_half(0,self._num_noise,shots)
+        self._minw=1
+        self._maxw=self.binary_search_half(1,self._num_noise,shots)
+        self._saturatew=self._maxw
         print("minw: ",self._minw)
         print("maxw: ",self._maxw)
 
@@ -142,7 +131,7 @@ class stratified_Scurve_LERcalc:
         self._matcher = pymatching.Matching.from_detector_error_model(self._detector_error_model)
 
 
-    def subspace_sampling(self):
+    def subspace_sampling_first_round(self,sampleBudget):
 
         """
         After we determine the minw and maxw, we generate an even distribution of points 
@@ -150,12 +139,13 @@ class stratified_Scurve_LERcalc:
         """
 
         gap=int((self._maxw-self._minw)/self._num_subspace)
-
+        if gap==0:
+            gap=1
 
         wlist =list(np.arange(self._minw, self._maxw, gap, dtype=int))
         self._estimated_wlist=wlist
         print("wlist: ",wlist)
-        slist=[self._sampleBudget//self._num_subspace]*len(wlist)
+        slist=[sampleBudget//self._num_subspace]*len(wlist)
 
 
         result=return_samples_many_weights(self._stim_str_after_rewrite,wlist,slist)
@@ -202,36 +192,31 @@ class stratified_Scurve_LERcalc:
         return self._estimated_subspaceLER[weight]*binomial_weight(self._num_noise, weight,self._error_rate)
 
 
-    def calculate_LER_from_file(self,filepath,pvalue):
-        pass
-
-
     '''
     Fit the distribution by 1/2-e^{alpha/W}
     '''
     def fit_Scurve(self):
         # Initial guess for alpha
-        initial_guess = [10,1.0]
-
-
-        sigmas=[x*2 for x in self._estimated_wlist]
+        self._saturatew
+        sigma_guess = self._saturatew / 3.2898
+        mu_guess    = self._saturatew/2          # centre in the middle of that span
+        initial_guess  = (mu_guess, sigma_guess)
 
         # Perform the curve fit with the bounds
         popt, pcov = curve_fit(
             scurve_function, 
             self._estimated_wlist, 
             [self._estimated_subspaceLER[x] for x in self._estimated_wlist], 
-            p0=initial_guess, 
-            sigma=sigmas,
+            p0=initial_guess
         )
 
         # Extract the best-fit parameter (alpha)
-        mu,sigma = popt[0],popt[1]
-        return mu,sigma
+        self._mu,self._sigma = popt[0],popt[1]
+        return self._mu,self._sigma
 
 
-    def calc_logical_error_rate_by_curve_fitting(self):
-        mu,sigma=self.fit_Scurve()
+    def calc_logical_error_rate_after_curve_fitting(self):
+        #self.fit_Scurve()
         self._LER=0
         for weight in range(1,self._num_noise+1):
             """
@@ -241,29 +226,280 @@ class stratified_Scurve_LERcalc:
             if weight in self._estimated_wlist:
                 self._LER+=self._estimated_subspaceLER[weight]*binomial_weight(self._num_noise,weight,self._error_rate)  
             else:
-                self._LER+=scurve_function(weight,mu,sigma)*binomial_weight(self._num_noise,weight,self._error_rate)
+                self._LER+=scurve_function(weight,self._mu,self._sigma)*binomial_weight(self._num_noise,weight,self._error_rate)
         return self._LER
 
 
-if __name__ == "__main__":
-    tmp=stratified_Scurve_LERcalc(0.0001,sampleBudget=10000,num_subspace=8)
+    """
+    After the first round of sampling, we use the fitted curve value to determine the 
+    number of samples needed for each subspace
+    """
+    def distribute_samples(self):
+        proportion_list=[]
+        """
+        Sample around the subspaces.
+        """
+        ave_error_weight=self._error_rate*self._num_noise
+
+        """
+        Evenly distribute the sample budget across all subspace
+        [ave_error_weight-self._num_subspace//2, ave_error_weight+self._num_subspace//2 ]
+        """
+        if(ave_error_weight-self._num_subspace//2<0):
+            self._minw=1
+        else:
+            self._minw=int(ave_error_weight-self._num_subspace//2)
+
+        if(ave_error_weight+self._num_subspace//2>self._num_noise):
+            self._maxw=self._num_noise
+        else:
+            self._maxw=int(ave_error_weight+self._num_subspace//2)    
+
+        if self._maxw<self._num_subspace:
+            self._maxw=self._num_subspace
+
+        wlist = list(range(self._minw, self._maxw + 1))       
+
+        for i in range(len(wlist)):
+            if wlist[i] in self._estimated_wlist:
+                proportion_list.append(self._estimated_subspaceLER[wlist[i]])
+            else:
+                proportion_list.append(scurve_function(wlist[i],self._mu,self._sigma)) 
+
+        maxelement=max(proportion_list)
+
+
+        """
+        If all the elements are 0, we set all of them to 1
+        """
+        if(maxelement==0):
+            proportion_list=[1 for i in range(len(proportion_list))]  
+        else:
+            """
+            If some of the elements are 0, we set them to the minimum/10 of the other elements
+            """
+            proportion_list = [1 / (x if x else min(y for y in proportion_list if y)/10) for x in proportion_list]
+
+        #We Normalize the proportions
+        sum_proportion = sum(proportion_list)
+        proportion_list = [x / sum_proportion for x in proportion_list]
+
+        slist = [int(x * self._sampleBudget) or 10  for x in proportion_list]
+
+
+        return wlist,slist
+
+
+
+    def subspace_sampling_second_round(self):
+        wlist,slist=self.distribute_samples()
+        result=return_samples_many_weights(self._stim_str_after_rewrite,wlist,slist)
+
+        print("wlist: ",wlist)
+        print("slist: ",slist)
+        print("Result shape is ",len(result)," ",len(result[0])," ",len(result[0][0]))
+        for i in range(len(wlist)):
+            states, observables = [], []
+
+            for j in range(0,slist[i]):
+                states.append(result[i][j][:-1])
+                observables.append([result[i][j][-1]])
+
+            shots=len(states)
+            predictions =self._matcher.decode_batch(states)
+            num_errors = 0
+            for shot in range(shots):
+                actual_for_shot = observables[shot]
+                predicted_for_shot = predictions[shot]
+                if not np.array_equal(actual_for_shot, predicted_for_shot):
+                    num_errors += 1
+            self._estimated_subspaceLER_second[wlist[i]]=num_errors/shots
+            self._estimated_subspaceLER[wlist[i]]=num_errors/shots
+            print("Logical error rate when w={} ".format(wlist[i])+str(self._estimated_subspaceLER[wlist[i]]))
+
+
+
+    def plot_scurve(self, filename,title="S-curve"):
+        """Plot the S-curve and its discrete estimate."""
+        keys   = self._estimated_wlist
+        values = [self._estimated_subspaceLER[k] for k in keys]
+        fig=plt.figure()
+        # bars ── discrete estimate
+        plt.bar(keys, values,
+                color='tab:blue',         # pick any color you like
+                alpha=0.8,
+                label='Estimated subspace LER by sampling')
+
+
+        keys_second = self._estimated_subspaceLER_second.keys()
+        values_second = [self._estimated_subspaceLER_second[k] for k in keys_second]
+        plt.bar(keys_second, values_second,
+                color='tab:red',         # pick any color you like
+                alpha=0.8,
+                label='Second round sampling LER by sampling')        
+
+
+        plt.axvline(x=self._error_rate*self._num_noise, color="red", linestyle="--", linewidth=1.2, label="Average Error number") # vertical line at x=0.5
+
+
+        # smooth curve ── fitted S-curve
+        x = np.linspace(0, self._saturatew + 10, 1000)
+        y = scurve_function(x, self._mu, self._sigma)
+        plt.plot(x, y,
+                color='tab:orange',
+                linewidth=2.0,
+                label='Fitted S-curve')
+
+        plt.xlabel('Weight')
+        plt.ylabel('Logical Error Rate in subspace')
+        plt.title(title+" (PL={})".format(self._LER))
+        plt.legend()                     # <- shows the two labels
+
+        # ── Force integer ticks on the X axis ──────────────────────────
+        plt.gca().xaxis.set_major_locator(mticker.MaxNLocator(integer=True))
+
+
+        plt.tight_layout()               # optional: nicely fit everything
+        plt.savefig(filename, dpi=300)
+        #plt.show()
+        plt.close(fig)
+
+
+    def calculate_LER_from_file(self,filepath,pvalue,figname,titlename):
+        self._error_rate=pvalue
+        self.parse_from_file(filepath)
+        self.determine_w()
+        self.subspace_sampling_first_round(int(self._sampleBudget//4))
+        self.fit_Scurve()
+        self.subspace_sampling_second_round()
+        self.fit_Scurve()        
+        self.calc_logical_error_rate_after_curve_fitting()
+        print("Final LER: ",self._LER)
+        self.plot_scurve(figname,titlename)
+
+
+
+
+
+def generate_all_surface_code_figure():
+    p=0.001
+
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=100000,num_subspace=10)
     filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
-    tmp.parse_from_file(filepath)
-
-
-    #result=tmp.calc_logical_error_rate_with_fixed_w(3,2)
-    #print(result)
-    #tmp.subspace_sampling()
-
-
-    tmp.determine_w(1000)
-
-    tmp.subspace_sampling()
-
-    LER=tmp.calculate_LER()
-    print("LER: ",LER)
+    ler=tmp.calculate_LER_from_file(filepath,p,"S3.png","Surface3")
 
 
 
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=500000,num_subspace=10)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface5"
+    ler=tmp.calculate_LER_from_file(filepath,p,"S5.png","Surface5")
 
 
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=800000,num_subspace=10)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface7"
+    ler=tmp.calculate_LER_from_file(filepath,p,"S7.png","Surface7")
+
+
+
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=100000,num_subspace=10)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface9"
+    ler=tmp.calculate_LER_from_file(filepath,p,"S9.png","Surface9")
+
+
+
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=120000,num_subspace=10)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface11"
+    ler=tmp.calculate_LER_from_file(filepath,p,"S11.png","Surface11")
+
+
+
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=140000,num_subspace=10)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface13"
+    ler=tmp.calculate_LER_from_file(filepath,p,"S13.png","Surface13")
+
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=160000,num_subspace=10)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface15"
+    ler=tmp.calculate_LER_from_file(filepath,p,"S15.png","Surface15")
+
+
+
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=180000,num_subspace=10)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface17"
+    ler=tmp.calculate_LER_from_file(filepath,p,"S17.png","Surface17")
+
+
+
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=200000,num_subspace=10)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface19"
+    ler=tmp.calculate_LER_from_file(filepath,p,"S19.png","Surface19")
+
+
+
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=220000,num_subspace=10)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface21"
+    ler=tmp.calculate_LER_from_file(filepath,p,"S21.png","Surface21")
+
+
+
+
+def generate_all_repetition_code_figure():
+    p=0.001
+
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=100000,num_subspace=10)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition3"
+    ler=tmp.calculate_LER_from_file(filepath,p,"R3.png","Repetition3")
+
+
+
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=500000,num_subspace=10)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition5"
+    ler=tmp.calculate_LER_from_file(filepath,p,"R5.png","Repetition5")
+
+
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=800000,num_subspace=10)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition7"
+    ler=tmp.calculate_LER_from_file(filepath,p,"R7.png","Repetition7")
+
+
+
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=100000,num_subspace=10)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition9"
+    ler=tmp.calculate_LER_from_file(filepath,p,"R9.png","Repetition9")
+
+
+
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=120000,num_subspace=10)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition11"
+    ler=tmp.calculate_LER_from_file(filepath,p,"R11.png","Repetition11")
+
+
+
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=140000,num_subspace=10)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition13"
+    ler=tmp.calculate_LER_from_file(filepath,p,"R13.png","Repetition13")
+
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=160000,num_subspace=10)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition15"
+    ler=tmp.calculate_LER_from_file(filepath,p,"R15.png","Repetition15")
+
+
+
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=180000,num_subspace=10)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition17"
+    ler=tmp.calculate_LER_from_file(filepath,p,"R17.png","Repetition17")
+
+
+
+
+def generate_all_hexagon_code_figure():
+    pass
+
+
+def generate_all_square_code_figure():
+    pass
+
+
+
+
+if __name__ == "__main__":
+    generate_all_repetition_code_figure()
