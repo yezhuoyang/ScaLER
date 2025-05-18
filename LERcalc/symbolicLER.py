@@ -146,12 +146,13 @@ class symbolicLER:
         matcher = pymatching.Matching.from_detector_error_model(detector_error_model)
 
         all_inputs = []
+
         for i in range(0,1<<self._num_detector):
             # Convert the integer to a list of booleans
             bool_list = idx_to_bool_list(i, self._num_detector)
             # Print the list of booleans
             all_inputs.append(bool_list)
-        print(all_inputs)
+        #print(all_inputs)
         self._all_predictions = matcher.decode_batch(all_inputs)
 
 
@@ -162,7 +163,23 @@ class symbolicLER:
         build a list including all row indices that cause logical error
         """
         self._error_row_indices = []
-
+        for row in range(0,self._total_detector_outcome):
+            full_bool_list = idx_to_bool_list(row, self._num_detector+1)     
+            """
+            Get the current observable outcome represented by 
+            the row index.
+            """ 
+            current_obs=full_bool_list[-1]
+            ind_no_obs=vec_to_idx(full_bool_list[:-1])
+            """
+            Return the exact prediction result from the decoder, which
+            is computed by function generate_pymatching_table(self)
+            """
+            real_obs=self._all_predictions[ind_no_obs][0]
+            if(current_obs!=real_obs):
+                self._error_row_indices.append(row)
+        
+        #print(self._error_row_indices)
 
 
 
@@ -192,11 +209,11 @@ class symbolicLER:
     def verify_table(self,i):
         sum=0
         for j in range(0,i+1):
-            for vec_index in range(4):
+            for vec_index in range(self._total_detector_outcome):
                 sum+=self._dp[i][j][vec_index]
-            #print(dp[i][j][vec_index])
+            # print(self._dp[i][j][vec_index])
         sum=simplify(sum)
-        print(i,sum)
+        # print(i,sum)
         assert sum==1
 
 
@@ -206,30 +223,41 @@ class symbolicLER:
         MAX_I = self._num_noise
         self.initialize_dp()
 
+
+        col_size=self._num_detector+1
         # ----------------------------------------------------------------------
         # Fill   dp[i][j][·]   using the recurrence in Eq. (1)
-        for i in range(1, MAX_I+1):
+        for i in range(0, MAX_I+1):
             self._dp[i][0][0] = (1-p)**i
 
             for j in range(1, i+1):           # j ≤ i
-                for vec_idx in range(4):
+                for vec_idx in range(self._total_detector_outcome):
 
-                    vec = idx_to_vec(vec_idx)
+                    vec = idx_to_vec(vec_idx,col_size)
 
                     # 1) “no error’’ branch
                     acc = q * self._dp[i-1][j][vec_idx]
 
+
+                    # print("i={}, j={}, vec={}".format(i,j,vec))
+                    # print("self._prop_X[i-1]={}".format(self._PROP_X[i-1]))
+                    # print("self._prop_Y[i-1]={}".format(self._PROP_Y[i-1]))
+                    # print("self._prop_Z[i-1]={}".format(self._PROP_Z[i-1]))
                     # 2) X, Y, Z branches  (need j-1 ≥ 0)
                     if j >= 1:
                         for (prob, prop) in ((Px, self._PROP_X[i-1]),
                                             (Py, self._PROP_Y[i-1]),
                                             (Pz, self._PROP_Z[i-1])):
+                            
+
                             prev_vec = xor_vec(prop, vec)
+                            # print("prev_vec",prev_vec)
+                            # print("self._dp[i-1][j-1][ vec_to_idx(prev_vec)]:{}".format(self._dp[i-1][j-1][vec_to_idx(prev_vec)]))
                             acc += prob * self._dp[i-1][j-1][ vec_to_idx(prev_vec) ]
 
                     self._dp[i][j][vec_idx] = simplify(acc)
 
-                    #print(f"dp[{i}][{j}][{vec_idx}] = {dp[i][j][vec_idx].series(p, 0, MAX_degree).removeO()}")
+                    # print(f"dp[{i}][{j}][{vec_idx}] = {self._dp[i][j][vec_idx]}")
             self.verify_table(i)
 
 
@@ -259,9 +287,16 @@ if __name__=="__main__":
     tmp.parse_from_file(filepath)
 
     tmp.generate_pymatching_table()
-
-    print(tmp._all_predictions)
     
 
     tmp.initialize_single_pauli_propagation()
 
+
+    tmp.calc_error_row_indices()
+
+
+    tmp.dynamic_calculation_of_dp()
+
+    ler=tmp.calculate_LER()
+
+    print(ler)
