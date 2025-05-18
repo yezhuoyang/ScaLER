@@ -70,20 +70,27 @@ class stratifiedLERcalc:
 
         [ave_error_weight-self._num_subspace//2, ave_error_weight+self._num_subspace//2 ]
         """
-       
+        
         
         if(ave_error_weight-self._num_subspace//2<0):
             self._minW=0
-            self._maxW=self._num_subspace
         else:
             self._minW=int(ave_error_weight-self._num_subspace//2)
-            self._maxW=int(ave_error_weight+self._num_subspace//2)            
+
+        if(ave_error_weight+self._num_subspace//2>self._num_noise):
+            self._maxW=self._num_noise
+        else:
+            self._maxW=int(ave_error_weight+self._num_subspace//2)    
 
         wlist = list(range(self._minW, self._maxW + 1))
         slist=[self._sampleBudget//self._num_subspace]*len(wlist)
 
 
         result=return_samples_many_weights(self._stim_str_after_rewrite,wlist,slist)
+
+        # print("wlist: ",wlist)
+        # print("slist: ",slist)
+        # print("Result shape is ",len(result)," ",len(result[0])," ",len(result[0][0]))
         for i in range(len(wlist)):
             states, observables = [], []
 

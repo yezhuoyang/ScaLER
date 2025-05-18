@@ -23,8 +23,8 @@ def generate_circuit(filepath: str | Path, distance: int = 3) -> Path:
     """
     # 1. Make the circuit and rewrite it
     stim_circuit = stim.Circuit.generated(
-        "repetition_code:memory",
-        rounds=distance * 3,
+        "surface_code:rotated_memory_z",
+        rounds=3,
         distance=distance
     ).flattened()
 
@@ -43,41 +43,43 @@ def generate_circuit(filepath: str | Path, distance: int = 3) -> Path:
 
 
 if __name__=="__main__":
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition7"
-    generate_circuit(filepath, distance= 7)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/surface3r3"
+    generate_circuit(filepath, distance= 3)
+    # filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition7"
+    # generate_circuit(filepath, distance= 7)
 
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition9"
-    generate_circuit(filepath, distance= 9)
+    # filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition9"
+    # generate_circuit(filepath, distance= 9)
 
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition11"
-    generate_circuit(filepath, distance= 11)
+    # filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition11"
+    # generate_circuit(filepath, distance= 11)
 
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition13"
-    generate_circuit(filepath, distance= 13)
+    # filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition13"
+    # generate_circuit(filepath, distance= 13)
 
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition13"
-    generate_circuit(filepath, distance= 13)
+    # filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition13"
+    # generate_circuit(filepath, distance= 13)
 
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition15"
-    generate_circuit(filepath, distance= 15)
+    # filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition15"
+    # generate_circuit(filepath, distance= 15)
 
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition17"
-    generate_circuit(filepath, distance= 17)
+    # filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition17"
+    # generate_circuit(filepath, distance= 17)
 
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition19"
-    generate_circuit(filepath, distance= 19)
+    # filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition19"
+    # generate_circuit(filepath, distance= 19)
 
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition21"
-    generate_circuit(filepath, distance= 21)
+    # filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition21"
+    # generate_circuit(filepath, distance= 21)
 
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition23"
-    generate_circuit(filepath, distance= 23)
+    # filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition23"
+    # generate_circuit(filepath, distance= 23)
 
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition25"
-    generate_circuit(filepath, distance= 25)
+    # filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition25"
+    # generate_circuit(filepath, distance= 25)
 
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition27"
-    generate_circuit(filepath, distance= 27)
+    # filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition27"
+    # generate_circuit(filepath, distance= 27)
 
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition29"
-    generate_circuit(filepath, distance= 29)
+    # filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition29"
+    # generate_circuit(filepath, distance= 29)

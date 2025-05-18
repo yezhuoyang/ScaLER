@@ -231,6 +231,7 @@ class symbolicLER:
             self._dp[i][0][0] = (1-p)**i
 
             for j in range(1, i+1):           # j ≤ i
+                print("MAX_I=",MAX_I,"i=",i,"j=",j)
                 for vec_idx in range(self._total_detector_outcome):
 
                     vec = idx_to_vec(vec_idx,col_size)
@@ -308,9 +309,13 @@ class symbolicLER:
         """
         self._error_rate=pvalue
         self.parse_from_file(filepath)
+        print("---Step2: Generate the prediction table---")
         self.generate_pymatching_table()
+        print("---Step2: construction QEPG--------------")
         self.initialize_single_pauli_propagation()
+        print("---Step3: calculating error indices--------------")
         self.calc_error_row_indices()
+        print("---Step4: synamic algorithm--------------")
         self.dynamic_calculation_of_dp()
         self.calculate_LER()
         return self.evaluate_LER(pvalue)
