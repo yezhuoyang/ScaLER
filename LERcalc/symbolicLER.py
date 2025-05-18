@@ -254,6 +254,13 @@ class symbolicLER:
 
 
 
+    def calculate_LER_brute_force(self):
+        """
+        Enumerate all possible noise input to get the exact LER polynomial
+        """
+        pass
+
+
     # ----------------------------------------------------------------------
     # Calculate logical error rate
     # The input is a list of rows with logical errors
@@ -312,5 +319,5 @@ if __name__=="__main__":
 
     #print(idx_to_bool_list(5, 3))
     tmp=symbolicLER(0.01)
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/simple"
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/simple"
     print(tmp.calculate_LER_from_file(filepath,0.01))
