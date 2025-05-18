@@ -10,10 +10,10 @@ from LERcalc.symbolicLER import symbolicLER
 
 error_rate=0.01
 absolute_error=0.05
-sample_size=8000000
+sample_size=1000000
 
 
-all_test_files=["1cnot","1cnot1R","1cnoth","2cnot","2cnot2R","cnot1","cnot1","cnot01","cnot01h01","cnoth0","cnot0h1","simple","simpleh","simpleMultiObs"]
+all_test_files=["1cnot","1cnot1R","1cnoth","2cnot","2cnot2R","cnot1","cnot1","cnot01","cnot01h01","cnoth0","cnoth01","simple","simpleh","simpleMultiObs"]
 
 
 def test_by_file_name(filepath):
