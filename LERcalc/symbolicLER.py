@@ -282,6 +282,9 @@ class symbolicLER:
         return self._LER.evalf(subs={p:pval})
 
 
+    def evaluate_LER_subspace(self,pval,weight):
+        return self._subspace_LER[weight].evalf(subs={p:pval})
+
     
     def calculate_LER_from_file(self,filepath,pvalue):
         """
@@ -319,5 +322,17 @@ if __name__=="__main__":
 
     #print(idx_to_bool_list(5, 3))
     tmp=symbolicLER(0.01)
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/simple"
+    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/cnot01h01"
+    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/1cnoth"
+    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/simpleh"
+    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/2cnot2R"
     print(tmp.calculate_LER_from_file(filepath,0.01))
+
+
+    num_noise=tmp._num_noise
+
+    for weight in range(1,5):
+        print("LER in the subspace {} is {}".format(weight,tmp.evaluate_LER_subspace(0.01,weight)))        
+
+    

@@ -76,8 +76,8 @@ class stratifiedLERcalc:
             self._minW=0
             self._maxW=self._num_subspace
         else:
-            self._minW=ave_error_weight-self._num_subspace//2
-            self._maxW=ave_error_weight+self._num_subspace//2            
+            self._minW=int(ave_error_weight-self._num_subspace//2)
+            self._maxW=int(ave_error_weight+self._num_subspace//2)            
 
         wlist = list(range(self._minW, self._maxW + 1))
         slist=[self._sampleBudget//self._num_subspace]*len(wlist)
@@ -102,7 +102,7 @@ class stratifiedLERcalc:
                     num_errors += 1
 
             self._estimated_subspaceLER[wlist[i]]=num_errors/shots
-            print("Logical error rate when w="+str(self._estimated_subspaceLER[wlist[i]]))
+            print("Logical error rate when w={} ".format(wlist[i])+str(self._estimated_subspaceLER[wlist[i]]))
         
 
 
@@ -119,6 +119,8 @@ class stratifiedLERcalc:
         return self._LER    
 
 
+    def get_LER_subspace(self,weight):
+        return self._estimated_subspaceLER[weight]*binomial_weight(self._num_noise, weight,self._error_rate)
 
 
     def calculate_LER_from_file(self,filepath,pvalue):
@@ -127,9 +129,25 @@ class stratifiedLERcalc:
 
 
 if __name__ == "__main__":
-    tmp=stratifiedLERcalc(0.01,sampleBudget=10000,num_subspace=5)
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/simple"
-
-
+    tmp=stratifiedLERcalc(0.001,sampleBudget=100000,num_subspace=8)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
+    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/1cnot"
+    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/cnot01h01"
+    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/1cnoth"
+    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/simpleh"
+    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/1cnot1R"
+    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/2cnot2R"
     tmp.parse_from_file(filepath)
     tmp.subspace_sampling()
+
+
+    LER=tmp.calculate_LER()
+
+    print(LER)
+
+    num_noise=tmp._num_noise
+
+    for weight in range(1,5):
+        print("LER in the subspace {} is {}".format(weight,tmp.get_LER_subspace(weight)))    
+
+

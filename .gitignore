@@ -13,4 +13,5 @@ test/__pycache__/*
 QEPG/build/*
 LERcalc/build/*
 LERcalc/__pycache__/*
+stimprograms/__pycache__/*
 
