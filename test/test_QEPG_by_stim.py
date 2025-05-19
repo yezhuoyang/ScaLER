@@ -1,8 +1,8 @@
 import stim
 import numpy as np
-
-
-
+from LERcalc.clifford import *
+from LERcalc.stimparser import *
+from QEPG.QEPG import return_detector_matrix
 import random
 
 
@@ -67,10 +67,11 @@ def transpile_stim_with_noise_vector(stimString,noise_vector,totalnoise):
             split=line.split(' ')        
             parity=0
             for i in range(1,len(split)):
-                meas=int(split[i][4:-1])
-                tmpmeas=s.current_measurement_record()[meas]
-                if tmpmeas:
-                    parity+=1
+                if split[i].startswith('rec'):
+                    meas=int(split[i][4:-1])
+                    tmpmeas=s.current_measurement_record()[meas]
+                    if tmpmeas:
+                        parity+=1
             if parity%2==1:
                 detector_result.append(1)
             else:
@@ -79,10 +80,11 @@ def transpile_stim_with_noise_vector(stimString,noise_vector,totalnoise):
         if line.startswith("OBSERVABLE_INCLUDE(0)"):
             split=line.split(' ')        
             for i in range(1,len(split)):
-                meas=int(split[i][4:-1])
-                tmpmeas=s.current_measurement_record()[meas]
-                if tmpmeas:
-                    observableparity+=1
+                if split[i].startswith('rec'):
+                    meas=int(split[i][4:-1])
+                    tmpmeas=s.current_measurement_record()[meas]
+                    if tmpmeas:
+                        observableparity+=1
             observableparity=observableparity%2
         if line.startswith('DEPOLARIZE1'):
             split=line.split(' ')

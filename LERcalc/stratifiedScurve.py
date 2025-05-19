@@ -26,6 +26,18 @@ def scurve_function(x, mu, sigma):
     return cdf_values
 
 
+def scurve_function_with_distance(x, cd, mu, sigma):
+    """
+    Piece-wise S-curve:
+        0                          for x < cd
+        0.5 * Φ((x - μ) / σ)       for x ≥ cd
+    where Φ is the standard normal CDF.
+    """
+    x = np.asarray(x)                      # ensure array
+    y = 0.5 * norm.cdf(x, loc=mu, scale=sigma)
+    return np.where(x < cd, 0.0, y)        # vectorised “if”
+
+
 '''
 Use strafified sampling + Scurve fitting  algorithm to calculate the logical error rate
 '''
@@ -172,6 +184,7 @@ class stratified_Scurve_LERcalc:
 
             self._estimated_subspaceLER[wlist[i]]=num_errors/shots
             print("Logical error rate when w={} ".format(wlist[i])+str(self._estimated_subspaceLER[wlist[i]]))
+
         
 
 
@@ -200,19 +213,28 @@ class stratified_Scurve_LERcalc:
         self._saturatew
         sigma_guess = self._saturatew / 3.2898
         mu_guess    = self._saturatew/2          # centre in the middle of that span
-        initial_guess  = (mu_guess, sigma_guess)
-
+        initial_guess  = (0,mu_guess, sigma_guess)
+        # initial_guess  = (mu_guess, sigma_guess)
         # Perform the curve fit with the bounds
+        # popt, pcov = curve_fit(
+        #     scurve_function, 
+        #     self._estimated_wlist, 
+        #     [self._estimated_subspaceLER[x] for x in self._estimated_wlist], 
+        #     p0=initial_guess
+        # )
+
         popt, pcov = curve_fit(
-            scurve_function, 
+            scurve_function_with_distance, 
             self._estimated_wlist, 
             [self._estimated_subspaceLER[x] for x in self._estimated_wlist], 
             p0=initial_guess
         )
 
+        
+
         # Extract the best-fit parameter (alpha)
-        self._mu,self._sigma = popt[0],popt[1]
-        return self._mu,self._sigma
+        self._codedistance, self._mu,self._sigma = popt[0] , popt[1] , popt[2]
+        return self._codedistance,self._mu,self._sigma
 
 
     def calc_logical_error_rate_after_curve_fitting(self):
@@ -226,7 +248,8 @@ class stratified_Scurve_LERcalc:
             if weight in self._estimated_wlist:
                 self._LER+=self._estimated_subspaceLER[weight]*binomial_weight(self._num_noise,weight,self._error_rate)  
             else:
-                self._LER+=scurve_function(weight,self._mu,self._sigma)*binomial_weight(self._num_noise,weight,self._error_rate)
+                self._LER+=scurve_function_with_distance(weight,self._codedistance,self._mu,self._sigma)*binomial_weight(self._num_noise,weight,self._error_rate)
+                #self._LER+=scurve_function(weight,self._mu,self._sigma)*binomial_weight(self._num_noise,weight,self._error_rate)
         return self._LER
 
 
@@ -316,7 +339,7 @@ class stratified_Scurve_LERcalc:
             self._estimated_subspaceLER_second[wlist[i]]=num_errors/shots
             self._estimated_subspaceLER[wlist[i]]=num_errors/shots
             print("Logical error rate when w={} ".format(wlist[i])+str(self._estimated_subspaceLER[wlist[i]]))
-
+            print("Weight of this subspace: {}",binomial_weight(self._num_noise, wlist[i],self._error_rate))
 
 
     def plot_scurve(self, filename,title="S-curve"):
@@ -374,6 +397,7 @@ class stratified_Scurve_LERcalc:
         self.subspace_sampling_second_round()
         self.fit_Scurve()        
         self.calc_logical_error_rate_after_curve_fitting()
+        #self.calculate_LER()
         print("Final LER: ",self._LER)
         self.plot_scurve(figname,titlename)
 
@@ -492,14 +516,97 @@ def generate_all_repetition_code_figure():
 
 
 def generate_all_hexagon_code_figure():
-    pass
+    p=0.001
+
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=100000,num_subspace=10)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon3"
+    ler=tmp.calculate_LER_from_file(filepath,p,"H3.png","hexagon3")
+
+
+
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=500000,num_subspace=10)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon5"
+    ler=tmp.calculate_LER_from_file(filepath,p,"H5.png","hexagon5")
+
+
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=800000,num_subspace=10)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon7"
+    ler=tmp.calculate_LER_from_file(filepath,p,"H7.png","hexagon7")
+
+
+
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=100000,num_subspace=10)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon9"
+    ler=tmp.calculate_LER_from_file(filepath,p,"H9.png","hexagon9")
+
+
+
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=120000,num_subspace=10)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon11"
+    ler=tmp.calculate_LER_from_file(filepath,p,"H11.png","hexagon11")
+
+
+
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=140000,num_subspace=10)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon13"
+    ler=tmp.calculate_LER_from_file(filepath,p,"H13.png","hexagon13")
+
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=160000,num_subspace=10)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon15"
+    ler=tmp.calculate_LER_from_file(filepath,p,"H15.png","hexagon15")
+
+
 
 
 def generate_all_square_code_figure():
-    pass
+    p=0.001
+
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=100000,num_subspace=10)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/square/square3"
+    ler=tmp.calculate_LER_from_file(filepath,p,"Sq3.png","square3")
+
+
+
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=500000,num_subspace=10)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/square/square5"
+    ler=tmp.calculate_LER_from_file(filepath,p,"Sq5.png","square5")
+
+
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=800000,num_subspace=10)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/square/square7"
+    ler=tmp.calculate_LER_from_file(filepath,p,"Sq7.png","square7")
+
+
+
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=100000,num_subspace=10)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/square/square9"
+    ler=tmp.calculate_LER_from_file(filepath,p,"Sq9.png","square9")
+
+
+
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=120000,num_subspace=10)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/square/square11"
+    ler=tmp.calculate_LER_from_file(filepath,p,"Sq11.png","square11")
+
+
+
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=140000,num_subspace=10)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/square/square13"
+    ler=tmp.calculate_LER_from_file(filepath,p,"Sq13.png","square13")
+
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=160000,num_subspace=10)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/square/square15"
+    ler=tmp.calculate_LER_from_file(filepath,p,"Sq15.png","square15")
 
 
 
 
 if __name__ == "__main__":
-    generate_all_repetition_code_figure()
+    #generate_all_repetition_code_figure()
+    #generate_all_square_code_figure()
+    #generate_all_hexagon_code_figure()
+    p=0.001
+
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=100000,num_subspace=10)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon3"
+    ler=tmp.calculate_LER_from_file(filepath,p,"H3new.png","Hexagon3")

@@ -54,6 +54,20 @@ void sampler::generate_many_output_samples(const QEPG::QEPG& graph,std::vector<Q
 }
 
 
+/*
+In this implementation, we also return the generated random noise vector 
+*/
+void sampler::generate_many_output_samples_with_noise_vector(const QEPG::QEPG& graph,std::vector<std::vector<singlePauli>>& noisecontainer,std::vector<QEPG::Row>& samplecontainer, size_t pauliweight, size_t samplenumber){
+    samplecontainer.reserve(samplenumber);
+    noisecontainer.reserve(samplenumber);
+    for(size_t i=0;i<samplenumber;i++){
+        std::vector<singlePauli> sample = generate_sample_Floyd(pauliweight);
+        noisecontainer.push_back(sample);
+        samplecontainer.push_back(calculate_parity_output_from_one_sample(graph,sample));
+    }
+}
+
+
 
 
 

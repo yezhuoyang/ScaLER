@@ -36,6 +36,7 @@ namespace LERcalculator{
     std::vector<std::vector<bool>> return_samples(const std::string& prog_str, size_t weight, size_t shots);
     std::vector<std::vector<std::vector<bool>>> return_samples_many_weights(const std::string& prog_str,const std::vector<size_t>& weight, const std::vector<size_t>& shots);
     std::vector<std::vector<bool>> return_detector_matrix(const std::string& prog_str);
+    std::pair<std::vector<std::vector<std::pair<int,int>>> ,std::vector<std::vector<bool>>>  return_samples_with_noise_vector(const std::string & prog_str,size_t weight, size_t shots);
 }
    
 
@@ -121,11 +122,13 @@ PYBIND11_MODULE(QEPG, m) { // Use the module name 'QEPG' as seen in your build o
         py::arg("prog_str"), py::arg("weight"), py::arg("shots"),
         "Function that returns samples of a list of weights based on a circuit and parameters");
 
-
     m.def("return_detector_matrix", &LERcalculator::return_detector_matrix, // Use &SAMPLE::return_detector_matrix
           py::arg("prog_str"),
           "Function that returns the detector matrix");
 
-
+    m.def("return_samples_with_noise_vector",
+        &LERcalculator::return_samples_with_noise_vector,
+        py::arg("prog_str"), py::arg("weight"), py::arg("shots"),
+        py::return_value_policy::move);   // avoid an extra copy on the Python side
 
 }

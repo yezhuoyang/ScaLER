@@ -15,4 +15,5 @@ LERcalc/build/*
 LERcalc/__pycache__/*
 stimprograms/__pycache__/*
 *.png
+benchmark/__pycache__/*
 
