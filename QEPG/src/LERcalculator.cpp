@@ -23,6 +23,27 @@ void convert_bitset_row_to_boolean(std::vector<std::vector<bool>>& result,const 
 
 
 
+
+void convert_bitset_row_to_boolean_separate_obs(std::vector<std::vector<bool>>& result,std::vector<bool>& obsresult,const std::vector<QEPG::Row>& samplecontainer){
+        result.reserve(samplecontainer.size()); // Reserve space
+        obsresult.reserve(samplecontainer.size());
+        // Convert each boost::dynamic_bitset<> to std::vector<bool>
+        for (const auto& bitset_row : samplecontainer) {
+            std::vector<bool> bool_row(bitset_row.size()-1);
+            for (size_t i = 0; i < bitset_row.size()-1; ++i) {
+                bool_row[i] = bitset_row[i]; // Access individual bits
+            }
+            result.push_back(bool_row);
+            obsresult.push_back(bitset_row[bitset_row.size()-1]);
+        }
+}
+
+
+
+
+
+
+
  std::vector<std::vector<bool>> return_samples(const std::string& prog_str,size_t weight, size_t shots){
     clifford::cliffordcircuit c;
     c.compile_from_rewrited_stim_string(prog_str);
@@ -53,7 +74,7 @@ void convert_bitset_row_to_boolean(std::vector<std::vector<bool>>& result,const 
     // for(QEPG::Row parityresult: samplecontainer){
     //     QEPG::print_bit_row(parityresult);
     // }
-    return result;
+    return std::move(result);
 }
 
 
@@ -150,8 +171,9 @@ std::vector<std::vector<std::vector<bool>>> return_samples_many_weights(const st
 
     std::vector<QEPG::Row> samplecontainer;
     std::vector<std::vector<bool>> tmpresult;
+    tmpresult.reserve(weight.size());
     std::vector<std::vector<std::vector<bool>>> result;
-
+    result.reserve(weight.size());
 
     for(size_t i=0;i<weight.size();++i){
         std::cout<<"Weight="<<weight[i]<<"\n";
@@ -164,8 +186,51 @@ std::vector<std::vector<std::vector<bool>>> return_samples_many_weights(const st
     // for(QEPG::Row parityresult: samplecontainer){
     //     QEPG::print_bit_row(parityresult);
     // }
-    return result;
+    return std::move(result);
 }
+
+
+
+std::pair<std::vector<std::vector<std::vector<bool>>>,std::vector<std::vector<bool>>> return_samples_many_weights_separate_obs(const std::string& prog_str,const std::vector<size_t>& weight, const std::vector<size_t>& shots){
+    clifford::cliffordcircuit c;
+    c.compile_from_rewrited_stim_string(prog_str);
+
+    QEPG::QEPG graph(c,c.get_num_detector(),c.get_num_noise());
+    graph.backward_graph_construction();
+
+    SAMPLE::sampler sampler(c.get_num_noise());
+
+
+    std::vector<QEPG::Row> samplecontainer;
+    std::vector<std::vector<bool>> tmpresult;
+    tmpresult.reserve(weight.size());
+
+    std::vector<bool> tmpobs;
+
+    std::vector<std::vector<std::vector<bool>>> detectorresult;
+    std::vector<std::vector<bool>> obsresult;
+
+    detectorresult.reserve(weight.size());
+
+    for(size_t i=0;i<weight.size();++i){
+        std::cout<<"Weight="<<weight[i]<<"\n";
+        samplecontainer.clear();
+        tmpresult.clear();
+        tmpobs.clear();
+
+        sampler.generate_many_output_samples(graph,samplecontainer,weight[i],shots[i]);
+        convert_bitset_row_to_boolean_separate_obs(tmpresult,tmpobs,samplecontainer);
+        detectorresult.emplace_back(tmpresult);
+        obsresult.emplace_back(tmpobs);
+    }
+    // for(QEPG::Row parityresult: samplecontainer){
+    //     QEPG::print_bit_row(parityresult);
+    // }
+
+    return std::pair<std::vector<std::vector<std::vector<bool>>>,std::vector<std::vector<bool>>>{std::move(detectorresult),std::move(obsresult)};
+
+}
+
 
 
 

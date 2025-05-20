@@ -1,8 +1,9 @@
 
-from QEPG.QEPG import return_samples,return_samples_many_weights,return_detector_matrix
+from QEPG.QEPG import return_samples,return_samples_many_weights,return_detector_matrix, return_samples_many_weights_separate_obs
 from LERcalc.clifford import *
 import math
 import pymatching
+import time
 
 def binomial_weight(N, W, p):
     if N<5000:
@@ -85,32 +86,31 @@ class stratifiedLERcalc:
         wlist = list(range(self._minW, self._maxW + 1))
         slist=[self._sampleBudget//self._num_subspace]*len(wlist)
 
+        print("wlist: ",wlist)
+        print("slist: ",slist)
 
-        result=return_samples_many_weights(self._stim_str_after_rewrite,wlist,slist)
-
+        detector_result,obsresult=return_samples_many_weights_separate_obs(self._stim_str_after_rewrite,wlist,slist)
+        #result=return_samples_many_weights(self._stim_str_after_rewrite,wlist,slist)
+        print("Result get!")
         # print("wlist: ",wlist)
         # print("slist: ",slist)
         # print("Result shape is ",len(result)," ",len(result[0])," ",len(result[0][0]))
-        for i in range(len(wlist)):
-            states, observables = [], []
-
-            for j in range(0,slist[i]):
-                states.append(result[i][j][:-1])
-                observables.append([result[i][j][-1]])
 
 
-            shots=len(states)
-            predictions =self._matcher.decode_batch(states)
-            num_errors = 0
-            for shot in range(shots):
-                actual_for_shot = observables[shot]
-                predicted_for_shot = predictions[shot]
-                if not np.array_equal(actual_for_shot, predicted_for_shot):
-                    num_errors += 1
+        for w_idx, (w, quota) in enumerate(zip(wlist, slist)):
 
-            self._estimated_subspaceLER[wlist[i]]=num_errors/shots
-            print("Logical error rate when w={} ".format(wlist[i])+str(self._estimated_subspaceLER[wlist[i]]))
-        
+            states      =  np.asarray(detector_result[w_idx])  
+            observables =  np.asarray(obsresult[w_idx])                    # (shots,)
+
+            # 2. batch-decode (decode_batch should accept ndarray) -------------------
+            predictions = self._matcher.decode_batch(states)   # shape (shots,) or (shots,1)
+            predictions = np.asarray(predictions).ravel()
+
+            # 3. count mismatches in vectorised form ---------------------------------
+            num_errors = np.count_nonzero(observables != predictions)
+            self._estimated_subspaceLER[w] = num_errors / quota
+
+            print(f"Logical error rate when w={w}: {self._estimated_subspaceLER[w]:.6g}")
 
 
 
@@ -136,8 +136,8 @@ class stratifiedLERcalc:
 
 
 if __name__ == "__main__":
-    tmp=stratifiedLERcalc(0.001,sampleBudget=500000,num_subspace=10)
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface9"
+    tmp=stratifiedLERcalc(0.001,sampleBudget=5000000,num_subspace=3)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon3"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/1cnot"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/surface3r1"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/cnot01h01"
@@ -149,13 +149,15 @@ if __name__ == "__main__":
     tmp.subspace_sampling()
 
 
-    LER=tmp.calculate_LER()
 
-    print(LER)
 
-    num_noise=tmp._num_noise
+    # LER=tmp.calculate_LER()
 
-    for weight in range(4,14):
-        print("LER in the subspace {} is {}".format(weight,tmp.get_LER_subspace(weight)))    
+    # print(LER)
+
+    # num_noise=tmp._num_noise
+
+    # for weight in range(1,3):
+    #     print("LER in the subspace {} is {}".format(weight,tmp.get_LER_subspace(weight)))    
 
 

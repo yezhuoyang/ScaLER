@@ -6,7 +6,7 @@ import pymatching
 
 
 
-error_rate=0.01
+error_rate=0.001
 absolute_error=0.05
 sample_size=5000
 num_subspace=3
@@ -107,6 +107,9 @@ def calc_W1_LER_subspace_by_stim(filepath):
         if all_x_outputs[shot]!=all_x_predictions[shot]:
             LER_count+=1
 
+    print( "LER count: ", LER_count)
+
+
     all_y_inputs=[]
     all_y_outputs=[]
     for current_index in range(num_noise):
@@ -121,6 +124,8 @@ def calc_W1_LER_subspace_by_stim(filepath):
     for shot in range(len(all_y_inputs)):
         if all_y_outputs[shot]!=all_y_predictions[shot]:
             LER_count+=1
+
+    print( "Y LER count: ", LER_count)
 
     all_z_inputs=[]
     all_z_outputs=[]
@@ -207,6 +212,6 @@ def calc_W2_LER_subspace_by_stim(filepath):
 if __name__ == "__main__":
 
 
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
-    calc_W2_LER_subspace_by_stim(filepath)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon3"
+    calc_W1_LER_subspace_by_stim(filepath)
     #test_by_file_name(filepath)
