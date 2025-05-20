@@ -5,6 +5,14 @@ import math
 import pymatching
 import time
 
+
+def subspace_size(num_noise, weight):
+    """
+    Calculate the size of the subspace
+    """
+    return math.comb(num_noise, weight)
+
+
 def binomial_weight(N, W, p):
     if N<5000:
         return math.comb(N, W) * ((p)**W) * ((1 - p)**(N - W))
@@ -16,6 +24,8 @@ def binomial_weight(N, W, p):
         return math.exp(log_pmf)
 
 
+MIN_NUM_LE_EVENT = 100
+SAMPLE_GAP=5000
 
 
 '''
@@ -33,12 +43,23 @@ class stratifiedLERcalc:
         Use a dictionary to store the estimated subspace logical error rate
         """
         self._estimated_subspaceLER={}
+        self._subspace_LE_count={}       
+        self._subspace_sample_used={}             
+
+
         self._sampleBudget=sampleBudget
         self._num_subspace=num_subspace
         self._minW=0
         self._maxW=0
 
         self._stim_str_after_rewrite=""
+
+        self._sample_used=0
+        self._uncertainty=0
+
+
+        self._circuit_level_code_distance=1
+
 
 
     def parse_from_file(self,filepath):
@@ -72,9 +93,8 @@ class stratifiedLERcalc:
         [ave_error_weight-self._num_subspace//2, ave_error_weight+self._num_subspace//2 ]
         """
         
-        
         if(ave_error_weight-self._num_subspace//2<0):
-            self._minW=0
+            self._minW=self._circuit_level_code_distance
         else:
             self._minW=int(ave_error_weight-self._num_subspace//2)
 
@@ -82,38 +102,80 @@ class stratifiedLERcalc:
             self._maxW=self._num_noise
         else:
             self._maxW=int(ave_error_weight+self._num_subspace//2)    
+        """
+        wlist store the subset of weights we need to sample and get
+        correct logical error rate.
+        
+        In each subspace, we stop sampling until 100 logical error events are detected, or we hit the total budget.
+        """
+        wlist_need_to_sample = list(range(self._minW, self._maxW + 1))
 
-        wlist = list(range(self._minW, self._maxW + 1))
-        slist=[self._sampleBudget//self._num_subspace]*len(wlist)
+        for weight in wlist_need_to_sample:
+            self._subspace_LE_count[weight]=0
+            self._subspace_sample_used[weight]=0
 
-        print("wlist: ",wlist)
-        print("slist: ",slist)
+        while True:
+            slist=[]
+            wlist=[]
+            """
+            Case 1 to end the while loop: We have consumed all of our sample budgets
+            """
+            if(self._sample_used>self._sampleBudget):
+                break
 
-        detector_result,obsresult=return_samples_many_weights_separate_obs(self._stim_str_after_rewrite,wlist,slist)
-        #result=return_samples_many_weights(self._stim_str_after_rewrite,wlist,slist)
-        print("Result get!")
-        # print("wlist: ",wlist)
-        # print("slist: ",slist)
-        # print("Result shape is ",len(result)," ",len(result[0])," ",len(result[0][0]))
-
-
-        for w_idx, (w, quota) in enumerate(zip(wlist, slist)):
-
-            states      =  np.asarray(detector_result[w_idx])  
-            observables =  np.asarray(obsresult[w_idx])                    # (shots,)
-
-            # 2. batch-decode (decode_batch should accept ndarray) -------------------
-            predictions = self._matcher.decode_batch(states)   # shape (shots,) or (shots,1)
-            predictions = np.asarray(predictions).ravel()
-
-            # 3. count mismatches in vectorised form ---------------------------------
-            num_errors = np.count_nonzero(observables != predictions)
-            self._estimated_subspaceLER[w] = num_errors / quota
-
-            print(f"Logical error rate when w={w}: {self._estimated_subspaceLER[w]:.6g}")
+            for weight in wlist_need_to_sample:
+                if(weight<=self._circuit_level_code_distance):
+                    continue
+                """
+                If the subspace has been sampled enough, but logical error rate is still zero,
+                also, the number of samples used in the subspace is comparable with the size of the subspace,
+                we declare that the code distance is larger than the current weight.
+                TODO
+                """
+                if(self._subspace_LE_count[weight]==0 and self._subspace_sample_used[weight]>0.1*subspace_size(self._num_noise, weight)):
+                    self._circuit_level_code_distance=weight
+                    continue
 
 
+                if(self._subspace_LE_count[weight]<MIN_NUM_LE_EVENT):
+                    slist.append(SAMPLE_GAP)
+                    self._subspace_sample_used[weight]+=SAMPLE_GAP
+                    wlist.append(weight)
+                    self._sample_used+=SAMPLE_GAP
+            """
+            Case 2 to end the while loop: We have get 100 logical error events for all these subspaces
+            """
+            if(len(wlist)==0):
+                break
 
+            print("wlist: ",wlist)
+            print("slist: ",slist)
+            detector_result,obsresult=return_samples_many_weights_separate_obs(self._stim_str_after_rewrite,wlist,slist)
+            print("Result get!")
+
+
+            for w_idx, (w, quota) in enumerate(zip(wlist, slist)):
+
+                states      =  np.asarray(detector_result[w_idx])  
+                observables =  np.asarray(obsresult[w_idx])                    # (shots,)
+
+                # 2. batch-decode (decode_batch should accept ndarray) -------------------
+                predictions = self._matcher.decode_batch(states)   # shape (shots,) or (shots,1)
+                predictions = np.asarray(predictions).ravel()
+
+                # 3. count mismatches in vectorised form ---------------------------------
+                num_errors = np.count_nonzero(observables != predictions)
+
+                self._subspace_LE_count[w]+=num_errors
+                self._estimated_subspaceLER[w] = self._subspace_LE_count[w] / self._subspace_sample_used[w]
+
+
+                print(f"Logical error rate when w={w}: {self._estimated_subspaceLER[w]*binomial_weight(self._num_noise, w,self._error_rate):.6g}")
+
+            print(self._subspace_LE_count)
+            print(self._subspace_sample_used)
+        print("Samples used:{}".format(self._sample_used))
+        print("circuit level code distance:{}".format(self._circuit_level_code_distance))
 
     # ----------------------------------------------------------------------
     # Calculate logical error rate
@@ -136,8 +198,9 @@ class stratifiedLERcalc:
 
 
 if __name__ == "__main__":
-    tmp=stratifiedLERcalc(0.001,sampleBudget=5000000,num_subspace=3)
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon3"
+    tmp=stratifiedLERcalc(0.0005,sampleBudget=1500000,num_subspace=10)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition5"
+    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/1cnot"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/surface3r1"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/cnot01h01"
@@ -150,10 +213,9 @@ if __name__ == "__main__":
 
 
 
+    LER=tmp.calculate_LER()
 
-    # LER=tmp.calculate_LER()
-
-    # print(LER)
+    print(LER)
 
     # num_noise=tmp._num_noise
 
