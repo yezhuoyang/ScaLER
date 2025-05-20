@@ -95,3 +95,4 @@ The python code is divided into different modules. For example, to run the test_
 - [ ] **LER calculation benchmark(Compare with STIM)** Set up a benchmark of surface code/repetition code
 - [ ] **QEPG generating speed benchmark** Set up a benchmark comparing the time used to generate the QEPG graph
 - [ ] **Sampling rate benchmark** Set up a benchmark comparing the time used to get 1 million samples
+- [ ] **Truncate weight of symbolic calculator**  Add a maximum weight in the dynamic algorithm, since we only care about small weight(W=1,2,3)

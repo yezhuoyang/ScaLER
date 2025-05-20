@@ -5,8 +5,8 @@ import math
 import pymatching
 
 def binomial_weight(N, W, p):
-    if N<200:
-        return math.comb(N, W) * (p**W) * ((1 - p)**(N - W))
+    if N<5000:
+        return math.comb(N, W) * ((p)**W) * ((1 - p)**(N - W))
     else:
         lam = N * p
         # PMF(X=W) = e^-lam * lam^W / W!
@@ -136,9 +136,10 @@ class stratifiedLERcalc:
 
 
 if __name__ == "__main__":
-    tmp=stratifiedLERcalc(0.001,sampleBudget=100000,num_subspace=8)
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
+    tmp=stratifiedLERcalc(0.01,sampleBudget=5000000,num_subspace=8)
+    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/1cnot"
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/surface3r1"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/cnot01h01"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/1cnoth"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/simpleh"

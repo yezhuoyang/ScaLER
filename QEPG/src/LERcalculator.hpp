@@ -24,6 +24,8 @@ namespace LERcalculator{
  std::vector<std::vector<std::vector<bool>>> return_samples_many_weights(const std::string& prog_str,const std::vector<size_t>& weight, const std::vector<size_t>& shots);
 
 
+ std::vector<std::vector<bool>> return_all_samples_with_fixed_weights(const std::string& prog_str,const size_t& weight);
+
 
  std::vector<std::vector<bool>> return_detector_matrix(const std::string& prog_str);
 

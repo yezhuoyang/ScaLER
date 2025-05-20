@@ -53,6 +53,14 @@ void sampler::generate_many_output_samples(const QEPG::QEPG& graph,std::vector<Q
     }
 }
 
+/*
+Enumerat all possible noise vector with fixed weight
+Use recursion
+*/
+void sampler::generate_all_samples_with_fixed_weight(const QEPG::QEPG& graph,std::vector<QEPG::Row>& samplecontainer,size_t pauliweight){
+
+}
+
 
 /*
 In this implementation, we also return the generated random noise vector 

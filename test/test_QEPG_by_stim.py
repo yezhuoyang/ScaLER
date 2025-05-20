@@ -113,8 +113,8 @@ def transpile_stim_with_noise_vector(stimString,noise_vector,totalnoise):
                 current_noise_index+=1
 
 
-    print("-----------------------------New stim circuit:---------------------------------")
-    print(newstimstr)
+    # print("-----------------------------New stim circuit:---------------------------------")
+    # print(newstimstr)
 
     measurement_result=s.current_measurement_record()
 

@@ -91,7 +91,7 @@ def xor_vec(vec_a, vec_b):
 
 
 MAX_degree=100
-
+MAX_weight=2
 
 '''
 Use symbolic algorithm to calculate the probability.
@@ -147,7 +147,10 @@ class symbolicLER:
 
         all_inputs = []
 
+        print("Total detector outcome: ", 1<<self._num_detector)
         for i in range(0,1<<self._num_detector):
+            print("i=",i)
+            print(1<<self._num_detector)
             # Convert the integer to a list of booleans
             bool_list = idx_to_bool_list(i, self._num_detector)
             # Print the list of booleans
@@ -231,6 +234,9 @@ class symbolicLER:
             self._dp[i][0][0] = (1-p)**i
 
             for j in range(1, i+1):           # j ≤ i
+                if j > MAX_weight:
+                    continue
+
                 print("MAX_I=",MAX_I,"i=",i,"j=",j)
                 for vec_idx in range(self._total_detector_outcome):
 
@@ -249,8 +255,8 @@ class symbolicLER:
                             acc += prob * self._dp[i-1][j-1][ vec_to_idx(prev_vec) ]
 
                     self._dp[i][j][vec_idx] = simplify(acc)
-
-            self.verify_table(i)
+            if MAX_weight>=self._num_noise:
+                self.verify_table(i)
 
 
 
@@ -330,8 +336,8 @@ if __name__=="__main__":
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/cnot01h01"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/1cnoth"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/simpleh"
-    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/2cnot2R"
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/surface3r1"
+    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/2cnot2R"
     print(tmp.calculate_LER_from_file(filepath,0.01))
 
 

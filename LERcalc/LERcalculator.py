@@ -3,7 +3,7 @@ import pymatching
 from LERcalc.interface import *
 from pathlib import Path
 import numpy as np
-
+from LERcalc.stimrewrite import rewrite_stim_code
 
 
 

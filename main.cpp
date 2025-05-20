@@ -343,26 +343,78 @@ void print_bool_matrix(const std::vector<std::vector<bool>>& mat)
     return result;
 }
 
+
+// ------------------------------------------------------------------
+// enumerate_all_vectors ---------------------------------------------------------
+//   length  – total number of bits (n)
+//   weight  – how many 1-bits (k)
+//   visit   – callback invoked with each vector
+//             (avoids storing everything in memory)
+// ------------------------------------------------------------------
+void enumerate_all_vectors(
+        std::size_t length,
+        std::size_t weight,
+        const std::function<void(const std::vector<int>&)>& visit)
+{
+    if (weight > length) return;          // nothing to generate
+
+    std::vector<int> vec(length, 0);      // current 0/1 vector
+    std::vector<std::size_t> idx(weight); // indices of 1-bits
+
+    // initialise first combination 0,1,2,…,k–1
+    for (std::size_t i = 0; i < weight; ++i) idx[i] = i;
+
+    auto push_vec = [&]{
+        std::fill(vec.begin(), vec.end(), 0);
+        for (std::size_t i : idx) vec[i] = 1;
+        visit(vec);
+    };
+
+    if (weight == 0) {                    // special-case k = 0
+        visit(vec);
+        return;
+    }
+
+    // iterate through all k-combinations of {0,…,n-1}
+    while (true) {
+        push_vec();                       // emit current vector
+
+        // generate next combination (EKM algorithm)
+        std::size_t i = weight;
+        while (i-- > 0 && idx[i] == length - weight + i);
+        if (i == static_cast<std::size_t>(-1)) break;     // done
+
+        ++idx[i];
+        for (std::size_t j = i + 1; j < weight; ++j)
+            idx[j] = idx[j - 1] + 1;
+    }
+}
+
+
 int main()
 {
     //test_matrix_multiplication();
 
     //test_bitset_pop_count();
-    clifford::cliffordcircuit c(3);
+    // clifford::cliffordcircuit c(3);
 
-    std::cout<<"Start compilation!"<<"\n";
-    std::string stim_str;
-    try{
-        stim_str=read_file_to_string("C:/Users/yezhu/Documents/Sampling/stimprograms/1cnot");
-        c.compile_from_rewrited_stim_string(stim_str);
-    } catch(const std::exception& e){
-        std::cerr<<e.what()<<'\n';
-    }
+    // std::cout<<"Start compilation!"<<"\n";
+    // std::string stim_str;
+    // try{
+    //     stim_str=read_file_to_string("C:/Users/yezhu/Documents/Sampling/stimprograms/1cnot");
+    //     c.compile_from_rewrited_stim_string(stim_str);
+    // } catch(const std::exception& e){
+    //     std::cerr<<e.what()<<'\n';
+    // }
 
-    QEPG::QEPG graph(c,c.get_num_detector(),c.get_num_noise());
-    graph.backward_graph_construction();
+    // QEPG::QEPG graph(c,c.get_num_detector(),c.get_num_noise());
+    // graph.backward_graph_construction();
 
-    
+    std::size_t n = 4, k = 2;
+    enumerate_all_vectors(n, k, [](const std::vector<int>& v){
+        for (int bit : v) std::cout << bit;
+        std::cout << '\n';
+    });
 
 }
 

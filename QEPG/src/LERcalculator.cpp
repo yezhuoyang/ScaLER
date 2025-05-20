@@ -57,6 +57,42 @@ void convert_bitset_row_to_boolean(std::vector<std::vector<bool>>& result,const 
 }
 
 
+ std::vector<std::vector<bool>> return_all_samples_with_fixed_weights(const std::string& prog_str,const size_t& weight){
+    clifford::cliffordcircuit c;
+    c.compile_from_rewrited_stim_string(prog_str);
+
+    QEPG::QEPG graph(c,c.get_num_detector(),c.get_num_noise());
+    graph.backward_graph_construction();
+
+
+    SAMPLE::sampler sampler(c.get_num_noise());
+
+    std::vector<QEPG::Row> samplecontainer;
+
+    using clock     = std::chrono::steady_clock;          // monotonic, good for benchmarking
+    using microsec  = std::chrono::microseconds;
+    auto t0 = clock::now();       
+    
+    // start timer
+    sampler.generate_all_samples_with_fixed_weight(graph,samplecontainer,weight);
+
+
+
+    auto t1 = clock::now();                               // stop section‑1
+    auto compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
+    std::cout << "[Time to generate these samples:] " << compile_us / 1'000.0 << "ms\n";
+
+
+    std::vector<std::vector<bool>> result;
+    convert_bitset_row_to_boolean(result,samplecontainer);
+
+    // for(QEPG::Row parityresult: samplecontainer){
+    //     QEPG::print_bit_row(parityresult);
+    // }
+    return result;
+}
+
+
 std::pair<std::vector<std::vector<std::pair<int,int>>> ,std::vector<std::vector<bool>>> 
 return_samples_with_noise_vector(const std::string & prog_str,size_t weight, size_t shots){
     clifford::cliffordcircuit c;

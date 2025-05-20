@@ -100,6 +100,8 @@ class sampler{
 
         void generate_many_output_samples(const QEPG::QEPG& graph,std::vector<QEPG::Row>& samplecontainer,size_t pauliweight , size_t samplenumber);
 
+        void generate_all_samples_with_fixed_weight(const QEPG::QEPG& graph,std::vector<QEPG::Row>& samplecontainer,size_t pauliweight);
+
         void generate_many_output_samples_with_noise_vector(const QEPG::QEPG& graph,std::vector<std::vector<singlePauli>>& noistcontainer,std::vector<QEPG::Row>& samplecontainer, size_t pauliweight, size_t samplenumber);
     private:
 
