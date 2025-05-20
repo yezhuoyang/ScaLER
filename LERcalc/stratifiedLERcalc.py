@@ -21,7 +21,7 @@ def binomial_weight(N, W, p):
 Use strafified sampling algorithm to calculate the logical error rate
 '''
 class stratifiedLERcalc:
-    def __init__(self, error_rate=0, sampleBudget=10000, num_subspace=5):
+    def __init__(self, error_rate=0, sampleBudget=10000, num_subspace=10):
         self._num_detector=0
         self._num_noise=0
         self._error_rate=error_rate
@@ -136,10 +136,10 @@ class stratifiedLERcalc:
 
 
 if __name__ == "__main__":
-    tmp=stratifiedLERcalc(0.01,sampleBudget=5000000,num_subspace=8)
-    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
+    tmp=stratifiedLERcalc(0.001,sampleBudget=500000,num_subspace=10)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface9"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/1cnot"
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/surface3r1"
+    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/surface3r1"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/cnot01h01"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/1cnoth"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/simpleh"
@@ -155,7 +155,7 @@ if __name__ == "__main__":
 
     num_noise=tmp._num_noise
 
-    for weight in range(1,5):
+    for weight in range(4,14):
         print("LER in the subspace {} is {}".format(weight,tmp.get_LER_subspace(weight)))    
 
 

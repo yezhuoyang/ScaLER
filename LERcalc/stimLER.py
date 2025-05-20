@@ -59,7 +59,7 @@ if __name__ == "__main__":
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/simpleh"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/2cnot2R"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon3"
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
-    ler=calculator.calculate_LER_from_file(10000000,filepath,0.001)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface9"
+    ler=calculator.calculate_LER_from_file(1000000,filepath,0.001)
 
     print(ler)
