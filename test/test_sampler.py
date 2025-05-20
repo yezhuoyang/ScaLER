@@ -1,5 +1,5 @@
 #Test the correctness of the sampler in QEPG
-from QEPG.QEPG import return_samples_with_noise_vector
+from QEPG.QEPG import return_samples_with_noise_vector, return_samples_many_weights, return_detector_matrix
 from LERcalc.clifford import *
 from test.test_QEPG_by_stim import transpile_stim_with_noise_vector
 
@@ -8,9 +8,9 @@ from test.test_QEPG_by_stim import transpile_stim_with_noise_vector
 
 error_rate=0.01
 absolute_error=0.05
-sample_size=2
+sample_size=10
 num_subspace=3
-
+weight=3
 
 
 
@@ -35,12 +35,20 @@ def test_by_file_name(filepath):
     stim_str=""
     with open(filepath, "r", encoding="utf-8") as f:
         stim_str = f.read()
-    noise_vector,samples=return_samples_with_noise_vector(stim_str,2,sample_size)
+    noise_vector,samples=return_samples_with_noise_vector(stim_str,weight,sample_size)
     print("Floyd samples: ",noise_vector)
+
+    print("samples output: ",samples)
     circuit=CliffordCircuit(3)
     circuit.compile_from_stim_circuit_str(stim_str)
     new_stim_circuit=circuit.get_stim_circuit()
     num_noise = circuit.get_totalnoise()
+
+
+    detectorMatrix=np.array(return_detector_matrix(str(stim_str)))
+    print("Detector matrix: ", detectorMatrix)
+    detectorMatrix = detectorMatrix.T          # or: np.transpose(detector_matrix)
+
 
     noise_vector=[convert_Floyd_sample_to_noise_vector(x,num_noise) for x in noise_vector]
 
@@ -68,5 +76,5 @@ def test_by_file_name(filepath):
 if __name__ == "__main__":
 
 
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/1cnot"
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
     test_by_file_name(filepath)
