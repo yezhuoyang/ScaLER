@@ -5,7 +5,7 @@ from time import time, perf_counter
 
 
 def test_samplerate():
-    distance=7
+    distance=15
     p=0.001
     circuit=CliffordCircuit(2)
     circuit.set_error_rate(p)

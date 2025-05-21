@@ -5,7 +5,7 @@
 
 namespace LERcalculator{
 
-namespace py = pybind11;
+
 
 
 void convert_bitset_row_to_boolean(std::vector<std::vector<bool>>& result,const std::vector<QEPG::Row>& samplecontainer){
@@ -259,6 +259,43 @@ std::vector<std::vector<std::vector<bool>>> return_samples_many_weights(const st
     // }
     return std::move(result);
 }
+
+
+
+
+std::vector<py::array_t<bool>> return_samples_many_weights_numpy(const std::string& prog_str,const std::vector<size_t>& weight, const std::vector<size_t>& shots){
+    clifford::cliffordcircuit c;
+    c.compile_from_rewrited_stim_string(prog_str);
+
+    QEPG::QEPG graph(c,c.get_num_detector(),c.get_num_noise());
+    graph.backward_graph_construction();
+
+    SAMPLE::sampler sampler(c.get_num_noise());
+
+    std::vector<QEPG::Row> samplecontainer;
+    std::vector<py::array_t<bool>> result;
+    result.reserve(weight.size());
+
+    for(size_t i=0;i<weight.size();++i){
+        std::cout<<"Weight="<<weight[i]<<"\n";
+        samplecontainer.clear();
+        py::array_t<bool> tmpresult;
+        sampler.generate_many_output_samples(graph,samplecontainer,weight[i],shots[i]);
+        tmpresult=bitset_rows_to_numpy(samplecontainer);
+        result.emplace_back(std::move(tmpresult));
+    }
+    // for(QEPG::Row parityresult: samplecontainer){
+    //     QEPG::print_bit_row(parityresult);
+    // }
+    return std::move(result);
+}
+
+
+
+
+
+
+
 
 
 

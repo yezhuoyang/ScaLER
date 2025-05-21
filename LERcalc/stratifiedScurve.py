@@ -1,5 +1,5 @@
 
-from QEPG.QEPG import return_samples,return_samples_many_weights,return_detector_matrix
+from QEPG.QEPG import return_samples,return_samples_many_weights,return_detector_matrix,return_samples_many_weights_numpy
 from LERcalc.clifford import *
 import math
 import pymatching
@@ -160,7 +160,7 @@ class stratified_Scurve_LERcalc:
         slist=[sampleBudget//self._num_subspace]*len(wlist)
 
 
-        result=return_samples_many_weights(self._stim_str_after_rewrite,wlist,slist)
+        result=return_samples_many_weights_numpy(self._stim_str_after_rewrite,wlist,slist)
 
         # print("wlist: ",wlist)
         # print("slist: ",slist)
@@ -316,7 +316,7 @@ class stratified_Scurve_LERcalc:
 
     def subspace_sampling_second_round(self):
         wlist,slist=self.distribute_samples()
-        result=return_samples_many_weights(self._stim_str_after_rewrite,wlist,slist)
+        result=return_samples_many_weights_numpy(self._stim_str_after_rewrite,wlist,slist)
 
         print("wlist: ",wlist)
         print("slist: ",slist)
@@ -339,7 +339,7 @@ class stratified_Scurve_LERcalc:
             self._estimated_subspaceLER_second[wlist[i]]=num_errors/shots
             self._estimated_subspaceLER[wlist[i]]=num_errors/shots
             print("Logical error rate when w={} ".format(wlist[i])+str(self._estimated_subspaceLER[wlist[i]]))
-            print("Weight of this subspace: {}",binomial_weight(self._num_noise, wlist[i],self._error_rate))
+            print("Weight of this subspace: {}".format(binomial_weight(self._num_noise, wlist[i],self._error_rate)))
 
 
     def plot_scurve(self, filename,title="S-curve"):
@@ -607,6 +607,6 @@ if __name__ == "__main__":
     #generate_all_hexagon_code_figure()
     p=0.001
 
-    tmp=stratified_Scurve_LERcalc(p,sampleBudget=100000,num_subspace=10)
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon3"
-    ler=tmp.calculate_LER_from_file(filepath,p,"H3new.png","Hexagon3")
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=1000000,num_subspace=10)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface30"
+    ler=tmp.calculate_LER_from_file(filepath,p,"S30.png","Surface30")

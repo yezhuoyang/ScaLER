@@ -39,6 +39,7 @@ namespace LERcalculator{
     std::pair<std::vector<std::vector<std::pair<int,int>>> ,std::vector<std::vector<bool>>>  return_samples_with_noise_vector(const std::string & prog_str,size_t weight, size_t shots);
     std::pair<std::vector<std::vector<std::vector<bool>>>,std::vector<std::vector<bool>>> return_samples_many_weights_separate_obs(const std::string& prog_str,const std::vector<size_t>& weight, const std::vector<size_t>& shots);
     py::array_t<bool> return_samples_numpy(const std::string& prog_str,size_t weight, size_t shots);
+    std::vector<py::array_t<bool>> return_samples_many_weights_numpy(const std::string& prog_str,const std::vector<size_t>& weight, const std::vector<size_t>& shots);
 }
    
 
@@ -120,17 +121,23 @@ PYBIND11_MODULE(QEPG, m) { // Use the module name 'QEPG' as seen in your build o
           py::return_value_policy::move,
           "Function that returns samples based on a circuit and parameters");
 
-          
+
     m.def("return_samples_numpy", &LERcalculator::return_samples_numpy, 
           py::arg("prog_str"), py::arg("weight"), py::arg("shots"),
           py::return_value_policy::move,
           "Function that directly return numpy array");
 
-
     m.def("return_samples_many_weights", &LERcalculator::return_samples_many_weights, // Use &SAMPLE::return_samples
         py::arg("prog_str"), py::arg("weight"), py::arg("shots"),
         py::return_value_policy::move,
         "Function that returns samples of a list of weights based on a circuit and parameters");
+
+        
+    m.def("return_samples_many_weights_numpy", &LERcalculator::return_samples_many_weights_numpy, // Use &SAMPLE::return_samples
+        py::arg("prog_str"), py::arg("weight"), py::arg("shots"),
+        py::return_value_policy::move,
+        "Function that returns samples of a list of weights based on a circuit and parameters, it return numpy vector directly");
+
 
     m.def("return_detector_matrix", &LERcalculator::return_detector_matrix, // Use &SAMPLE::return_detector_matrix
           py::arg("prog_str"),
