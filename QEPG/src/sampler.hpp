@@ -49,7 +49,7 @@ class sampler{
         Generate a single sample with weight error by Floyd method. 
         
         */
-        std::vector<singlePauli> generate_sample_Floyd(size_t weight);
+        inline std::vector<singlePauli> generate_sample_Floyd(size_t weight,std::mt19937& gen);
 
 
         inline QEPG::Row calculate_output_from_one_sample(const QEPG::QEPG& graph,std::vector<singlePauli> sample){

@@ -53,8 +53,16 @@ py setup.py build_ext --inplace
 
 Run the following command to clear the previously compiled output:
 
-```bind
+```bash
 py setup.py clean --all    
+```
+
+
+We also need to convert C++ object to python object directly. So "Python.h" needs to be added to the search path. Typically, it is under:
+
+
+```bash
+C:\Users\yezhu\miniconda3\include
 ```
 
 

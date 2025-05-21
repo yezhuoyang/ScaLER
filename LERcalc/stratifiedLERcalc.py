@@ -25,7 +25,7 @@ def binomial_weight(N, W, p):
 
 
 MIN_NUM_LE_EVENT = 100
-SAMPLE_GAP=5000
+SAMPLE_GAP=500000
 
 
 '''
@@ -199,7 +199,7 @@ class stratifiedLERcalc:
 
 if __name__ == "__main__":
     tmp=stratifiedLERcalc(0.0005,sampleBudget=1500000,num_subspace=10)
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition5"
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition7"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/1cnot"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/surface3r1"

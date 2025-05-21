@@ -5,10 +5,12 @@
 #include "QEPG.hpp"
 #include "sampler.hpp"
 #include <chrono>
-
+#include <pybind11/pybind11.h>
+#include <pybind11/numpy.h>          // <-- defines py::array_t
 
 namespace LERcalculator{
 
+namespace py = pybind11;
 
  struct noisesample{
       int type;
@@ -32,6 +34,8 @@ namespace LERcalculator{
 
  std::vector<std::vector<bool>> return_detector_matrix(const std::string& prog_str);
 
+
+ py::array_t<bool> return_samples_numpy(const std::string& prog_str,size_t weight, size_t shots);
 
 }
 

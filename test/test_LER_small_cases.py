@@ -147,7 +147,7 @@ def LER_small_circuit(circuit_file_path):
 
 if __name__ == "__main__":
     # Example usage
-    circuit_file_path = "C:/Users/yezhu/Documents/Sampling/stimprograms/1cnot"
+    circuit_file_path = "stimprograms/small/1cnot"
     LER_small_circuit(circuit_file_path)
     #stim_ground_truth_LER(circuit_file_path)
 
