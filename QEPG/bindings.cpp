@@ -37,7 +37,7 @@ namespace LERcalculator{
     std::vector<std::vector<std::vector<bool>>> return_samples_many_weights(const std::string& prog_str,const std::vector<size_t>& weight, const std::vector<size_t>& shots);
     std::vector<std::vector<bool>> return_detector_matrix(const std::string& prog_str);
     std::pair<std::vector<std::vector<std::pair<int,int>>> ,std::vector<std::vector<bool>>>  return_samples_with_noise_vector(const std::string & prog_str,size_t weight, size_t shots);
-    std::pair<std::vector<std::vector<std::vector<bool>>>,std::vector<std::vector<bool>>> return_samples_many_weights_separate_obs(const std::string& prog_str,const std::vector<size_t>& weight, const std::vector<size_t>& shots);
+    std::pair<py::array_t<bool>,py::array_t<bool>> return_samples_many_weights_separate_obs(const std::string& prog_str,const std::vector<size_t>& weight, const std::vector<size_t>& shots);
     py::array_t<bool> return_samples_numpy(const std::string& prog_str,size_t weight, size_t shots);
     std::vector<py::array_t<bool>> return_samples_many_weights_numpy(const std::string& prog_str,const std::vector<size_t>& weight, const std::vector<size_t>& shots);
 }

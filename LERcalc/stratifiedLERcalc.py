@@ -81,6 +81,39 @@ class stratifiedLERcalc:
         self._matcher = pymatching.Matching.from_detector_error_model(self._detector_error_model)
 
 
+    def sample_all_subspace(self, shots_each_subspace=1000000):
+        """
+        Aggressively sample all the subspace.
+        This function is only used to test the correctness of the algorithm.
+        """
+        wlist = list(range(0, self._num_noise + 1))
+        slist = [shots_each_subspace] * len(wlist)
+        detector_result,obsresult=return_samples_many_weights_separate_obs(self._stim_str_after_rewrite,wlist,slist)
+        predictions_result = self._matcher.decode_batch(detector_result)
+
+
+        for w in wlist:
+            self._subspace_LE_count[w]=0
+            self._estimated_subspaceLER[w]=0
+            self._subspace_sample_used[w]=shots_each_subspace
+
+        begin_index=0
+        for w_idx, (w, quota) in enumerate(zip(wlist, slist)):
+            observables =  np.asarray(obsresult[begin_index:begin_index+quota])                    # (shots,)
+            # 2. batch-decode (decode_batch should accept ndarray) -------------------
+               # shape (shots,) or (shots,1)
+            predictions = np.asarray(predictions_result[begin_index:begin_index+quota]).ravel()
+
+            # 3. count mismatches in vectorised form ---------------------------------
+            num_errors = np.count_nonzero(observables != predictions)
+
+            self._subspace_LE_count[w]+=num_errors
+            self._estimated_subspaceLER[w] = self._subspace_LE_count[w] / self._subspace_sample_used[w]
+
+            #print(f"Subspace logical error {self._estimated_subspaceLER[w]}")
+            #print(f"Logical error rate when w={w}: {self._estimated_subspaceLER[w]*binomial_weight(self._num_noise, w,self._error_rate):.6g}")
+            begin_index+=quota
+
     def subspace_sampling(self):
         """
         Sample around the subspaces.
@@ -151,17 +184,15 @@ class stratifiedLERcalc:
             print("wlist: ",wlist)
             print("slist: ",slist)
             detector_result,obsresult=return_samples_many_weights_separate_obs(self._stim_str_after_rewrite,wlist,slist)
+            predictions_result = self._matcher.decode_batch(detector_result)
             print("Result get!")
 
-
+            
+            begin_index=0
             for w_idx, (w, quota) in enumerate(zip(wlist, slist)):
 
-                states      =  np.asarray(detector_result[w_idx])  
-                observables =  np.asarray(obsresult[w_idx])                    # (shots,)
-
-                # 2. batch-decode (decode_batch should accept ndarray) -------------------
-                predictions = self._matcher.decode_batch(states)   # shape (shots,) or (shots,1)
-                predictions = np.asarray(predictions).ravel()
+                observables =  np.asarray(obsresult[begin_index:begin_index+quota])                    # (shots,)
+                predictions = np.asarray(predictions_result[begin_index:begin_index+quota]).ravel()
 
                 # 3. count mismatches in vectorised form ---------------------------------
                 num_errors = np.count_nonzero(observables != predictions)
@@ -198,8 +229,8 @@ class stratifiedLERcalc:
 
 
 if __name__ == "__main__":
-    tmp=stratifiedLERcalc(0.0005,sampleBudget=1500000,num_subspace=10)
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition7"
+    tmp=stratifiedLERcalc(0.05,sampleBudget=1500,num_subspace=10)
+    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition3"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/1cnot"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/surface3r1"
@@ -208,14 +239,17 @@ if __name__ == "__main__":
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/simpleh"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/1cnot1R"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/2cnot2R"
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/simple"
     tmp.parse_from_file(filepath)
-    tmp.subspace_sampling()
+    tmp.sample_all_subspace(5000)
+
+    #tmp.subspace_sampling()
 
 
 
-    LER=tmp.calculate_LER()
+    # LER=tmp.calculate_LER()
 
-    print(LER)
+    # print(LER)
 
     # num_noise=tmp._num_noise
 

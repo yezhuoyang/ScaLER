@@ -91,7 +91,7 @@ def xor_vec(vec_a, vec_b):
 
 
 MAX_degree=100
-MAX_weight=2
+MAX_weight=100
 
 '''
 Use symbolic algorithm to calculate the probability.
@@ -113,6 +113,13 @@ class symbolicLER:
 
         self._error_row_indices = []
         self._subspace_LER={}
+
+    def get_totalnoise(self):
+        """
+        Get the total number of noise in the circuit
+        """
+        return self._num_noise
+
 
     def parse_from_file(self,filepath):
         """
@@ -332,18 +339,18 @@ if __name__=="__main__":
 
 
     #print(idx_to_bool_list(5, 3))
-    tmp=symbolicLER(0.01)
+    tmp=symbolicLER(0.001)
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/cnot01h01"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/1cnoth"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/simpleh"
     filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/surface3r1"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/2cnot2R"
-    print(tmp.calculate_LER_from_file(filepath,0.01))
+    print(tmp.calculate_LER_from_file(filepath,0.001))
 
 
     num_noise=tmp._num_noise
 
     for weight in range(1,5):
-        print("LER in the subspace {} is {}".format(weight,tmp.evaluate_LER_subspace(0.01,weight)))        
+        print("LER in the subspace {} is {}".format(weight,tmp.evaluate_LER_subspace(0.001,weight)))        
 
     

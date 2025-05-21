@@ -61,6 +61,23 @@ void convert_bitset_row_to_boolean_separate_obs(std::vector<std::vector<bool>>& 
 }
 
 
+/*
+Return a three 
+*/
+inline void convert_bitset_row_to_boolean_separate_obs_numpy(py::array_t<bool>& detectionresult,py::array_t<bool>& obsresult,const size_t& begin_index,const std::vector<QEPG::Row>& samplecontainer){
+        auto detector_buf = detectionresult.mutable_unchecked<2>();     // raw, bounds-checked only in debug
+        auto observable_buf = obsresult.mutable_unchecked<1>(); 
+        auto row_index=0;
+        for (const auto& bitset_row : samplecontainer) {
+            std::vector<bool> bool_row(bitset_row.size()-1);
+            for (size_t i = 0; i < bitset_row.size()-1; ++i) {
+                detector_buf(begin_index+row_index,i)= bitset_row[i]; 
+            }
+            observable_buf(begin_index+row_index)=bitset_row[bitset_row.size()-1];
+            row_index++;
+        }
+}
+
 
 
 
@@ -299,7 +316,7 @@ std::vector<py::array_t<bool>> return_samples_many_weights_numpy(const std::stri
 
 
 
-std::pair<std::vector<std::vector<std::vector<bool>>>,std::vector<std::vector<bool>>> return_samples_many_weights_separate_obs(const std::string& prog_str,const std::vector<size_t>& weight, const std::vector<size_t>& shots){
+ std::pair<py::array_t<bool>,py::array_t<bool>> return_samples_many_weights_separate_obs(const std::string& prog_str,const std::vector<size_t>& weight, const std::vector<size_t>& shots){
     clifford::cliffordcircuit c;
     c.compile_from_rewrited_stim_string(prog_str);
 
@@ -310,33 +327,27 @@ std::pair<std::vector<std::vector<std::vector<bool>>>,std::vector<std::vector<bo
 
 
     std::vector<QEPG::Row> samplecontainer;
-    std::vector<std::vector<bool>> tmpresult;
-    tmpresult.reserve(weight.size());
 
-    std::vector<bool> tmpobs;
+    size_t shot_sum=0;
+    for(int i=0;i<weight.size();i++){
+        shot_sum+=shots[i];
+    }
 
-    std::vector<std::vector<std::vector<bool>>> detectorresult;
-    std::vector<std::vector<bool>> obsresult;
+    py::array_t<bool> detectorresult({shot_sum,c.get_num_detector()});
+    py::array_t<bool> obsresult(shot_sum);
 
-    detectorresult.reserve(weight.size());
-
+    auto begin_index=0;
     for(size_t i=0;i<weight.size();++i){
         std::cout<<"Weight="<<weight[i]<<"\n";
         samplecontainer.clear();
-        tmpresult.clear();
-        tmpobs.clear();
-
         sampler.generate_many_output_samples(graph,samplecontainer,weight[i],shots[i]);
-        convert_bitset_row_to_boolean_separate_obs(tmpresult,tmpobs,samplecontainer);
-        detectorresult.emplace_back(tmpresult);
-        obsresult.emplace_back(tmpobs);
+        convert_bitset_row_to_boolean_separate_obs_numpy(detectorresult,obsresult,begin_index,samplecontainer);
+        begin_index+=shots[i];
     }
     // for(QEPG::Row parityresult: samplecontainer){
     //     QEPG::print_bit_row(parityresult);
     // }
-
-    return std::pair<std::vector<std::vector<std::vector<bool>>>,std::vector<std::vector<bool>>>{std::move(detectorresult),std::move(obsresult)};
-
+    return std::pair<py::array_t<bool>,py::array_t<bool>>{std::move(detectorresult),std::move(obsresult)};
 }
 
 
