@@ -21,9 +21,14 @@ def binomial_weight(N, W, p):
 
 
 
-def scurve_function(x, mu, sigma):
-    cdf_values = 0.5*norm.cdf(x, loc=mu, scale=sigma)
-    return cdf_values
+# def scurve_function(x, mu, sigma):
+#     cdf_values = 0.5*norm.cdf(x, loc=mu, scale=sigma)
+#     return cdf_values
+
+
+def scurve_function(x, center, sigma):
+    return 0.5/(1+np.exp(-(x - center) / sigma))
+
 
 
 def scurve_function_with_distance(x, cd, mu, sigma):
@@ -103,7 +108,7 @@ class stratified_Scurve_LERcalc:
     that give saturate logical error rate
     We just try 10 samples
     '''
-    def binary_search_half(self,low,high, shots, epsilon=0.15):
+    def binary_search_half(self,low,high, shots, epsilon=0.48):
         left=low
         right=high
         while left<right:
@@ -214,9 +219,15 @@ class stratified_Scurve_LERcalc:
     def fit_Scurve(self):
         # Initial guess for alpha
         self._saturatew
-        sigma_guess = self._saturatew / 3.2898
-        mu_guess    = self._saturatew/2          # centre in the middle of that span
-        initial_guess  = (0,mu_guess, sigma_guess)
+        # sigma_guess = self._saturatew / 3.2898
+        # mu_guess    = self._saturatew/2          # centre in the middle of that span
+        # initial_guess  = (0,mu_guess, sigma_guess)
+
+        center = self._saturatew /2 
+        sigma    = self._saturatew/7          # centre in the middle of that span
+        initial_guess  = (center, sigma )
+
+
         # initial_guess  = (mu_guess, sigma_guess)
         # Perform the curve fit with the bounds
         # popt, pcov = curve_fit(
@@ -227,25 +238,27 @@ class stratified_Scurve_LERcalc:
         # )
 
         popt, pcov = curve_fit(
-            scurve_function_with_distance, 
+            scurve_function, 
             self._estimated_wlist, 
             [self._estimated_subspaceLER[x] for x in self._estimated_wlist], 
             p0=initial_guess
         )
 
-    
+        self._codedistance = 0
         # Extract the best-fit parameter (alpha)
-        self._codedistance, self._mu,self._sigma = popt[0] , popt[1] , popt[2]
+        self._mu,self._sigma = popt[0] , popt[1]
         return self._codedistance,self._mu,self._sigma
 
 
     def calc_logical_error_rate_after_curve_fitting(self):
         #self.fit_Scurve()
         self._LER=0
-        for weight in range(1,self._num_noise+1):
+        for weight in range(self._minw,self._num_noise+1):
             """
             If the weight is in the estimated list, we use the estimated value
             Else, we use the curve fitting value
+
+            If the weight is less than the minw, we just declare it as 0
             """
             if weight in self._estimated_wlist:
                 self._LER+=self._estimated_subspaceLER[weight]*binomial_weight(self._num_noise,weight,self._error_rate)  
@@ -626,6 +639,6 @@ if __name__ == "__main__":
     #generate_all_hexagon_code_figure()
     p=0.001
 
-    tmp=stratified_Scurve_LERcalc(p,sampleBudget=1000000,num_subspace=5)
-    filepath="C:/Users/yezhu/GitRepos/Sampling/stimprograms/surface/surface15"
-    ler=tmp.calculate_LER_from_file(filepath,p,"S15.png","Surface15")
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=10000000,num_subspace=20)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface7"
+    ler=tmp.calculate_LER_from_file(filepath,p,"S7.png","Surface7")
