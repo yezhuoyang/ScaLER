@@ -1,5 +1,5 @@
 
-from QEPG.QEPG import return_samples,return_samples_many_weights,return_detector_matrix,return_samples_many_weights_numpy
+from QEPG.QEPG import return_samples,return_samples_many_weights,return_detector_matrix,return_samples_many_weights_numpy,return_samples_many_weights_separate_obs
 from LERcalc.clifford import *
 import math
 import pymatching
@@ -51,11 +51,17 @@ class stratified_Scurve_LERcalc:
 
         self._LER=0
         """
-        Use a dictionary to store the estimated subspace logical error rate
+        Use a dictionary to store the estimated subspace logical error rate,
+        how many samples have been used in each subspace
         """
         self._estimated_subspaceLER={}
+        self._subspace_LE_count={}
         self._estimated_subspaceLER_second={}
+        self._subspace_sample_used={}
+
         self._sampleBudget=sampleBudget
+        self._sample_used=0
+        self._circuit_level_code_distance=1
         self._num_subspace=num_subspace
         self._minw=1
         self._maxw=10000000000000
@@ -156,36 +162,33 @@ class stratified_Scurve_LERcalc:
 
         wlist =list(np.arange(self._minw, self._maxw, gap, dtype=int))
         self._estimated_wlist=wlist
-        print("wlist: ",wlist)
         slist=[sampleBudget//self._num_subspace]*len(wlist)
 
 
-        result=return_samples_many_weights_numpy(self._stim_str_after_rewrite,wlist,slist)
+        detector_result,obsresult=return_samples_many_weights_separate_obs(self._stim_str_after_rewrite,wlist,slist)
+        predictions_result = self._matcher.decode_batch(detector_result)
 
-        # print("wlist: ",wlist)
-        # print("slist: ",slist)
-        # print("Result shape is ",len(result)," ",len(result[0])," ",len(result[0][0]))
-        for i in range(len(wlist)):
-            states, observables = [], []
+        print("wlist: ",wlist)
+        print("slist: ",slist)
+        for w,s in zip(wlist,slist):
+            self._subspace_LE_count[w]=0
+            self._estimated_subspaceLER[w]=0
+            self._subspace_sample_used[w]=s
 
-            for j in range(0,slist[i]):
-                states.append(result[i][j][:-1])
-                observables.append([result[i][j][-1]])
+        begin_index=0
+        for w_idx, (w, quota) in enumerate(zip(wlist, slist)):
 
+            observables =  np.asarray(obsresult[begin_index:begin_index+quota])                    # (shots,)
+            predictions = np.asarray(predictions_result[begin_index:begin_index+quota]).ravel()
 
-            shots=len(states)
-            predictions =self._matcher.decode_batch(states)
-            num_errors = 0
-            for shot in range(shots):
-                actual_for_shot = observables[shot]
-                predicted_for_shot = predictions[shot]
-                if not np.array_equal(actual_for_shot, predicted_for_shot):
-                    num_errors += 1
+            # 3. count mismatches in vectorised form ---------------------------------
+            num_errors = np.count_nonzero(observables != predictions)
 
-            self._estimated_subspaceLER[wlist[i]]=num_errors/shots
-            print("Logical error rate when w={} ".format(wlist[i])+str(self._estimated_subspaceLER[wlist[i]]))
+            self._subspace_LE_count[w]+=num_errors
+            self._estimated_subspaceLER[w]=self._subspace_LE_count[w]/self._subspace_sample_used[w]
+            print("Logical error rate when w={} ".format(w)+str(self._estimated_subspaceLER[w]))
+            begin_index+=quota
 
-        
 
 
 
@@ -314,31 +317,47 @@ class stratified_Scurve_LERcalc:
 
 
     def subspace_sampling_second_round(self):
-        wlist,slist=self.distribute_samples()
-        result=return_samples_many_weights_numpy(self._stim_str_after_rewrite,wlist,slist)
+        wlist,slist=self.distribute_samples()     
+        detector_result,obsresult=return_samples_many_weights_separate_obs(self._stim_str_after_rewrite,wlist,slist)
+        predictions_result = self._matcher.decode_batch(detector_result)
 
         print("wlist: ",wlist)
         print("slist: ",slist)
-        print("Result shape is ",len(result)," ",len(result[0])," ",len(result[0][0]))
-        for i in range(len(wlist)):
-            states, observables = [], []
 
-            for j in range(0,slist[i]):
-                states.append(result[i][j][:-1])
-                observables.append([result[i][j][-1]])
+        for w,s in zip(wlist,slist):
+            if not w in self._subspace_LE_count.keys():
+                self._subspace_LE_count[w]=0
+                self._subspace_sample_used[w]=s
+            else:
+                self._subspace_sample_used[w]+=s
 
-            shots=len(states)
-            predictions =self._matcher.decode_batch(states)
-            num_errors = 0
-            for shot in range(shots):
-                actual_for_shot = observables[shot]
-                predicted_for_shot = predictions[shot]
-                if not np.array_equal(actual_for_shot, predicted_for_shot):
-                    num_errors += 1
-            self._estimated_subspaceLER_second[wlist[i]]=num_errors/shots
-            self._estimated_subspaceLER[wlist[i]]=num_errors/shots
-            print("Logical error rate when w={} ".format(wlist[i])+str(self._estimated_subspaceLER[wlist[i]]))
-            print("Weight of this subspace: {}".format(binomial_weight(self._num_noise, wlist[i],self._error_rate)))
+
+        begin_index=0
+        for w_idx, (w, quota) in enumerate(zip(wlist, slist)):
+
+            observables =  np.asarray(obsresult[begin_index:begin_index+quota])                    # (shots,)
+            predictions = np.asarray(predictions_result[begin_index:begin_index+quota]).ravel()
+
+            # 3. count mismatches in vectorised form ---------------------------------
+            num_errors = np.count_nonzero(observables != predictions)
+
+            self._subspace_LE_count[w]+=num_errors
+            self._estimated_subspaceLER_second[w] = self._subspace_LE_count[w] / self._subspace_sample_used[w]
+            self._estimated_subspaceLER[w]=self._subspace_LE_count[w]/self._subspace_sample_used[w]
+
+
+            print("Logical error rate when w={} ".format(w)+str(self._estimated_subspaceLER[w]))
+            print("Weight of this subspace: {}".format(binomial_weight(self._num_noise, w,self._error_rate)))
+
+            print(f"Logical error rate when w={w}: {self._estimated_subspaceLER[w]*binomial_weight(self._num_noise, w,self._error_rate):.6g}")
+
+            begin_index+=quota
+
+        print(self._subspace_LE_count)
+        print(self._subspace_sample_used)
+        print("Samples used:{}".format(self._sample_used))
+        print("circuit level code distance:{}".format(self._circuit_level_code_distance))
+
 
 
     def plot_scurve(self, filename,title="S-curve"):
@@ -385,6 +404,7 @@ class stratified_Scurve_LERcalc:
         plt.savefig(filename, dpi=300)
         #plt.show()
         plt.close(fig)
+
 
 
     def calculate_LER_from_file(self,filepath,pvalue,figname,titlename):
@@ -606,6 +626,6 @@ if __name__ == "__main__":
     #generate_all_hexagon_code_figure()
     p=0.001
 
-    tmp=stratified_Scurve_LERcalc(p,sampleBudget=1000000,num_subspace=10)
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface30"
-    ler=tmp.calculate_LER_from_file(filepath,p,"S30.png","Surface30")
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=1000000,num_subspace=5)
+    filepath="C:/Users/yezhu/GitRepos/Sampling/stimprograms/surface/surface15"
+    ler=tmp.calculate_LER_from_file(filepath,p,"S15.png","Surface15")

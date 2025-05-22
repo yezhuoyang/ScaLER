@@ -24,8 +24,8 @@ def binomial_weight(N, W, p):
         return math.exp(log_pmf)
 
 
-MIN_NUM_LE_EVENT = 100
-SAMPLE_GAP=500000
+MIN_NUM_LE_EVENT = 10
+SAMPLE_GAP=10000
 
 
 '''
@@ -165,16 +165,22 @@ class stratifiedLERcalc:
                 we declare that the code distance is larger than the current weight.
                 TODO
                 """
-                if(self._subspace_LE_count[weight]==0 and self._subspace_sample_used[weight]>0.1*subspace_size(self._num_noise, weight)):
+                if(self._subspace_LE_count[weight]==0 and 10*self._subspace_sample_used[weight]>subspace_size(self._num_noise, weight)):
                     self._circuit_level_code_distance=weight
                     continue
 
 
                 if(self._subspace_LE_count[weight]<MIN_NUM_LE_EVENT):
-                    slist.append(SAMPLE_GAP)
-                    self._subspace_sample_used[weight]+=SAMPLE_GAP
+                    if(self._subspace_LE_count[weight]>=1):
+                        sample_num_required=int(MIN_NUM_LE_EVENT/self._subspace_LE_count[weight])* self._subspace_sample_used[weight]
+                        slist.append(sample_num_required)
+                        self._subspace_sample_used[weight]+=sample_num_required  
+                        self._sample_used+=sample_num_required
+                    else:                   
+                        slist.append(SAMPLE_GAP)
+                        self._subspace_sample_used[weight]+=SAMPLE_GAP
+                        self._sample_used+=SAMPLE_GAP
                     wlist.append(weight)
-                    self._sample_used+=SAMPLE_GAP
             """
             Case 2 to end the while loop: We have get 100 logical error events for all these subspaces
             """
@@ -203,6 +209,7 @@ class stratifiedLERcalc:
 
                 print(f"Logical error rate when w={w}: {self._estimated_subspaceLER[w]*binomial_weight(self._num_noise, w,self._error_rate):.6g}")
 
+                begin_index+=quota
             print(self._subspace_LE_count)
             print(self._subspace_sample_used)
         print("Samples used:{}".format(self._sample_used))
@@ -229,9 +236,9 @@ class stratifiedLERcalc:
 
 
 if __name__ == "__main__":
-    tmp=stratifiedLERcalc(0.05,sampleBudget=1500,num_subspace=10)
+    tmp=stratifiedLERcalc(0.0005,sampleBudget=150000000,num_subspace=10)
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition3"
-    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
+    filepath="C:/Users/yezhu/GitRepos/Sampling/stimprograms/surface/surface9"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/1cnot"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/surface3r1"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/cnot01h01"
@@ -239,17 +246,17 @@ if __name__ == "__main__":
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/simpleh"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/1cnot1R"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/2cnot2R"
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/simple"
+    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/simple"
     tmp.parse_from_file(filepath)
-    tmp.sample_all_subspace(5000)
+    #tmp.sample_all_subspace(5000)
 
-    #tmp.subspace_sampling()
+    tmp.subspace_sampling()
 
 
 
-    # LER=tmp.calculate_LER()
+    LER=tmp.calculate_LER()
 
-    # print(LER)
+    print(LER)
 
     # num_noise=tmp._num_noise
 

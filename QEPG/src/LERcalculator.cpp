@@ -112,19 +112,106 @@ inline void convert_bitset_row_to_boolean_separate_obs(std::vector<std::vector<b
 /*
 Return a three 
 */
-inline void convert_bitset_row_to_boolean_separate_obs_numpy(py::array_t<bool>& detectionresult,py::array_t<bool>& obsresult,const size_t& begin_index,const std::vector<QEPG::Row>& samplecontainer){
-        auto detector_buf = detectionresult.mutable_unchecked<2>();     // raw, bounds-checked only in debug
-        auto observable_buf = obsresult.mutable_unchecked<1>(); 
-        auto row_index=0;
-        for (const auto& bitset_row : samplecontainer) {
-            std::vector<bool> bool_row(bitset_row.size()-1);
-            for (size_t i = 0; i < bitset_row.size()-1; ++i) {
-                detector_buf(begin_index+row_index,i)= bitset_row[i]; 
+// inline void convert_bitset_row_to_boolean_separate_obs_numpy(py::array_t<bool>& detectionresult,py::array_t<bool>& obsresult,const size_t& begin_index,const std::vector<QEPG::Row>& samplecontainer){
+//         auto detector_buf = detectionresult.mutable_unchecked<2>();     // raw, bounds-checked only in debug
+//         auto observable_buf = obsresult.mutable_unchecked<1>(); 
+//         auto row_index=0;
+//         for (const auto& bitset_row : samplecontainer) {
+//             std::vector<bool> bool_row(bitset_row.size()-1);
+//             for (size_t i = 0; i < bitset_row.size()-1; ++i) {
+//                 detector_buf(begin_index+row_index,i)= bitset_row[i]; 
+//             }
+//             observable_buf(begin_index+row_index)=bitset_row[bitset_row.size()-1];
+//             row_index++;
+//         }
+// }
+
+
+inline void convert_bitset_row_to_boolean_separate_obs_numpy(
+        pybind11::array_t<bool>&        detectionresult,   // shape (N, k)
+        pybind11::array_t<bool>&        obsresult,         // shape (N,)
+        const std::size_t               begin_index,
+        const std::vector<QEPG::Row>&   samplecontainer)
+{
+    namespace py = pybind11;
+    using bitset_t = QEPG::Row;
+    using block_t  = bitset_t::block_type;                 // 32- or 64-bit
+
+    const std::size_t n_rows = samplecontainer.size();
+    if (n_rows == 0) return;                               // nothing to do
+
+    /* ------- detector-column count (k) must be constant ---------------- */
+    const std::size_t n_det = samplecontainer.front().size() - 1;   // last = obs
+
+    /* ------- basic shape / bounds checks ------------------------------ */
+    auto det_info = detectionresult.request();
+    auto obs_info = obsresult.request();
+
+    if (det_info.ndim != 2 || det_info.shape[1] != n_det)
+        throw std::runtime_error("detectionresult has wrong shape");
+    if (det_info.shape[0] < begin_index + n_rows
+        || obs_info.shape[0] < begin_index + n_rows)
+        throw std::runtime_error("output arrays are too small");
+
+    /* ------- raw pointers & strides (bytes) --------------------------- */
+    auto* det_base = static_cast<std::uint8_t*>(det_info.ptr);
+    const std::size_t det_row_stride =
+        static_cast<std::size_t>(det_info.strides[0]);     // bytes per row
+
+    auto* obs_base = static_cast<std::uint8_t*>(obs_info.ptr);
+
+    /* ------- constants ------------------------------------------------ */
+    constexpr std::size_t WORD_BITS =
+        std::numeric_limits<block_t>::digits;              // 32 or 64
+
+    /* ------- work outside the GIL ------------------------------------ */
+    py::gil_scoped_release release;
+
+    #pragma omp parallel                                                \
+        default(none) shared(samplecontainer, det_base, obs_base)
+    {
+        static thread_local std::vector<block_t> tl_buf;   // scratch per thread
+
+        #pragma omp for schedule(static)
+        for (long long r = 0; r < static_cast<long long>(n_rows); ++r)
+        {
+            const bitset_t& bits   = samplecontainer[static_cast<std::size_t>(r)];
+            const std::size_t n_blk = bits.num_blocks();
+
+            /* -- obtain packed words ---------------------------------- */
+            tl_buf.resize(n_blk);
+            boost::to_block_range(bits, tl_buf.begin());
+
+            /* -- detector destination row ----------------------------- */
+            std::uint8_t* det_dst =
+                det_base + (begin_index + r) * det_row_stride;
+
+            /* -- full words ------------------------------------------- */
+            const std::size_t n_blk_det = n_det / WORD_BITS;
+            for (std::size_t b = 0; b < n_blk_det; ++b) {
+                block_t w = tl_buf[b];
+                for (std::size_t k = 0; k < WORD_BITS; ++k, w >>= 1)
+                    det_dst[b * WORD_BITS + k] =
+                        static_cast<std::uint8_t>(w & 1);
             }
-            observable_buf(begin_index+row_index)=bitset_row[bitset_row.size()-1];
-            row_index++;
+
+            /* -- tail bits -------------------------------------------- */
+            const std::size_t rem = n_det & (WORD_BITS - 1);
+            if (rem) {
+                block_t w = tl_buf[n_blk_det];
+                for (std::size_t k = 0; k < rem; ++k, w >>= 1)
+                    det_dst[n_blk_det * WORD_BITS + k] =
+                        static_cast<std::uint8_t>(w & 1);
+            }
+
+            /* -- observable bit --------------------------------------- */
+            obs_base[begin_index + r] =
+                static_cast<std::uint8_t>(bits[n_det]);
         }
+    }
 }
+
+
 
 
 
