@@ -9,6 +9,7 @@ import sys
 extra_compile_args = ['/std:c++20', '/EHsc']
 if sys.platform == 'win32':
     extra_compile_args.append('/O2')    # MSVC “optimize for speed”
+    extra_compile_args.append('/openmp')   
 else:
     extra_compile_args.append('-O3')    # GCC/Clang “optimize even more”
 

@@ -1,5 +1,6 @@
 #include "sampler.hpp"
-#include "chrono";
+#include "chrono"
+#include <thread>
 
 
 namespace SAMPLE{
@@ -40,15 +41,36 @@ inline std::vector<singlePauli> sampler::generate_sample_Floyd(size_t weight, st
 
 
 void sampler::generate_many_output_samples(const QEPG::QEPG& graph,std::vector<QEPG::Row>& samplecontainer, size_t pauliweight, size_t samplenumber){
-    samplecontainer.reserve(samplenumber);
+    //samplecontainer.reserve(samplenumber);
+    samplecontainer.resize(samplenumber);
     // Seed source for the random number engine
-    std::random_device rd;
-    auto seed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
-    // Mersenne Twister engine seeded with rd()
-    std::mt19937 gen(seed);
-    for(size_t i=0;i<samplenumber;i++){
-        std::vector<singlePauli> sample = std::move(generate_sample_Floyd(pauliweight,gen));
-        samplecontainer.push_back(std::move(calculate_parity_output_from_one_sample(graph,sample)));
+    // std::random_device rd;
+    // 
+    // // Mersenne Twister engine seeded with rd()
+    // std::mt19937 gen(seed);
+    // for(size_t i=0;i<samplenumber;i++){
+    //     std::vector<singlePauli> sample = std::move(generate_sample_Floyd(pauliweight,gen));
+    //     samplecontainer.push_back(std::move(calculate_parity_output_from_one_sample(graph,sample)));
+    // }
+    static const std::uint64_t global_seed = std::random_device{}();   // log this if you need to replay
+
+    // 2. Parallel region
+    #pragma omp parallel
+    {
+        thread_local std::mt19937 rng{
+            static_cast<std::mt19937::result_type>(
+                global_seed ^                                    // same run → same base
+                std::hash<std::thread::id>{}(std::this_thread::get_id()))  // thread-specific part
+        };
+
+
+        // 3. Work-share the loop
+        #pragma omp for schedule(static)
+        for (long long i = 0; i < static_cast<long long>(samplenumber); ++i) {
+            auto sample = generate_sample_Floyd(pauliweight, rng);
+            samplecontainer[i] =
+                calculate_parity_output_from_one_sample(graph, sample);
+        }
     }
 }
 

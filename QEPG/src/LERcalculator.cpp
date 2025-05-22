@@ -46,7 +46,7 @@ inline py::array_t<bool> bitset_rows_to_numpy(const std::vector<QEPG::Row>& rows
 
 
 
-void convert_bitset_row_to_boolean_separate_obs(std::vector<std::vector<bool>>& result,std::vector<bool>& obsresult,const std::vector<QEPG::Row>& samplecontainer){
+inline void convert_bitset_row_to_boolean_separate_obs(std::vector<std::vector<bool>>& result,std::vector<bool>& obsresult,const std::vector<QEPG::Row>& samplecontainer){
         result.reserve(samplecontainer.size()); // Reserve space
         obsresult.reserve(samplecontainer.size());
         // Convert each boost::dynamic_bitset<> to std::vector<bool>

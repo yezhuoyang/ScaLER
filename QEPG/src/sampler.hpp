@@ -10,7 +10,7 @@
 #include <random>
 #include <unordered_set>  
 #include "QEPG.hpp"
-
+#include <omp.h>          // just include and -fopenmp / /openmp
 
 namespace SAMPLE{
 
