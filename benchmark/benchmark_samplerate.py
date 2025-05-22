@@ -39,15 +39,21 @@ def test_samplerate(distance):
 
 
 if __name__ == "__main__":
+    #test_samplerate(11)
+
     test_samplerate(3)
 
     test_samplerate(5)
 
     test_samplerate(7)
 
-    test_samplerate(7)
+    test_samplerate(9)
 
     test_samplerate(11)
 
+    test_samplerate(15)
 
+    test_samplerate(17)
+
+    test_samplerate(19)
 

@@ -13,9 +13,6 @@ sampler::sampler(size_t num_total_paulierror):num_total_pauliError_(num_total_pa
 sampler::~sampler()=default;
 
 /*---------------------------------------Sample one vector with fixed weight----------*/        
-std::vector<size_t> sampler::sample_fixed_one_two_three(size_t weight){
-    
-}
 
 
 inline std::vector<singlePauli> sampler::generate_sample_Floyd(size_t weight, std::mt19937& gen){
@@ -43,15 +40,7 @@ inline std::vector<singlePauli> sampler::generate_sample_Floyd(size_t weight, st
 void sampler::generate_many_output_samples(const QEPG::QEPG& graph,std::vector<QEPG::Row>& samplecontainer, size_t pauliweight, size_t samplenumber){
     //samplecontainer.reserve(samplenumber);
     samplecontainer.resize(samplenumber);
-    // Seed source for the random number engine
-    // std::random_device rd;
-    // 
-    // // Mersenne Twister engine seeded with rd()
-    // std::mt19937 gen(seed);
-    // for(size_t i=0;i<samplenumber;i++){
-    //     std::vector<singlePauli> sample = std::move(generate_sample_Floyd(pauliweight,gen));
-    //     samplecontainer.push_back(std::move(calculate_parity_output_from_one_sample(graph,sample)));
-    // }
+
     static const std::uint64_t global_seed = std::random_device{}();   // log this if you need to replay
 
     // 2. Parallel region
@@ -68,8 +57,7 @@ void sampler::generate_many_output_samples(const QEPG::QEPG& graph,std::vector<Q
         #pragma omp for schedule(static)
         for (long long i = 0; i < static_cast<long long>(samplenumber); ++i) {
             auto sample = generate_sample_Floyd(pauliweight, rng);
-            samplecontainer[i] =
-                calculate_parity_output_from_one_sample(graph, sample);
+            samplecontainer[i] = calculate_parity_output_from_one_sample(graph, sample);
         }
     }
 }

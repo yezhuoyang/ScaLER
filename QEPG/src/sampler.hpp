@@ -42,12 +42,9 @@ class sampler{
 
 
     /*---------------------------------------Sample one vector with fixed weight----------*/        
-        std::vector<size_t> sample_fixed_one_two_three(size_t weight);
-
 
         /*
         Generate a single sample with weight error by Floyd method. 
-        
         */
         inline std::vector<singlePauli> generate_sample_Floyd(size_t weight,std::mt19937& gen);
 

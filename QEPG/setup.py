@@ -9,7 +9,10 @@ import sys
 extra_compile_args = ['/std:c++20', '/EHsc']
 if sys.platform == 'win32':
     extra_compile_args.append('/O2')    # MSVC “optimize for speed”
-    extra_compile_args.append('/openmp')   
+    extra_compile_args.append('/openmp:llvm')   
+    lflags = [
+        "/DEBUG"               # <-- carry PDB into final .pyd
+    ]
 else:
     extra_compile_args.append('-O3')    # GCC/Clang “optimize even more”
 
@@ -28,6 +31,7 @@ ext_modules=[
             'C:/Users/yezhu/miniconda3/Include',
         ],
         extra_compile_args=extra_compile_args,
+        extra_link_args=lflags,
         language='c++'
     ),
 ]

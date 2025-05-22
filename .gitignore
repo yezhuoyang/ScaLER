@@ -16,4 +16,6 @@ LERcalc/__pycache__/*
 stimprograms/__pycache__/*
 *.png
 benchmark/__pycache__/*
-
+QEPG/vc140.pdb
+benchmark/tmp.py
+output2.txt

@@ -26,20 +26,68 @@ void convert_bitset_row_to_boolean(std::vector<std::vector<bool>>& result,const 
 
 inline py::array_t<bool> bitset_rows_to_numpy(const std::vector<QEPG::Row>& rows)
 {
+    using bitset_t  = QEPG::Row;
+    using block_t   = bitset_t::block_type;           // usually uint64_t
+
     const std::size_t n_rows = rows.size();
     const std::size_t n_cols = n_rows ? rows.front().size() : 0;
+    if(n_cols==0)
+        return py::array_t<bool>({n_rows, n_cols});
 
     // create a NumPy array of shape (n_rows, n_cols), dtype=bool
     py::array_t<bool> out({n_rows, n_cols});
-    auto buf = out.mutable_unchecked<2>();     // raw, bounds-checked only in debug
+    // auto buf = out.mutable_unchecked<2>();     // raw, bounds-checked only in debug
 
-    for (std::size_t r = 0; r < n_rows; ++r) {
-        const auto& bits = rows[r];            // the current bitset
-        for (std::size_t c = 0; c < n_cols; ++c) {
-            buf(r, c) = bits[c];               // copy bit by bit
+    // for (std::size_t r = 0; r < n_rows; ++r) {
+    //     const auto& bits = rows[r];            // the current bitset
+    //     for (std::size_t c = 0; c < n_cols; ++c) {
+    //         buf(r, c) = bits[c];               // copy bit by bit
+    //     }
+    // }
+    // return out;                                // pybind11 returns the array by value
+    //Raw buffer pointer(One row=n_cols bytes)
+    auto req=out.request();
+    auto* base=static_cast<std::uint8_t*>(req.ptr);
+    const auto row_stride=n_cols;
+
+    //release the GIL so other python threads can run
+    py::gil_scoped_release release;
+
+
+    //How many bits stored in this block, either 32 or 64
+    constexpr std::size_t WORD_BITS = std::numeric_limits<block_t>::digits;
+
+
+
+    //-----parallel over rows-------------------------------
+    #pragma omp parallel for schedule(static)
+    for(long long r=0; r < static_cast<long long>(n_rows);++r)
+    {
+        const QEPG::Row& bits=rows[static_cast<std::size_t>(r)];
+        const std::size_t n_blk=bits.num_blocks();
+
+        /* --- thread-local scratch buffer (namespace scope ==> OK in MSVC) */
+        static thread_local std::vector<block_t> tl_buf;
+        tl_buf.resize(n_blk);                               // realloc only if needed
+        boost::to_block_range(bits, tl_buf.begin());        // fill the buffer
+
+        /*  2. Unpack into the Numpy row (64 bits -> 64 bytes)*/
+        std::uint8_t* dst=base+r*row_stride;
+
+        for(std::size_t b=0; b+1 <n_blk;++b){
+            std::uint64_t word=static_cast<std::uint64_t>(tl_buf[b]);
+            for(int k=0;k<WORD_BITS;++k,word>>=1)
+                dst[b*WORD_BITS+k]=static_cast<std::uint8_t>(word&1);
+        }
+
+        const std::size_t rem_bits=n_cols&(WORD_BITS-1);
+        if(rem_bits){
+            std::uint64_t word = static_cast<std::uint64_t>(tl_buf[n_blk-1]);
+            for(std::size_t k=0;k<rem_bits;++k, word>>=1)
+                dst[(n_blk-1)*WORD_BITS + k]=static_cast<std::uint8_t>(word & 1);
         }
     }
-    return out;                                // pybind11 returns the array by value
+    return out;
 }
 
 

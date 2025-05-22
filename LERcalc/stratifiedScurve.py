@@ -230,8 +230,7 @@ class stratified_Scurve_LERcalc:
             p0=initial_guess
         )
 
-        
-
+    
         # Extract the best-fit parameter (alpha)
         self._codedistance, self._mu,self._sigma = popt[0] , popt[1] , popt[2]
         return self._codedistance,self._mu,self._sigma
