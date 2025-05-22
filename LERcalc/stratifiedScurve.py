@@ -28,6 +28,7 @@ def binomial_weight(N, W, p):
 
 def scurve_function(x, center, sigma):
     return 0.5/(1+np.exp(-(x - center) / sigma))
+    #return 0*x
 
 
 
@@ -41,6 +42,44 @@ def scurve_function_with_distance(x, cd, mu, sigma):
     x = np.asarray(x)                      # ensure array
     y = 0.5 * norm.cdf(x, loc=mu, scale=sigma)
     return np.where(x < cd, 0.0, y)        # vectorised “if”
+
+
+
+
+def r_squared(y_true, y_pred, clip=False):
+    """
+    Compute the coefficient of determination (R²).
+
+    Parameters
+    ----------
+    y_true : array-like
+        Observed data.
+    y_pred : array-like
+        Model-predicted data (same length as y_true).
+    clip : bool, default False
+        If True, negative R² values are clipped to 0 so the
+        score lies strictly in the interval [0, 1].
+
+    Returns
+    -------
+    float
+        The R² statistic.
+    """
+    y_true = np.asarray(y_true, dtype=float)
+    y_pred = np.asarray(y_pred, dtype=float)
+
+    if y_true.shape != y_pred.shape:
+        raise ValueError("y_true and y_pred must have the same shape")
+
+    ss_res = np.sum((y_true - y_pred) ** 2)        # residual sum of squares
+    ss_tot = np.sum((y_true - y_true.mean()) ** 2) # total sum of squares
+
+    # Handle the degenerate case where variance is zero
+    if ss_tot == 0.0:
+        return 1.0 if ss_res == 0.0 else 0.0
+
+    r2 = 1.0 - ss_res / ss_tot
+    return max(0.0, r2) if clip else r2
 
 
 '''
@@ -196,6 +235,12 @@ class stratified_Scurve_LERcalc:
 
 
 
+    def calculate_R_square_score(self):
+        y_observed = [self._estimated_subspaceLER[x] for x in self._estimated_wlist]
+        y_predicted = [scurve_function(x,self._mu,self._sigma) for x in self._estimated_wlist]
+        r2 = r_squared(y_observed, y_predicted)
+        print("R^2 score: ", r2)
+        return r2
 
 
     # ----------------------------------------------------------------------
@@ -263,7 +308,7 @@ class stratified_Scurve_LERcalc:
             if weight in self._estimated_wlist:
                 self._LER+=self._estimated_subspaceLER[weight]*binomial_weight(self._num_noise,weight,self._error_rate)  
             else:
-                self._LER+=scurve_function_with_distance(weight,self._codedistance,self._mu,self._sigma)*binomial_weight(self._num_noise,weight,self._error_rate)
+                self._LER+=scurve_function(weight,self._mu,self._sigma)*binomial_weight(self._num_noise,weight,self._error_rate)
                 #self._LER+=scurve_function(weight,self._mu,self._sigma)*binomial_weight(self._num_noise,weight,self._error_rate)
         return self._LER
 
@@ -640,5 +685,7 @@ if __name__ == "__main__":
     p=0.001
 
     tmp=stratified_Scurve_LERcalc(p,sampleBudget=10000000,num_subspace=20)
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface7"
-    ler=tmp.calculate_LER_from_file(filepath,p,"S7.png","Surface7")
+
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface5"
+    ler=tmp.calculate_LER_from_file(filepath,p,"S5.png","Surface5")
+    tmp.calculate_R_square_score()
