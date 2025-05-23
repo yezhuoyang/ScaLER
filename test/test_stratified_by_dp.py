@@ -9,7 +9,7 @@ from LERcalc.symbolicLER import symbolicLER
 
 
 
-all_test_files=["1cnot","1cnot1R","1cnoth","2cnot","2cnot2R","cnot1","cnot1","cnot01","cnot01h01","cnoth0","cnoth01","simple","simpleh","simpleMultiObs"]
+all_test_files=["1cnot","1cnot1R","1cnoth","2cnot","2cnot2R","cnot1","cnot1","cnot01","cnot01h01","cnoth0","cnoth01","simple","simpleh","simpleMultiObs","repetition3r2","surface3r1"]
 
 
 
@@ -48,7 +48,7 @@ def test_by_file_name(filepath):
 if __name__ == "__main__":
 
 
-    rootfilepath="C:/Users/yezhu/GitRepos/Sampling/stimprograms/small/"
+    rootfilepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/"
 
     for test_file in all_test_files:
         filepath=rootfilepath+test_file

@@ -31,7 +31,7 @@ def count_logical_errors(circuit: stim.Circuit, num_shots: int) -> int:
 
 
 def surface_groundTruth():
-    distance=3
+    distance=7
     circuit=CliffordCircuit(2)
     circuit.set_error_rate(0.001)
     stim_circuit=stim.Circuit.generated("surface_code:rotated_memory_z",rounds=distance*3,distance=distance).flattened()

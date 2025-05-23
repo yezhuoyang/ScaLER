@@ -328,7 +328,7 @@ class symbolicLER:
         self.initialize_single_pauli_propagation()
         print("---Step3: calculating error indices--------------")
         self.calc_error_row_indices()
-        print("---Step4: synamic algorithm--------------")
+        print("---Step4: dynamic algorithm--------------")
         self.dynamic_calculation_of_dp()
         self.calculate_LER()
         return self.evaluate_LER(pvalue)

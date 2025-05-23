@@ -236,9 +236,9 @@ class stratifiedLERcalc:
 
 
 if __name__ == "__main__":
-    tmp=stratifiedLERcalc(0.0005,sampleBudget=150000000,num_subspace=10)
+    tmp=stratifiedLERcalc(0.001,sampleBudget=150000000,num_subspace=20)
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition3"
-    filepath="C:/Users/yezhu/GitRepos/Sampling/stimprograms/surface/surface9"
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/1cnot"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/surface3r1"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/cnot01h01"

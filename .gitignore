@@ -19,3 +19,5 @@ benchmark/__pycache__/*
 QEPG/vc140.pdb
 benchmark/tmp.py
 output2.txt
+.ipynb_checkpoints/
+*.ipynb

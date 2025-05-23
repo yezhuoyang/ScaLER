@@ -117,6 +117,7 @@ class stratified_Scurve_LERcalc:
         self._mu=0
         self._sigma=0
 
+        #In the area we are interested in, the maximum value of the logical error rate
         self._rough_value_for_subspace_LER=0
 
 
@@ -125,6 +126,7 @@ class stratified_Scurve_LERcalc:
     def calc_logical_error_rate_with_fixed_w(self, shots, w):
         """
         Calculate the logical error rate with fixed w
+        TODO: Optimize this function
         """
         result=return_samples(self._stim_str_after_rewrite,w,shots)
         states, observables = [], []
@@ -166,7 +168,7 @@ class stratified_Scurve_LERcalc:
 
 
 
-    def determine_w(self,shots=100):
+    def determine_w(self,shots=10000):
         """
         Use binary search to determine the minw and maxw
         """
@@ -199,14 +201,15 @@ class stratified_Scurve_LERcalc:
 
 
     def get_rough_subspace_LER(self,maximum_shots):
-
+        """
+        Input: the maximum number of shots
+        Output: the rough value of the subspace logical error rate
+        """
         max_estimated_subspaceLER=0
         shots=1000
         while max_estimated_subspaceLER==0:
             self._sampleBudget=shots
             wlist,slist=self.distribute_samples(equal=True)
-            print("wlist: ",wlist)
-            print("slist: ",slist)
             for w,s in zip(wlist,slist):
                 if not w in self._subspace_LE_count.keys():
                     self._subspace_LE_count[w]=0
@@ -232,27 +235,22 @@ class stratified_Scurve_LERcalc:
                 if self._estimated_subspaceLER[w]>max_estimated_subspaceLER:
                     max_estimated_subspaceLER=self._estimated_subspaceLER[w]
 
-                print("Logical error rate when w={} ".format(w)+str(self._estimated_subspaceLER[w]))
-                print("Weight of this subspace: {}".format(binomial_weight(self._num_noise, w,self._error_rate)))
-
-                print(f"Logical error rate when w={w}: {self._estimated_subspaceLER[w]*binomial_weight(self._num_noise, w,self._error_rate):.6g}")
-
                 begin_index+=quota
             shots*=10
             if(shots>maximum_shots):
                 break
 
-        print(self._subspace_LE_count)
-        print(self._subspace_sample_used)
-        print("Samples used:{}".format(self._sample_used))
-        print("circuit level code distance:{}".format(self._circuit_level_code_distance))
         self._rough_value_for_subspace_LER=max_estimated_subspaceLER
+
+
 
     def subspace_sampling_first_round(self,sampleBudget):
 
         """
         After we determine the minw and maxw, we generate an even distribution of points 
-        between minw and maxw
+        between minw and maxw.
+
+        The goal is for the curve fitting in the next step to get more accurate.
         """
 
         gap=int((self._maxw-self._minw)/self._num_subspace)
@@ -267,12 +265,13 @@ class stratified_Scurve_LERcalc:
         detector_result,obsresult=return_samples_many_weights_separate_obs(self._stim_str_after_rewrite,wlist,slist)
         predictions_result = self._matcher.decode_batch(detector_result)
 
-        print("wlist: ",wlist)
-        print("slist: ",slist)
         for w,s in zip(wlist,slist):
-            self._subspace_LE_count[w]=0
-            self._estimated_subspaceLER[w]=0
-            self._subspace_sample_used[w]=s
+            if not w in self._subspace_LE_count.keys():
+                self._subspace_LE_count[w]=0
+                self._subspace_sample_used[w]=s
+                self._estimated_subspaceLER[w]=0
+            else:
+                self._subspace_sample_used[w]+=s        
 
         begin_index=0
         for w_idx, (w, quota) in enumerate(zip(wlist, slist)):
@@ -285,9 +284,12 @@ class stratified_Scurve_LERcalc:
 
             self._subspace_LE_count[w]+=num_errors
             self._estimated_subspaceLER[w]=self._subspace_LE_count[w]/self._subspace_sample_used[w]
-            print("Logical error rate when w={} ".format(w)+str(self._estimated_subspaceLER[w]))
+            #print("Logical error rate when w={} ".format(w)+str(self._estimated_subspaceLER[w]))
             begin_index+=quota
-
+        print("---------------After first round sampling-------------------")
+        print("Subspace LE count: ",self._subspace_LE_count)
+        print("self._subspace_sample_used: ",self._subspace_sample_used)
+        print("self._estimated_subspaceLER: ",self._estimated_subspaceLER)
 
 
     def calculate_R_square_score(self):
@@ -431,14 +433,17 @@ class stratified_Scurve_LERcalc:
         return wlist,slist
 
 
-
     def subspace_sampling_second_round(self):
+        """
+        The second round of subspace stratified sampling
+        We already know the rough value of the subspace logical error rate
+        We also have get the fitted curve.
+        The goal is to get more accurate value of the logical error rate, specially for these subspaces
+        """
         wlist,slist=self.distribute_samples()     
         detector_result,obsresult=return_samples_many_weights_separate_obs(self._stim_str_after_rewrite,wlist,slist)
         predictions_result = self._matcher.decode_batch(detector_result)
 
-        print("wlist: ",wlist)
-        print("slist: ",slist)
 
         for w,s in zip(wlist,slist):
             if not w in self._subspace_LE_count.keys():
@@ -446,7 +451,6 @@ class stratified_Scurve_LERcalc:
                 self._subspace_sample_used[w]=s
             else:
                 self._subspace_sample_used[w]+=s
-
 
         begin_index=0
         for w_idx, (w, quota) in enumerate(zip(wlist, slist)):
@@ -460,17 +464,12 @@ class stratified_Scurve_LERcalc:
             self._subspace_LE_count[w]+=num_errors
             self._estimated_subspaceLER_second[w] = self._subspace_LE_count[w] / self._subspace_sample_used[w]
             self._estimated_subspaceLER[w]=self._subspace_LE_count[w]/self._subspace_sample_used[w]
-
-
-            print("Logical error rate when w={} ".format(w)+str(self._estimated_subspaceLER[w]))
-            print("Weight of this subspace: {}".format(binomial_weight(self._num_noise, w,self._error_rate)))
-
-            print(f"Logical error rate when w={w}: {self._estimated_subspaceLER[w]*binomial_weight(self._num_noise, w,self._error_rate):.6g}")
-
             begin_index+=quota
 
-        print(self._subspace_LE_count)
-        print(self._subspace_sample_used)
+
+        print("---------------After second round sampling-------------------")
+        print("Subspace LE count: ",self._subspace_LE_count)
+        print("self._subspace_sample_used: ",self._subspace_sample_used)
         print("Samples used:{}".format(self._sample_used))
         print("circuit level code distance:{}".format(self._circuit_level_code_distance))
 
@@ -478,8 +477,14 @@ class stratified_Scurve_LERcalc:
 
     def plot_scurve(self, filename,title="S-curve"):
         """Plot the S-curve and its discrete estimate."""
-        keys   = self._estimated_wlist
+
+
+        print("LER count: ",self._subspace_LE_count)
+        keys   = list(self._estimated_subspaceLER.keys())
         values = [self._estimated_subspaceLER[k] for k in keys]
+
+        print("keys: ",keys)
+        print("values: ",values)
         fig=plt.figure()
         # bars ── discrete estimate
         plt.bar(keys, values,
@@ -488,8 +493,12 @@ class stratified_Scurve_LERcalc:
                 label='Estimated subspace LER by sampling')
 
 
-        keys_second = self._estimated_subspaceLER_second.keys()
+        keys_second = list(self._estimated_subspaceLER_second.keys())
         values_second = [self._estimated_subspaceLER_second[k] for k in keys_second]
+
+
+        print("keys_second: ",keys_second)
+        print("values_second: ",values_second)
         plt.bar(keys_second, values_second,
                 color='tab:red',         # pick any color you like
                 alpha=0.8,
@@ -498,9 +507,10 @@ class stratified_Scurve_LERcalc:
 
         plt.axvline(x=self._error_rate*self._num_noise, color="red", linestyle="--", linewidth=1.2, label="Average Error number") # vertical line at x=0.5
 
+        print("Saturate w: ",self._saturatew)
 
         # smooth curve ── fitted S-curve
-        x = np.linspace(0, self._saturatew + 10, 1000)
+        x = np.linspace(0, self._saturatew, 1000)
         y = scurve_function(x, self._mu, self._sigma)
         plt.plot(x, y,
                 color='tab:orange',
@@ -742,18 +752,19 @@ if __name__ == "__main__":
     #generate_all_hexagon_code_figure()
     p=0.001
 
-    tmp=stratified_Scurve_LERcalc(p,sampleBudget=10000000,num_subspace=5)
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=10000000,num_subspace=10)
 
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface5"
-    figname="S5.png"
-    titlename="Surface5"
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface7"
+    figname="S7.png"
+    titlename="Surface7"
 
     tmp.parse_from_file(filepath)
     tmp.get_rough_subspace_LER(10000)
-    tmp.binary_search_half(1,tmp._num_noise,10000)
+    tmp.determine_w()
 
     tmp.subspace_sampling_first_round(int(10000000//4))
     tmp.fit_Scurve()
+    tmp._sampleBudget=10000000
     tmp.subspace_sampling_second_round()
     tmp.fit_Scurve()        
     tmp.calc_logical_error_rate_after_curve_fitting()
