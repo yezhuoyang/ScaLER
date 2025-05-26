@@ -7,17 +7,23 @@ from scipy.optimize import curve_fit
 from scipy.stats import norm
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
+from scipy.stats import binom
+
+# def binomial_weight(N, W, p):
+#     if N<200:
+#         return math.comb(N, W) * (p**W) * ((1 - p)**(N - W))
+#     else:
+#         lam = N * p
+#         # PMF(X=W) = e^-lam * lam^W / W!
+#         # Evaluate in logs to avoid overflow for large W, then exponentiate
+#         log_pmf = (-lam) + W*math.log(lam) - math.lgamma(W+1)
+#         return math.exp(log_pmf)
+
 
 
 def binomial_weight(N, W, p):
-    if N<200:
-        return math.comb(N, W) * (p**W) * ((1 - p)**(N - W))
-    else:
-        lam = N * p
-        # PMF(X=W) = e^-lam * lam^W / W!
-        # Evaluate in logs to avoid overflow for large W, then exponentiate
-        log_pmf = (-lam) + W*math.log(lam) - math.lgamma(W+1)
-        return math.exp(log_pmf)
+    return binom.pmf(W, N, p)
+    #return math.comb(N, W) * (p**W) * ((1 - p)**(N - W))
 
 
 
@@ -217,6 +223,8 @@ class stratified_Scurve_LERcalc:
         We use the standard deviation to approimxate the range
         """
         sigma=int(np.sqrt(self._error_rate*(1-self._error_rate)*self._num_noise))
+        if sigma==0:
+            sigma=1
         ep=int(self._error_rate*self._num_noise)
         self._minw=max(1,ep-5*sigma)
         self._maxw=max(2,ep+5*sigma)
@@ -768,9 +776,9 @@ if __name__ == "__main__":
 
     tmp=stratified_Scurve_LERcalc(p,sampleBudget=100000,num_subspace=10)
 
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon3"
-    figname="H3.png"
-    titlename="Hexagon3"
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
+    figname="S3.png"
+    titlename="Surface3"
 
     tmp.parse_from_file(filepath)
     tmp.determine_range_to_sample()

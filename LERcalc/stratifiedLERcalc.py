@@ -4,7 +4,7 @@ from LERcalc.clifford import *
 import math
 import pymatching
 import time
-
+from scipy.stats import binom
 
 def subspace_size(num_noise, weight):
     """
@@ -23,6 +23,11 @@ def binomial_weight(N, W, p):
         log_pmf = (-lam) + W*math.log(lam) - math.lgamma(W+1)
         return math.exp(log_pmf)
 
+
+
+
+def binomial_weight(N, W, p):
+    return binom.pmf(W, N, p)
 
 MIN_NUM_LE_EVENT = 10
 SAMPLE_GAP=10000

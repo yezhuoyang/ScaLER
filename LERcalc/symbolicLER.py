@@ -91,7 +91,7 @@ def xor_vec(vec_a, vec_b):
 
 
 MAX_degree=100
-MAX_weight=100
+MAX_weight=1
 
 '''
 Use symbolic algorithm to calculate the probability.
@@ -343,8 +343,9 @@ if __name__=="__main__":
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/cnot01h01"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/1cnoth"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/simpleh"
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/surface3r1"
+    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/surface3r1"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/2cnot2R"
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
     print(tmp.calculate_LER_from_file(filepath,0.001))
 
 

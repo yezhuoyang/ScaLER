@@ -9,7 +9,7 @@ def count_logical_errors(circuit: stim.Circuit, num_shots: int) -> int:
     detection_events, observable_flips = sampler.sample(num_shots, separate_observables=True)
 
     # Configure a decoder using the circuit.
-    detector_error_model = circuit.detector_error_model(decompose_errors=True)
+    detector_error_model = circuit.detector_error_model(decompose_errors=False)
     matcher = pymatching.Matching.from_detector_error_model(detector_error_model)
 
     # Run the decoder.
@@ -63,7 +63,7 @@ class stimLERcalc:
 
         
         sampler = new_stim_circuit.compile_detector_sampler()
-        detector_error_model = new_stim_circuit.detector_error_model(decompose_errors=True)
+        detector_error_model = new_stim_circuit.detector_error_model(decompose_errors=False)
         matcher = pymatching.Matching.from_detector_error_model(detector_error_model)        
 
 
@@ -123,11 +123,11 @@ if __name__ == "__main__":
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/1cnoth"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/simpleh"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/2cnot2R"
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon3"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon3"
-    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
+    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon3"
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface9"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition7"
-    ler=calculator.calculate_LER_from_file(100000,filepath,0.001)
+    ler=calculator.calculate_LER_from_file(500000,filepath,0.001)
 
     print(ler)
