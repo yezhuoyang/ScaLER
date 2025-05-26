@@ -123,9 +123,9 @@ if __name__ == "__main__":
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/1cnoth"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/simpleh"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/2cnot2R"
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon3"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon3"
-    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon3"
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
+    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface9"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition7"
     ler=calculator.calculate_LER_from_file(100000,filepath,0.001)

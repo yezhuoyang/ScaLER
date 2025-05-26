@@ -8,12 +8,14 @@ from LERcalc.symbolicLER import symbolicLER
 
 
 
-error_rate=0.01
+error_rate=0.001
 absolute_error=0.05
-sample_size=1000000
+sample_size=1000000000
 
 
-all_test_files=["1cnot","1cnot1R","1cnoth","2cnot","2cnot2R","cnot1","cnot1","cnot01","cnot01h01","cnoth0","cnoth01","simple","simpleh","simpleMultiObs"]
+all_test_files=["1cnot","1cnot1R","1cnoth","2cnot","2cnot2R","cnot1","cnot1","cnot01","cnot01h01","cnoth0","cnoth01","simple","simpleh","simpleMultiObs","repetition3r2","surface3r1","surface3r2"]
+
+
 
 
 def test_by_file_name(filepath):
@@ -43,6 +45,7 @@ def test_all():
 if __name__ == "__main__":
 
     test_all()
+
 
 
 
