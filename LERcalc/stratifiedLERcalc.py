@@ -29,7 +29,7 @@ def binomial_weight(N, W, p):
 def binomial_weight(N, W, p):
     return binom.pmf(W, N, p)
 
-MIN_NUM_LE_EVENT = 10
+MIN_NUM_LE_EVENT = 5
 SAMPLE_GAP=10000
 
 
@@ -37,7 +37,7 @@ SAMPLE_GAP=10000
 Use strafified sampling algorithm to calculate the logical error rate
 '''
 class stratifiedLERcalc:
-    def __init__(self, error_rate=0, sampleBudget=10000, num_subspace=10):
+    def __init__(self, error_rate=0, sampleBudget=10000, num_subspace=30):
         self._num_detector=0
         self._num_noise=0
         self._error_rate=error_rate
@@ -82,7 +82,7 @@ class stratifiedLERcalc:
         self._stim_str_after_rewrite=stim_str
 
         # Configure a decoder using the circuit.
-        self._detector_error_model = self._cliffordcircuit.get_stim_circuit().detector_error_model(decompose_errors=False)
+        self._detector_error_model = self._cliffordcircuit.get_stim_circuit().detector_error_model(decompose_errors=True)
         self._matcher = pymatching.Matching.from_detector_error_model(self._detector_error_model)
 
 
@@ -119,27 +119,35 @@ class stratifiedLERcalc:
             #print(f"Logical error rate when w={w}: {self._estimated_subspaceLER[w]*binomial_weight(self._num_noise, w,self._error_rate):.6g}")
             begin_index+=quota
 
+
+    def determine_range_to_sample(self,epsilon=0.01):
+        """
+        We need to be exact about the range of w we want to sample. 
+        We don't want to sample too many subspaces, especially those subspaces with tiny binomial weights.
+        This should comes from the analysis of the weight of each subspace.
+
+        We use the standard deviation to approimxate the range
+        """
+        sigma=int(np.sqrt(self._error_rate*(1-self._error_rate)*self._num_noise))
+        if sigma==0:
+            sigma=1
+        ep=int(self._error_rate*self._num_noise)
+        self._minW=max(1,ep-2*sigma)
+        self._maxW=max(2,ep+2*sigma)
+
+        print("Minw:    ")
+        print(self._minW)
+        print("Maxw:    ")
+        print(self._maxW)
+        print("sima:")
+        print(sigma)
+
+
     def subspace_sampling(self):
         """
         Sample around the subspaces.
         """
-        ave_error_weight=self._error_rate*self._num_noise
-
-        """
-        Evenly distribute the sample budget across all subspace
-
-        [ave_error_weight-self._num_subspace//2, ave_error_weight+self._num_subspace//2 ]
-        """
-        
-        if(ave_error_weight-self._num_subspace//2<0):
-            self._minW=self._circuit_level_code_distance
-        else:
-            self._minW=int(ave_error_weight-self._num_subspace//2)
-
-        if(ave_error_weight+self._num_subspace//2>self._num_noise):
-            self._maxW=self._num_noise
-        else:
-            self._maxW=int(ave_error_weight+self._num_subspace//2)    
+        self.determine_range_to_sample()
         """
         wlist store the subset of weights we need to sample and get
         correct logical error rate.
@@ -152,6 +160,9 @@ class stratifiedLERcalc:
             self._subspace_LE_count[weight]=0
             self._subspace_sample_used[weight]=0
 
+        print(wlist_need_to_sample)
+
+        min_non_zero_weight=1e9
         while True:
             slist=[]
             wlist=[]
@@ -168,12 +179,26 @@ class stratifiedLERcalc:
                 If the subspace has been sampled enough, but logical error rate is still zero,
                 also, the number of samples used in the subspace is comparable with the size of the subspace,
                 we declare that the code distance is larger than the current weight.
-                TODO
                 """
-                if(self._subspace_LE_count[weight]==0 and 10*self._subspace_sample_used[weight]>subspace_size(self._num_noise, weight)):
-                    self._circuit_level_code_distance=weight
-                    continue
+                if(weight+1<wlist_need_to_sample[-1]):
+                    # if(weight>min_non_zero_weight):
+                    #     continue
+                    if(self._subspace_LE_count[weight]==0):
+                        if(subspace_size(self._num_noise, weight)<2*self._subspace_sample_used[weight]):
+                            self._circuit_level_code_distance=weight
+                            continue                            
+                        if(self._subspace_LE_count[weight+1]>=MIN_NUM_LE_EVENT and 2*self._subspace_sample_used[weight+1]<self._subspace_sample_used[weight]):
+                            self._circuit_level_code_distance=weight
+                            continue
+                        else:
+                            slist.append(max(2*self._subspace_sample_used[weight+1],SAMPLE_GAP))
+                            wlist.append(weight)
+                            self._subspace_sample_used[weight]+=max(2*self._subspace_sample_used[weight+1],SAMPLE_GAP)
+                            self._sample_used+=max(2*self._subspace_sample_used[weight+1],SAMPLE_GAP)
+                            continue
 
+                if(self._subspace_LE_count[weight]>0):
+                    min_non_zero_weight=min(weight,min_non_zero_weight)
 
                 if(self._subspace_LE_count[weight]<MIN_NUM_LE_EVENT):
                     if(self._subspace_LE_count[weight]>=1):
@@ -242,8 +267,9 @@ class stratifiedLERcalc:
 
 if __name__ == "__main__":
     tmp=stratifiedLERcalc(0.001,sampleBudget=150000000,num_subspace=20)
-    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition3"
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
+    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition7"
+    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
+    filepath="C:/Users/yezhu/GitRepos/Sampling/stimprograms/surface/surface7"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/1cnot"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/surface3r1"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/cnot01h01"

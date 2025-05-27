@@ -209,7 +209,7 @@ class stratified_Scurve_LERcalc:
         self._stim_str_after_rewrite=stim_str
 
         # Configure a decoder using the circuit.
-        self._detector_error_model = self._cliffordcircuit.get_stim_circuit().detector_error_model(decompose_errors=False)
+        self._detector_error_model = self._cliffordcircuit.get_stim_circuit().detector_error_model(decompose_errors=True)
         self._matcher = pymatching.Matching.from_detector_error_model(self._detector_error_model)
 
 
@@ -776,9 +776,10 @@ if __name__ == "__main__":
 
     tmp=stratified_Scurve_LERcalc(p,sampleBudget=100000,num_subspace=10)
 
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
-    figname="S3.png"
-    titlename="Surface3"
+    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
+    filepath="C:/Users/yezhu/GitRepos/Sampling/stimprograms/surface/surface5"
+    figname="S5.png"
+    titlename="Surface5"
 
     tmp.parse_from_file(filepath)
     tmp.determine_range_to_sample()
