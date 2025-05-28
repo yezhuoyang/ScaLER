@@ -27,6 +27,16 @@ QEPG::~QEPG(){
 
 
 
+const size_t& QEPG::get_total_noise() const noexcept{
+    return total_noise_;
+}
+
+const size_t& QEPG::get_total_detector() const noexcept{
+    return total_detectors_;
+}
+
+
+
 /*--------------------print QEPG graph---------------------------------------*/
 
 
@@ -89,9 +99,9 @@ inline void transpose_matrix(const std::vector<Row>& mat,std::vector<Row>& matTr
 
 void QEPG::backward_graph_construction(){
 
-    using clock     = std::chrono::steady_clock;          // monotonic, good for benchmarking
-    using microsec  = std::chrono::microseconds;
-    auto t0 = clock::now();                               // start timer
+    // using clock     = std::chrono::steady_clock;          // monotonic, good for benchmarking
+    // using microsec  = std::chrono::microseconds;
+    // auto t0 = clock::now();                               // start timer
 
     size_t gate_size=circuit_.get_gate_num();
 
@@ -219,9 +229,9 @@ void QEPG::backward_graph_construction(){
             current_x_parity_prop[qindex].swap(current_z_parity_prop[qindex]);
         }
     }
-    auto t1 = clock::now();                               // stop section‑1
-    auto compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
-    std::cout << "[Backword detector matrix construction:] " << compile_us / 1'000.0 << "ms\n";
+    // auto t1 = clock::now();                               // stop section‑1
+    // auto compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
+    // std::cout << "[Backword detector matrix construction:] " << compile_us / 1'000.0 << "ms\n";
 } 
 
 
@@ -367,26 +377,26 @@ void QEPG::backward_graph_construction_Eigen(){
             rowx.swap(rowz);
         }
     }
-    auto t1 = clock::now();                               // stop section‑1
-    auto compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
-    std::cout << "[Backword detector matrix construction:] " << compile_us / 1'000.0 << "ms\n";
+    // auto t1 = clock::now();                               // stop section‑1
+    // auto compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
+    // std::cout << "[Backword detector matrix construction:] " << compile_us / 1'000.0 << "ms\n";
     /*
     Compute the transpose of detectorMatrix for future calculation
     */
-    t0 = clock::now();                               // start timer
+    // t0 = clock::now();                               // start timer
 
-    //transpose_matrix(detectorMatrix_,detectorMatrixTranspose_);
+    // //transpose_matrix(detectorMatrix_,detectorMatrixTranspose_);
    
 
-    t1 = clock::now();                               // stop section‑1
-    compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
-    std::cout << "[Transpose matrix:] " << compile_us / 1'000.0 << "ms\n";
-    t0 = clock::now();                               // start timer
+    // t1 = clock::now();                               // stop section‑1
+    // compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
+    // std::cout << "[Transpose matrix:] " << compile_us / 1'000.0 << "ms\n";
+    // t0 = clock::now();                               // start timer
     
     //compute_parityPropMatrix_Eigen();
-    t1 = clock::now();                               // stop section‑1
-    compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
-    std::cout << "[ compute_parityPropMatrix:] " << compile_us / 1'000.0 << "ms\n";    
+    // t1 = clock::now();                               // stop section‑1
+    // compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
+    // std::cout << "[ compute_parityPropMatrix:] " << compile_us / 1'000.0 << "ms\n";    
 
 
 }
@@ -509,9 +519,9 @@ void QEPG::backward_parity_matrix_construction_Eigen(){
             rowx.swap(rowz);
         }
     }
-    auto t1 = clock::now();                               // stop section‑1
-    auto compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
-    std::cout << "[Backword detector matrix construction:] " << compile_us / 1'000.0 << "ms\n";
+    // auto t1 = clock::now();                               // stop section‑1
+    // auto compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
+    // std::cout << "[Backword detector matrix construction:] " << compile_us / 1'000.0 << "ms\n";
 
 
 
@@ -603,24 +613,24 @@ void QEPG::compute_parityPropMatrix(){
     for(size_t index: observable_group.indexlist){
         paritygroupMatrix[detector_parity_group.size()][index]=true;
     }
-    auto t1 = clock::now();                               // stop section‑1
-    auto compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
-    std::cout << "[Set up parity group:] " << compile_us / 1'000.0 << "ms\n";
+    // auto t1 = clock::now();                               // stop section‑1
+    // auto compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
+    // std::cout << "[Set up parity group:] " << compile_us / 1'000.0 << "ms\n";
 
 
 
-    std::cout << "[dectector matrix size:] " << detectorMatrix_.size()<<","<<detectorMatrix_[0].size()<< "\n";
-    std::cout << "[dectector matrix transpose size:] " <<detectorMatrixTranspose_.size()<<","<<detectorMatrixTranspose_[0].size()<< "\n";
-    t0 = clock::now();                               // start timer
+    // std::cout << "[dectector matrix size:] " << detectorMatrix_.size()<<","<<detectorMatrix_[0].size()<< "\n";
+    // std::cout << "[dectector matrix transpose size:] " <<detectorMatrixTranspose_.size()<<","<<detectorMatrixTranspose_[0].size()<< "\n";
+    // t0 = clock::now();                               // start timer
     parityPropMatrix_=bitset_matrix_multiplication(paritygroupMatrix,detectorMatrix_);
-    t1 = clock::now();                               // stop section‑1
-    compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
-    std::cout << "[bitset_matrix_multiplication(paritygroupMatrix,detectorMatrix_):] " << compile_us / 1'000.0 << "ms\n";
-    t0 = clock::now();                               // start timer
+    // t1 = clock::now();                               // stop section‑1
+    // compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
+    // std::cout << "[bitset_matrix_multiplication(paritygroupMatrix,detectorMatrix_):] " << compile_us / 1'000.0 << "ms\n";
+    // t0 = clock::now();                               // start timer
     transpose_matrix(parityPropMatrix_,parityPropMatrixTranspose_);
-    t1 = clock::now();                               // stop section‑1
-    compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
-    std::cout << "[transpose_matrix(parityPropMatrix_,parityPropMatrixTranspose_):] " << compile_us / 1'000.0 << "ms\n";
+    // t1 = clock::now();                               // stop section‑1
+    // compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
+    // std::cout << "[transpose_matrix(parityPropMatrix_,parityPropMatrixTranspose_):] " << compile_us / 1'000.0 << "ms\n";
     
 }
 

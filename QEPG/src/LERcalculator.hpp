@@ -30,6 +30,9 @@ namespace py = pybind11;
  std::pair<py::array_t<bool>,py::array_t<bool>> return_samples_many_weights_separate_obs(const std::string& prog_str,const std::vector<size_t>& weight, const std::vector<size_t>& shots);
 
 
+std::pair<py::array_t<bool>,py::array_t<bool>> return_samples_many_weights_separate_obs_with_QEPG(const QEPG::QEPG& graph,const std::vector<size_t>& weight, const std::vector<size_t>& shots);
+
+
  std::vector<std::vector<bool>> return_all_samples_with_fixed_weights(const std::string& prog_str,const size_t& weight);
 
 
@@ -37,6 +40,10 @@ namespace py = pybind11;
 
 
  py::array_t<bool> return_samples_numpy(const std::string& prog_str,size_t weight, size_t shots);
+
+
+ QEPG::QEPG compile_QEPG(const std::string& prog_str);
+
 
 }
 

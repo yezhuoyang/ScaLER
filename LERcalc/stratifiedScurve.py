@@ -1,5 +1,5 @@
 
-from QEPG.QEPG import return_samples,return_samples_many_weights,return_detector_matrix,return_samples_many_weights_numpy,return_samples_many_weights_separate_obs
+from QEPG.QEPG import return_samples,return_samples_many_weights,return_detector_matrix,return_samples_many_weights_numpy,return_samples_many_weights_separate_obs, compile_QEPG, return_samples_many_weights_separate_obs_with_QEPG
 from LERcalc.clifford import *
 import math
 import pymatching
@@ -71,8 +71,9 @@ def poly_function(x, a, b,c,d):
     return a * x**3+b*x**2 + c*x+d
 
 
-MIN_NUM_LE_EVENT = 50
+MIN_NUM_LE_EVENT = 20
 SAMPLE_GAP=100
+MAX_SAMPLE_GAP=10000000
 
 def subspace_size(num_noise, weight):
     """
@@ -205,6 +206,9 @@ class stratified_Scurve_LERcalc:
         self._stratified_succeed=False
 
 
+        self._QEPG_graph=None
+
+
 
 
     def calc_logical_error_rate_with_fixed_w(self, shots, w):
@@ -282,7 +286,7 @@ class stratified_Scurve_LERcalc:
         self._detector_error_model = self._cliffordcircuit.get_stim_circuit().detector_error_model(decompose_errors=True)
         self._matcher = pymatching.Matching.from_detector_error_model(self._detector_error_model)
 
-
+        self._QEPG_graph=compile_QEPG(stim_str)
 
     def determine_range_to_sample(self,k=3):
         """
@@ -323,7 +327,8 @@ class stratified_Scurve_LERcalc:
                     self._subspace_sample_used[w]=s
                 else:
                     self._subspace_sample_used[w]+=s
-            detector_result,obsresult=return_samples_many_weights_separate_obs(self._stim_str_after_rewrite,wlist,slist)
+            #detector_result,obsresult=return_samples_many_weights_separate_obs(self._stim_str_after_rewrite,wlist,slist)
+            detector_result,obsresult=return_samples_many_weights_separate_obs_with_QEPG(self._QEPG_graph,wlist,slist)
             predictions_result = self._matcher.decode_batch(detector_result)
 
             begin_index=0
@@ -370,8 +375,6 @@ class stratified_Scurve_LERcalc:
                 self._subspace_sample_used[weight]=0
 
         print(wlist_need_to_sample)
-
-        min_non_zero_weight=1e9
         self._sample_used=0
         while True:
             if(self._sample_used>self._sampleBudget):
@@ -392,7 +395,7 @@ class stratified_Scurve_LERcalc:
                     if(subspace_size(self._num_noise, weight)<2*self._subspace_sample_used[weight]):
                         self._circuit_level_code_distance=weight
                         self._estimated_subspaceLER[weight]=0
-                        print("Circuit level code distance: ",self._circuit_level_code_distance)
+                        # print("Circuit level code distance: ",self._circuit_level_code_distance)
                         continue         
                 if(self._subspace_LE_count[weight]<MIN_NUM_LE_EVENT):
                     if(self._subspace_LE_count[weight]>=1):
@@ -411,11 +414,12 @@ class stratified_Scurve_LERcalc:
             if(len(wlist)==0):
                 break
 
-            print("wlist: ",wlist)
-            print("slist: ",slist)
-            detector_result,obsresult=return_samples_many_weights_separate_obs(self._stim_str_after_rewrite,wlist,slist)
+            # print("wlist: ",wlist)
+            # print("slist: ",slist)
+            #detector_result,obsresult=return_samples_many_weights_separate_obs(self._stim_str_after_rewrite,wlist,slist)
+            detector_result,obsresult=return_samples_many_weights_separate_obs_with_QEPG(self._QEPG_graph,wlist,slist)
             predictions_result = self._matcher.decode_batch(detector_result)
-            print("Result get!")
+            # print("Result get!")
 
             
             begin_index=0
@@ -431,11 +435,11 @@ class stratified_Scurve_LERcalc:
                 self._estimated_subspaceLER[w] = self._subspace_LE_count[w] / self._subspace_sample_used[w]
 
 
-                print(f"Logical error rate when w={w}: {self._estimated_subspaceLER[w]*binomial_weight(self._num_noise, w,self._error_rate):.6g}")
+                # print(f"Logical error rate when w={w}: {self._estimated_subspaceLER[w]*binomial_weight(self._num_noise, w,self._error_rate):.6g}")
 
                 begin_index+=quota
-            print(self._subspace_LE_count)
-            print(self._subspace_sample_used)
+            # print(self._subspace_LE_count)
+            # print(self._subspace_sample_used)
 
 
         total_ler_count=np.sum(list(self._subspace_LE_count.values()))
@@ -445,10 +449,10 @@ class stratified_Scurve_LERcalc:
             self._stratified_succeed=False
 
         
-        print("Samples used:{}".format(self._sample_used))
-        print("circuit level code distance:{}".format(self._circuit_level_code_distance))
-        print(self._estimated_wlist)
-        print(self._estimated_subspaceLER)
+        # print("Samples used:{}".format(self._sample_used))
+        # print("circuit level code distance:{}".format(self._circuit_level_code_distance))
+        # print(self._estimated_wlist)
+        # print(self._estimated_subspaceLER)
 
 
 
@@ -468,7 +472,8 @@ class stratified_Scurve_LERcalc:
         slist=[sampleBudget//self._num_subspace]*len(wlist)
 
 
-        detector_result,obsresult=return_samples_many_weights_separate_obs(self._stim_str_after_rewrite,wlist,slist)
+        #detector_result,obsresult=return_samples_many_weights_separate_obs(self._stim_str_after_rewrite,wlist,slist)
+        detector_result,obsresult=return_samples_many_weights_separate_obs_with_QEPG(self._QEPG_graph,wlist,slist)
         predictions_result = self._matcher.decode_batch(detector_result)
 
         for w,s in zip(wlist,slist):
@@ -688,19 +693,18 @@ class stratified_Scurve_LERcalc:
         self._error_rate=pvalue
         self._circuit_level_code_distance=codedistance
         self.parse_from_file(filepath)
-
         self.determine_range_to_sample(3)
         self.subspace_sampling()
-
-
         self.determine_saturated_w()
+
         self.subspace_sampling_to_fit_curve(self._sampleBudget)
         self.fit_linear()
-        #tmp.fit_Scurve()
         self.calc_logical_error_rate_after_curve_fitting()
-        print("Final LER: ",self._LER)
 
         self.plot_scurve(figname,titlename)
+        self._sample_used=np.sum(list(self._subspace_sample_used.values()))
+        print("Final LER: ",self._LER)
+        print("Total samples used: ",self._sample_used)
 
 
 
@@ -909,23 +913,12 @@ if __name__ == "__main__":
     sample_buget=5000000
     tmp=stratified_Scurve_LERcalc(p,sampleBudget=sample_buget,num_subspace=8)
 
-    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/square/square5"
-    figname="S5.png"
-    titlename="Square5"
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface7"
+    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/square/square5"
+    figname="S7.png"
+    titlename="Surface7"
 
 
     tmp.calculate_LER_from_file(filepath,p,1,figname,titlename)
-    # tmp.parse_from_file(filepath)
 
-    # tmp.determine_range_to_sample(3)
-    # tmp.subspace_sampling()
-
-
-    # tmp.determine_saturated_w()
-    # tmp.subspace_sampling_to_fit_curve(sample_buget)
-    # tmp.fit_linear()
-    # #tmp.fit_Scurve()
-    # tmp.calc_logical_error_rate_after_curve_fitting()
-    # print("Final LER: ",tmp._LER)
 

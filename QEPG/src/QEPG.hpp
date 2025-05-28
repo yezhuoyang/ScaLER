@@ -115,6 +115,10 @@ class QEPG{
 
         const SpMat& get_parityPropMatrixTrans_Eigen() const noexcept; 
 
+        const size_t& get_total_noise() const noexcept;
+
+        const size_t& get_total_detector() const noexcept;
+
 
     private:
 

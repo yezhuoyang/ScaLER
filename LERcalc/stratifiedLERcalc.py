@@ -1,5 +1,5 @@
 
-from QEPG.QEPG import return_samples,return_samples_many_weights,return_detector_matrix, return_samples_many_weights_separate_obs
+from QEPG.QEPG import return_samples,return_samples_many_weights,return_detector_matrix, return_samples_many_weights_separate_obs, compile_QEPG, return_samples_many_weights_separate_obs_with_QEPG
 from LERcalc.clifford import *
 import math
 import pymatching
@@ -66,6 +66,8 @@ class stratifiedLERcalc:
         self._circuit_level_code_distance=1
 
 
+        self._QEPG_graph=None
+
 
     def parse_from_file(self,filepath):
         """
@@ -84,6 +86,8 @@ class stratifiedLERcalc:
         # Configure a decoder using the circuit.
         self._detector_error_model = self._cliffordcircuit.get_stim_circuit().detector_error_model(decompose_errors=True)
         self._matcher = pymatching.Matching.from_detector_error_model(self._detector_error_model)
+
+        self._QEPG_graph=compile_QEPG(stim_str)
 
 
     def sample_all_subspace(self, shots_each_subspace=1000000):
@@ -219,7 +223,8 @@ class stratifiedLERcalc:
 
             print("wlist: ",wlist)
             print("slist: ",slist)
-            detector_result,obsresult=return_samples_many_weights_separate_obs(self._stim_str_after_rewrite,wlist,slist)
+            #detector_result,obsresult=return_samples_many_weights_separate_obs(self._stim_str_after_rewrite,wlist,slist)
+            detector_result,obsresult=return_samples_many_weights_separate_obs_with_QEPG(self._QEPG_graph,wlist,slist)
             predictions_result = self._matcher.decode_batch(detector_result)
             print("Result get!")
 
@@ -265,8 +270,10 @@ class stratifiedLERcalc:
 
 
 
+
+
 if __name__ == "__main__":
-    tmp=stratifiedLERcalc(0.0005,sampleBudget=150000000,num_subspace=15)
+    tmp=stratifiedLERcalc(0.0005,sampleBudget=15000000,num_subspace=5)
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition7"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
     filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface7"

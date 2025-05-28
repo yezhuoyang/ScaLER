@@ -27,8 +27,10 @@ def count_logical_errors(circuit: stim.Circuit, num_shots: int) -> int:
 
 
 
-MIN_NUM_LE_EVENT = 1000
+MIN_NUM_LE_EVENT = 2
 SAMPLE_GAP_INITIAL = 1000
+MAX_SAMPLE_GAP = 1000000
+
 
 '''
 Use stim and Monte Calo sampling method to estimate the logical error rate
@@ -73,7 +75,7 @@ class stimLERcalc:
             if self._num_LER==0 and self._sample_used>0:
                 current_sample_gap*=2
             elif self._num_LER>0:
-                current_sample_gap=int(MIN_NUM_LE_EVENT/self._num_LER)*self._sample_used
+                current_sample_gap=min(int(MIN_NUM_LE_EVENT/self._num_LER)*self._sample_used, MAX_SAMPLE_GAP)
             self._sample_used+=current_sample_gap
             #self._num_LER+=count_logical_errors(new_stim_circuit,SAMPLE_GAP)
 
@@ -121,6 +123,9 @@ class stimLERcalc:
 
 
 
+#filepath_list=["surface/surface9","square/square7","square/square9","hexagon/hexagon7","hexagon/hexagon9","repetition/repetition5","repetition/repetition7","repetition/repetition9"]
+filepath_list=["surface/surface11"]
+
 
 if __name__ == "__main__":
     calculator=stimLERcalc()
@@ -131,15 +136,12 @@ if __name__ == "__main__":
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/1cnoth"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/simpleh"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/2cnot2R"
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/square/square5"
-    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon3"
-    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
-    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface9"
-    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition7"
 
-    current_time = time.time()
-    ler=calculator.calculate_LER_from_file(100000000,filepath,0.0005)
-    elapsed_time = time.time() - current_time
-    print(f"Elapsed time: {elapsed_time:.2f} seconds")
-
-    print(ler)
+    for filepath in filepath_list:
+        print(f"----------------Processing {filepath}...-------------------------")
+        filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/"+filepath
+        current_time = time.time()
+        ler=calculator.calculate_LER_from_file(100000000,filepath,0.0005)
+        elapsed_time = time.time() - current_time
+        print(f"Elapsed time for {filepath}: {elapsed_time:.2f} seconds")
+        print(f"LER for {filepath}: {ler}\n")

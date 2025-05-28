@@ -40,6 +40,8 @@ namespace LERcalculator{
     std::pair<py::array_t<bool>,py::array_t<bool>> return_samples_many_weights_separate_obs(const std::string& prog_str,const std::vector<size_t>& weight, const std::vector<size_t>& shots);
     py::array_t<bool> return_samples_numpy(const std::string& prog_str,size_t weight, size_t shots);
     std::vector<py::array_t<bool>> return_samples_many_weights_numpy(const std::string& prog_str,const std::vector<size_t>& weight, const std::vector<size_t>& shots);
+    QEPG::QEPG compile_QEPG(const std::string& prog_str);
+    std::pair<py::array_t<bool>,py::array_t<bool>> return_samples_many_weights_separate_obs_with_QEPG(const QEPG::QEPG& graph,const std::vector<size_t>& weight, const std::vector<size_t>& shots);
 }
    
 
@@ -148,12 +150,27 @@ PYBIND11_MODULE(QEPG, m) { // Use the module name 'QEPG' as seen in your build o
         py::arg("prog_str"), py::arg("weight"), py::arg("shots"),
         py::return_value_policy::move);   // avoid an extra copy on the Python side
 
-
     m.def("return_samples_many_weights_separate_obs",
         &LERcalculator::return_samples_many_weights_separate_obs,
         py::arg("prog_str"), py::arg("weight"), py::arg("shots"),
         py::return_value_policy::move);   // avoid an extra copy on the Python side
 
+    m.def(
+        "compile_QEPG",
+        &LERcalculator::compile_QEPG,
+        py::arg("prog_str"),
+        R"pbdoc(
+            compile_QEPG(prog_str: str) → QEPGGraph
+            Parse a Stim‐style program string into a QEPGGraph object,
+            run its backward_graph_construction() pass, and return it.
+        )pbdoc",
+        py::return_value_policy::move  // make sure we move the returned graph into Python
+    );
     
+
+    m.def("return_samples_many_weights_separate_obs_with_QEPG",
+        &LERcalculator::return_samples_many_weights_separate_obs_with_QEPG,
+        py::arg("graph"), py::arg("weight"), py::arg("shots"),
+        py::return_value_policy::move);   // avoid an extra copy on the Python side
 
 }
