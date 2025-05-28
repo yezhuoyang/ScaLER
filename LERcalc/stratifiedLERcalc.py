@@ -29,8 +29,8 @@ def binomial_weight(N, W, p):
 def binomial_weight(N, W, p):
     return binom.pmf(W, N, p)
 
-MIN_NUM_LE_EVENT = 5
-SAMPLE_GAP=10000
+MIN_NUM_LE_EVENT = 10
+SAMPLE_GAP=100
 
 
 '''
@@ -132,8 +132,8 @@ class stratifiedLERcalc:
         if sigma==0:
             sigma=1
         ep=int(self._error_rate*self._num_noise)
-        self._minW=max(1,ep-2*sigma)
-        self._maxW=max(2,ep+2*sigma)
+        self._minW=max(1,ep-5*sigma)
+        self._maxW=max(2,ep+5*sigma)
 
         print("Minw:    ")
         print(self._minW)
@@ -266,10 +266,10 @@ class stratifiedLERcalc:
 
 
 if __name__ == "__main__":
-    tmp=stratifiedLERcalc(0.001,sampleBudget=150000000,num_subspace=20)
+    tmp=stratifiedLERcalc(0.0005,sampleBudget=150000000,num_subspace=15)
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition7"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
-    filepath="C:/Users/yezhu/GitRepos/Sampling/stimprograms/surface/surface7"
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface7"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/1cnot"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/surface3r1"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/cnot01h01"

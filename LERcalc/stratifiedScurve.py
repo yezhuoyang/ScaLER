@@ -25,7 +25,42 @@ def binomial_weight(N, W, p):
     return binom.pmf(W, N, p)
     #return math.comb(N, W) * (p**W) * ((1 - p)**(N - W))
 
+def linear_function(x, a, b):
+    """
+    Linear function for curve fitting.
+    """
+    return a * x + b
 
+
+def modified_linear_function(x, a, b,c,d):
+    """
+    Linear function for curve fitting.
+    """
+    return a * x + b+c/(x-d)
+
+
+def quadratic_function(x, a, b,c):
+    """
+    Linear function for curve fitting.
+    """
+    return a * x**2+b*x + c
+
+
+def poly_function(x, a, b,c,d):
+    """
+    Linear function for curve fitting.
+    """
+    return a * x**3+b*x**2 + c*x+d
+
+
+MIN_NUM_LE_EVENT = 200
+SAMPLE_GAP=100
+
+def subspace_size(num_noise, weight):
+    """
+    Calculate the size of the subspace
+    """
+    return math.comb(num_noise, weight)
 
 # def scurve_function(x, mu, sigma):
 #     cdf_values = 0.5*norm.cdf(x, loc=mu, scale=sigma)
@@ -50,6 +85,21 @@ def scurve_function_with_distance(x, cd, mu, sigma):
     return np.where(x < cd, 0.0, y)        # vectorised “if”
 
 
+
+
+def evenly_spaced_ints(minw, maxw, N):
+    if N == 1:
+        return [minw]
+    if N > (maxw - minw + 1):
+        return list(range(minw, maxw + 1))
+     
+    # Use high-resolution linspace, round, then deduplicate
+    raw = np.linspace(minw, maxw, num=10 * N)
+    rounded = sorted(set(map(int, raw)))
+    
+    # Pick N evenly spaced indices from the unique set
+    indices = np.linspace(0, len(rounded) - 1, num=N, dtype=int)
+    return [rounded[i] for i in indices]
 
 
 def r_squared(y_true, y_pred, clip=False):
@@ -134,6 +184,8 @@ class stratified_Scurve_LERcalc:
         #In the area we are interested in, the maximum value of the logical error rate
         self._rough_value_for_subspace_LER=0
 
+        self._stratified_succeed=False
+
 
 
 
@@ -172,12 +224,12 @@ class stratified_Scurve_LERcalc:
     def binary_search_half(self,low,high, shots):
         left=low
         right=high
-        epsilon=0.5-15*self._rough_value_for_subspace_LER
+        epsion=0.45
         while left<right:
             print(left,right)
             mid=(left+right)//2
             er=self.calc_logical_error_rate_with_fixed_w(shots,mid)
-            if er>(0.5-epsilon):
+            if er>epsion:
                 right=mid
             else:
                 left=mid+1
@@ -185,7 +237,7 @@ class stratified_Scurve_LERcalc:
 
 
 
-    def determine_w(self,shots=200000):
+    def determine_saturated_w(self,shots=1000):
         """
         Use binary search to determine the minw and maxw
         """
@@ -214,7 +266,7 @@ class stratified_Scurve_LERcalc:
 
 
 
-    def determine_range_to_sample(self,epsilon=0.01):
+    def determine_range_to_sample(self,k=3):
         """
         We need to be exact about the range of w we want to sample. 
         We don't want to sample too many subspaces, especially those subspaces with tiny binomial weights.
@@ -226,12 +278,12 @@ class stratified_Scurve_LERcalc:
         if sigma==0:
             sigma=1
         ep=int(self._error_rate*self._num_noise)
-        self._minw=max(1,ep-5*sigma)
-        self._maxw=max(2,ep+5*sigma)
+        self._minw=max(1,ep-3*sigma)
+        self._maxw=max(self._num_subspace,ep+k*sigma)
 
-        print("Minw:    ")
+        print("Needed Minw:    ")
         print(self._minw)
-        print("Maxw:    ")
+        print("Needed Maxw:    ")
         print(self._maxw)
 
 
@@ -283,7 +335,106 @@ class stratified_Scurve_LERcalc:
 
 
 
-    def subspace_sampling_first_round(self,sampleBudget):
+    def subspace_sampling(self):
+        """
+        wlist store the subset of weights we need to sample and get
+        correct logical error rate.
+        
+        In each subspace, we stop sampling until 100 logical error events are detected, or we hit the total budget.
+        """
+        #wlist_need_to_sample = list(range(self._minw, self._maxw + 1))
+        wlist_need_to_sample=evenly_spaced_ints(self._minw, self._maxw, self._num_subspace)
+
+        for weight in wlist_need_to_sample:
+            if not weight in self._estimated_wlist:
+                self._estimated_wlist.append(weight)
+                self._subspace_LE_count[weight]=0
+                self._subspace_sample_used[weight]=0
+
+        print(wlist_need_to_sample)
+
+        min_non_zero_weight=1e9
+        self._sample_used=0
+        while True:
+            if(self._sample_used>self._sampleBudget):
+                break
+            slist=[]
+            wlist=[]
+            """
+            Case 1 to end the while loop: We have consumed all of our sample budgets
+            """
+            if(self._sample_used>self._sampleBudget):
+                break
+
+            for weight in wlist_need_to_sample:
+                if weight<=self._circuit_level_code_distance:
+                    self._estimated_subspaceLER[weight]=0
+                    continue
+                if(self._subspace_LE_count[weight]==0):
+                    if(subspace_size(self._num_noise, weight)<2*self._subspace_sample_used[weight]):
+                        self._circuit_level_code_distance=weight
+                        self._estimated_subspaceLER[weight]=0
+                        print("Circuit level code distance: ",self._circuit_level_code_distance)
+                        continue         
+                if(self._subspace_LE_count[weight]<MIN_NUM_LE_EVENT):
+                    if(self._subspace_LE_count[weight]>=1):
+                        sample_num_required=int(MIN_NUM_LE_EVENT/self._subspace_LE_count[weight])* self._subspace_sample_used[weight]
+                        slist.append(sample_num_required)
+                        self._subspace_sample_used[weight]+=sample_num_required  
+                        self._sample_used+=sample_num_required
+                    else:                   
+                        slist.append(max(SAMPLE_GAP,self._subspace_sample_used[weight]*2))
+                        self._subspace_sample_used[weight]+=max(SAMPLE_GAP,self._subspace_sample_used[weight]*2)
+                        self._sample_used+=max(SAMPLE_GAP,self._subspace_sample_used[weight]*2)
+                    wlist.append(weight)
+            """
+            Case 2 to end the while loop: We have get 100 logical error events for all these subspaces
+            """
+            if(len(wlist)==0):
+                break
+
+            print("wlist: ",wlist)
+            print("slist: ",slist)
+            detector_result,obsresult=return_samples_many_weights_separate_obs(self._stim_str_after_rewrite,wlist,slist)
+            predictions_result = self._matcher.decode_batch(detector_result)
+            print("Result get!")
+
+            
+            begin_index=0
+            for w_idx, (w, quota) in enumerate(zip(wlist, slist)):
+
+                observables =  np.asarray(obsresult[begin_index:begin_index+quota])                    # (shots,)
+                predictions = np.asarray(predictions_result[begin_index:begin_index+quota]).ravel()
+
+                # 3. count mismatches in vectorised form ---------------------------------
+                num_errors = np.count_nonzero(observables != predictions)
+
+                self._subspace_LE_count[w]+=num_errors
+                self._estimated_subspaceLER[w] = self._subspace_LE_count[w] / self._subspace_sample_used[w]
+
+
+                print(f"Logical error rate when w={w}: {self._estimated_subspaceLER[w]*binomial_weight(self._num_noise, w,self._error_rate):.6g}")
+
+                begin_index+=quota
+            print(self._subspace_LE_count)
+            print(self._subspace_sample_used)
+
+
+        total_ler_count=np.sum(list(self._subspace_LE_count.values()))
+        if(total_ler_count>0.8*MIN_NUM_LE_EVENT*self._num_subspace):
+            self._stratified_succeed=True
+        else:
+            self._stratified_succeed=False
+
+        
+        print("Samples used:{}".format(self._sample_used))
+        print("circuit level code distance:{}".format(self._circuit_level_code_distance))
+        print(self._estimated_wlist)
+        print(self._estimated_subspaceLER)
+
+
+
+    def subspace_sampling_to_fit_curve(self,sampleBudget):
 
         """
         After we determine the minw and maxw, we generate an even distribution of points 
@@ -292,12 +443,10 @@ class stratified_Scurve_LERcalc:
         The goal is for the curve fitting in the next step to get more accurate.
         """
 
-        gap=int((self._saturatew  -self._minw)/self._num_subspace)
-        if gap==0:
-            gap=1
-
-        wlist =list(np.arange(self._minw, self._saturatew , gap, dtype=int))
-        self._estimated_wlist=wlist
+        wlist=evenly_spaced_ints(self._minw,self._saturatew,self._num_subspace)
+        for weight in wlist:
+            if not (weight in self._estimated_wlist):
+                self._estimated_wlist.append(weight)
         slist=[sampleBudget//self._num_subspace]*len(wlist)
 
 
@@ -354,15 +503,48 @@ class stratified_Scurve_LERcalc:
         return self._estimated_subspaceLER[weight]*binomial_weight(self._num_noise, weight,self._error_rate)
 
 
+    def fit_linear(self):
+        
+        x_list = [x for x in self._estimated_subspaceLER.keys() if 0 < self._estimated_subspaceLER[x] < 0.5]
+        y_list = [np.log(0.5/self._estimated_subspaceLER[x]-1) for x in x_list]
+        #x_list=np.log(x_list)  # Take the log of the weights
+        popt, pcov = curve_fit(
+            modified_linear_function, 
+            x_list, 
+            y_list
+        )
+
+        self._codedistance = 0
+        # Extract the best-fit parameter (alpha)
+        a,b,c,d= popt[0] , popt[1], popt[2], popt[3]
+
+
+        #Plot the fitted line
+        x_fit = np.linspace(min(x_list), max(x_list), 1000)
+
+        y_fit = modified_linear_function(x_fit, a, b,c,d)
+        plt.figure()
+        plt.scatter(x_list, y_list, label='Data points', color='blue')
+        plt.plot(x_fit, y_fit, label='Fitted line', color='orange')
+        plt.xlabel('Weight')
+        plt.ylabel('Log(0.5 / LER - 1)')
+        plt.title('Linear Fit of S-curve')
+        plt.legend()
+        plt.savefig("linear_fit.png", dpi=300)
+        plt.close()
+
+
+
     '''
     Fit the distribution by 1/2-e^{alpha/W}
     '''
     def fit_Scurve(self):
         # Initial guess for alpha
-        self._saturatew
         # sigma_guess = self._saturatew / 3.2898
         # mu_guess    = self._saturatew/2          # centre in the middle of that span
         # initial_guess  = (0,mu_guess, sigma_guess)
+        if self._stratified_succeed:
+            self._saturatew=self._maxw
 
         center = self._saturatew /2 
         sigma    = self._saturatew/7          # centre in the middle of that span
@@ -394,6 +576,14 @@ class stratified_Scurve_LERcalc:
     def calc_logical_error_rate_after_curve_fitting(self):
         #self.fit_Scurve()
         self._LER=0
+        if not self._stratified_succeed:
+            sigma=int(np.sqrt(self._error_rate*(1-self._error_rate)*self._num_noise))
+            if sigma==0:
+                sigma=1
+            ep=int(self._error_rate*self._num_noise)
+            self._minw=max(1,ep-5*sigma)
+            self._maxw=max(2,ep+5*sigma)
+
         for weight in range(self._minw,self._maxw+1):
             """
             If the weight is in the estimated list, we use the estimated value
@@ -402,104 +592,17 @@ class stratified_Scurve_LERcalc:
             If the weight is less than the minw, we just declare it as 0
             """
             if weight in self._estimated_subspaceLER.keys():
-                self._LER+=self._estimated_subspaceLER[weight]*binomial_weight(self._num_noise,weight,self._error_rate)  
-                print("Weight: ",weight," Subspace LER: ",self._estimated_subspaceLER[weight]*binomial_weight(self._num_noise,weight,self._error_rate) )
+                self._LER+=self._estimated_subspaceLER[weight]*binomial_weight(self._num_noise, weight,self._error_rate)
             else:
                 self._LER+=scurve_function(weight,self._mu,self._sigma)*binomial_weight(self._num_noise,weight,self._error_rate)
-                #self._LER+=scurve_function(weight,self._mu,self._sigma)*binomial_weight(self._num_noise,weight,self._error_rate)
+            #self._LER+=scurve_function(weight,self._mu,self._sigma)*binomial_weight(self._num_noise,weight,self._error_rate)
         return self._LER
 
-
-    """
-    After the first round of sampling, we use the fitted curve value to determine the 
-    number of samples needed for each subspace
-    """
-    def distribute_samples(self, equal=False):
-        proportion_list=[]
-        """
-        Sample around the subspaces.
-        """
-        gap=int((self._maxw  -self._minw)/self._num_subspace)
-        if gap==0:
-            gap=1
-        wlist =list(np.arange(self._minw, self._maxw, gap, dtype=int))
-
-
-        if equal:
-            proportion_list = [1 for i in range(len(wlist))]
-        else:
-            for i in range(len(wlist)):
-                if wlist[i] in self._estimated_wlist:
-                    proportion_list.append(self._estimated_subspaceLER[wlist[i]])
-                else:
-                    proportion_list.append(scurve_function(wlist[i],self._mu,self._sigma)) 
-
-        maxelement=max(proportion_list)
-
-
-        """
-        If all the elements are 0, we set all of them to 1
-        """
-        if(maxelement==0):
-            proportion_list=[1 for i in range(len(proportion_list))]  
-        else:
-            """
-            If some of the elements are 0, we set them to the minimum/10 of the other elements
-            """
-            proportion_list = [1 / (x if x else min(y for y in proportion_list if y)/10) for x in proportion_list]
-
-        #We Normalize the proportions
-        sum_proportion = sum(proportion_list)
-        proportion_list = [x / sum_proportion for x in proportion_list]
-        slist = [int(x * self._sampleBudget) or 10  for x in proportion_list]
-        return wlist,slist
-
-
-    def subspace_sampling_second_round(self):
-        """
-        The second round of subspace stratified sampling
-        We already know the rough value of the subspace logical error rate
-        We also have get the fitted curve.
-        The goal is to get more accurate value of the logical error rate, specially for these subspaces
-        """
-        wlist,slist=self.distribute_samples()     
-        detector_result,obsresult=return_samples_many_weights_separate_obs(self._stim_str_after_rewrite,wlist,slist)
-        predictions_result = self._matcher.decode_batch(detector_result)
-
-
-        for w,s in zip(wlist,slist):
-            if not w in self._subspace_LE_count.keys():
-                self._subspace_LE_count[w]=0
-                self._subspace_sample_used[w]=s
-            else:
-                self._subspace_sample_used[w]+=s
-
-        begin_index=0
-        for w_idx, (w, quota) in enumerate(zip(wlist, slist)):
-
-            observables =  np.asarray(obsresult[begin_index:begin_index+quota])                    # (shots,)
-            predictions = np.asarray(predictions_result[begin_index:begin_index+quota]).ravel()
-
-            # 3. count mismatches in vectorised form ---------------------------------
-            num_errors = np.count_nonzero(observables != predictions)
-
-            self._subspace_LE_count[w]+=num_errors
-            self._estimated_subspaceLER_second[w] = self._subspace_LE_count[w] / self._subspace_sample_used[w]
-            self._estimated_subspaceLER[w]=self._subspace_LE_count[w]/self._subspace_sample_used[w]
-            begin_index+=quota
-
-
-        print("---------------After second round sampling-------------------")
-        print("Subspace LE count: ",self._subspace_LE_count)
-        print("self._subspace_sample_used: ",self._subspace_sample_used)
-        print("Samples used:{}".format(self._sample_used))
-        print("circuit level code distance:{}".format(self._circuit_level_code_distance))
 
 
 
     def plot_scurve(self, filename,title="S-curve"):
         """Plot the S-curve and its discrete estimate."""
-
 
         print("LER count: ",self._subspace_LE_count)
         keys   = list(self._estimated_subspaceLER.keys())
@@ -513,20 +616,7 @@ class stratified_Scurve_LERcalc:
                 color='tab:blue',         # pick any color you like
                 alpha=0.8,
                 label='Estimated subspace LER by sampling')
-
-
-        keys_second = list(self._estimated_subspaceLER_second.keys())
-        values_second = [self._estimated_subspaceLER_second[k] for k in keys_second]
-
-
-        print("keys_second: ",keys_second)
-        print("values_second: ",values_second)
-        plt.bar(keys_second, values_second,
-                color='tab:red',         # pick any color you like
-                alpha=0.8,
-                label='Second round sampling LER by sampling')        
-
-
+    
         plt.axvline(x=self._error_rate*self._num_noise, color="red", linestyle="--", linewidth=1.2, label="Average Error number") # vertical line at x=0.5
 
         print("Saturate w: ",self._saturatew)
@@ -772,30 +862,31 @@ if __name__ == "__main__":
     #generate_all_repetition_code_figure()
     #generate_all_square_code_figure()
     #generate_all_hexagon_code_figure()
-    p=0.001
-
-    tmp=stratified_Scurve_LERcalc(p,sampleBudget=100000,num_subspace=10)
+    p=0.0005
+    sample_buget=1000000
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=sample_buget,num_subspace=20)
 
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
-    filepath="C:/Users/yezhu/GitRepos/Sampling/stimprograms/surface/surface5"
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface9"
     figname="S5.png"
     titlename="Surface5"
-
     tmp.parse_from_file(filepath)
-    tmp.determine_range_to_sample()
+    tmp.determine_saturated_w()
+    tmp.subspace_sampling_to_fit_curve(sample_buget)
+    # k=3
+    # while not tmp._stratified_succeed:
+    #     print("------------------------k=",k,"------------------------")
+    #     tmp.determine_range_to_sample(k)
+    #     tmp.subspace_sampling()
+    #     k=k*2
+    #     # 
+    #     # tmp.subspace_sampling_to_fit_curve(sample_buget)
 
-    tmp.get_rough_subspace_LER(1000000)
-    tmp.determine_w()
-
-    tmp.subspace_sampling_first_round(int(100000//4))
-    tmp.fit_Scurve()
-    tmp._sampleBudget=100000
-    tmp.subspace_sampling_second_round()
-    tmp.fit_Scurve()        
-    tmp.calc_logical_error_rate_after_curve_fitting()
-    print("Final LER: ",tmp._LER)
-    tmp.plot_scurve(figname,titlename)
+    tmp.fit_linear()
+    #tmp.fit_Scurve()
+    #tmp.calc_logical_error_rate_after_curve_fitting()
+    #print("Final LER: ",tmp._LER)
+    #tmp.plot_scurve(figname,titlename)
 
 
-    #ler=tmp.calculate_LER_from_file(filepath,p,"S5.png","Surface5")
-    tmp.calculate_R_square_score()
+    #tmp.calculate_R_square_score()

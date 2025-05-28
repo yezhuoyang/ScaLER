@@ -1,7 +1,7 @@
 from LERcalc.clifford import *
 import pymatching
 from LERcalc.stimparser import *
-
+import time
 
 def count_logical_errors(circuit: stim.Circuit, num_shots: int) -> int:
     # Sample the circuit.
@@ -27,8 +27,8 @@ def count_logical_errors(circuit: stim.Circuit, num_shots: int) -> int:
 
 
 
-MIN_NUM_LE_EVENT = 100
-SAMPLE_GAP = 10000000
+MIN_NUM_LE_EVENT = 1000
+SAMPLE_GAP_INITIAL = 1000
 
 '''
 Use stim and Monte Calo sampling method to estimate the logical error rate
@@ -63,17 +63,22 @@ class stimLERcalc:
 
         
         sampler = new_stim_circuit.compile_detector_sampler()
-        detector_error_model = new_stim_circuit.detector_error_model(decompose_errors=False)
+        detector_error_model = new_stim_circuit.detector_error_model(decompose_errors=True)
         matcher = pymatching.Matching.from_detector_error_model(detector_error_model)        
 
 
         self._num_LER=0
+        current_sample_gap=SAMPLE_GAP_INITIAL
         while self._num_LER<MIN_NUM_LE_EVENT:
-            self._sample_used+=SAMPLE_GAP
+            if self._num_LER==0 and self._sample_used>0:
+                current_sample_gap*=2
+            elif self._num_LER>0:
+                current_sample_gap=int(MIN_NUM_LE_EVENT/self._num_LER)*self._sample_used
+            self._sample_used+=current_sample_gap
             #self._num_LER+=count_logical_errors(new_stim_circuit,SAMPLE_GAP)
 
 
-            detection_events, observable_flips = sampler.sample(SAMPLE_GAP, separate_observables=True)
+            detection_events, observable_flips = sampler.sample(current_sample_gap, separate_observables=True)
             predictions = matcher.decode_batch(detection_events)
                 # 3. count mismatches in vectorised form ---------------------------------
             num_errors = np.count_nonzero(observable_flips != predictions)
@@ -119,16 +124,22 @@ class stimLERcalc:
 
 if __name__ == "__main__":
     calculator=stimLERcalc()
-    filepath="C:/Users/yezhu/GitRepos/Sampling/stimprograms/surface/surface7"
+    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition5"
+    #filepath="C:/Users/yezhu/GitRepos/Sampling/stimprograms/surface/surface5"
+    #filepath="C:/Users/yezhu/GitRepos/Sampling/stimprograms/surface/surface7"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface30"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/1cnoth"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/simpleh"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/2cnot2R"
-    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon3"
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/square/square5"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon3"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface9"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition7"
-    ler=calculator.calculate_LER_from_file(1000000,filepath,0.001)
+
+    current_time = time.time()
+    ler=calculator.calculate_LER_from_file(100000000,filepath,0.0005)
+    elapsed_time = time.time() - current_time
+    print(f"Elapsed time: {elapsed_time:.2f} seconds")
 
     print(ler)
