@@ -32,11 +32,29 @@ def linear_function(x, a, b):
     return a * x + b
 
 
-def modified_linear_function(x, a, b,c,d):
+# def modified_linear_function(x, a, b,c,d):
+#     """
+#     Linear function for curve fitting.
+#     """
+#     return a * x + b+c/(x-d)
+
+
+# Strategy A: keep the model safe near the pole
+def modified_linear_function(x, a, b, c, d):
+    eps   = 1e-12
+    delta = x - d
+    delta = np.where(np.abs(delta) < eps, np.sign(delta)*eps, delta)
+    return a * x + b + c / delta
+
+
+
+def modified_sigmoid_function(x, a, b,c,d):
     """
-    Linear function for curve fitting.
+    Modified sigmoid function for curve fitting.
+    This function is used to fit the S-curve.
     """
-    return a * x + b+c/(x-d)
+    return 0.5/(1+np.exp(a*x+b+c/(x-d)))
+
 
 
 def quadratic_function(x, a, b,c):
@@ -53,7 +71,7 @@ def poly_function(x, a, b,c,d):
     return a * x**3+b*x**2 + c*x+d
 
 
-MIN_NUM_LE_EVENT = 200
+MIN_NUM_LE_EVENT = 50
 SAMPLE_GAP=100
 
 def subspace_size(num_noise, weight):
@@ -506,23 +524,43 @@ class stratified_Scurve_LERcalc:
     def fit_linear(self):
         
         x_list = [x for x in self._estimated_subspaceLER.keys() if 0 < self._estimated_subspaceLER[x] < 0.5]
+        min_x = min(x_list)
         y_list = [np.log(0.5/self._estimated_subspaceLER[x]-1) for x in x_list]
         #x_list=np.log(x_list)  # Take the log of the weights
+
+        center = self._saturatew /2 
+        sigma    = self._saturatew/7          # centre in the middle of that span
+        b=center/sigma
+        a=-1/sigma
+        c=1
+        initial_guess  = (a, b ,c,self._circuit_level_code_distance)
+
+        # ── lower bounds for [param1, param2, param3, param4]
+        lower = [-np.inf,  0,  0,                 0]
+
+        # ── upper bounds for [param1, param2, param3, param4]
+        upper = [ 0,   np.inf,  np.inf,        max(min_x,self._circuit_level_code_distance)]
+
         popt, pcov = curve_fit(
-            modified_linear_function, 
-            x_list, 
-            y_list
+            modified_linear_function,
+            x_list,
+            y_list,
+            p0=initial_guess,          # len(initial_guess) must be 4 and within the bounds above
+            bounds=(lower, upper),     # <-- tuple with two arrays
+            maxfev=50_000              # or max_nfev in newer SciPy
         )
 
         self._codedistance = 0
         # Extract the best-fit parameter (alpha)
-        a,b,c,d= popt[0] , popt[1], popt[2], popt[3]
+        self._a,self._b,self._c,self._d= popt[0] , popt[1], popt[2], popt[3]
 
 
         #Plot the fitted line
-        x_fit = np.linspace(min(x_list), max(x_list), 1000)
+        x_fit = np.linspace(max(min(x_list),self._d*1.01), max(x_list), 1000)
 
-        y_fit = modified_linear_function(x_fit, a, b,c,d)
+        y_fit = modified_linear_function(x_fit, self._a, self._b,self._c,self._d)
+
+        print("Fitted parameters: a={}, b={}, c={}, d={}".format(self._a, self._b, self._c, self._d))
         plt.figure()
         plt.scatter(x_list, y_list, label='Data points', color='blue')
         plt.plot(x_fit, y_fit, label='Fitted line', color='orange')
@@ -594,7 +632,7 @@ class stratified_Scurve_LERcalc:
             if weight in self._estimated_subspaceLER.keys():
                 self._LER+=self._estimated_subspaceLER[weight]*binomial_weight(self._num_noise, weight,self._error_rate)
             else:
-                self._LER+=scurve_function(weight,self._mu,self._sigma)*binomial_weight(self._num_noise,weight,self._error_rate)
+                self._LER+=modified_sigmoid_function(weight,self._a,self._b,self._c,self._d)*binomial_weight(self._num_noise,weight,self._error_rate)
             #self._LER+=scurve_function(weight,self._mu,self._sigma)*binomial_weight(self._num_noise,weight,self._error_rate)
         return self._LER
 
@@ -622,8 +660,9 @@ class stratified_Scurve_LERcalc:
         print("Saturate w: ",self._saturatew)
 
         # smooth curve ── fitted S-curve
-        x = np.linspace(0, self._saturatew, 1000)
-        y = scurve_function(x, self._mu, self._sigma)
+        x = np.linspace(self._d*1.01, self._saturatew, 1000)
+        y = modified_sigmoid_function(x, self._a, self._b,self._c,self._d)
+
         plt.plot(x, y,
                 color='tab:orange',
                 linewidth=2.0,
@@ -645,19 +684,23 @@ class stratified_Scurve_LERcalc:
 
 
 
-    def calculate_LER_from_file(self,filepath,pvalue,figname,titlename):
+    def calculate_LER_from_file(self,filepath,pvalue,codedistance,figname,titlename):
         self._error_rate=pvalue
+        self._circuit_level_code_distance=codedistance
         self.parse_from_file(filepath)
-        self.determine_w()
-        self.subspace_sampling_first_round(int(self._sampleBudget//4))
-        self.fit_Scurve()
-        self.subspace_sampling_second_round()
-        self.fit_Scurve()        
-        self.calc_logical_error_rate_after_curve_fitting()
-        #self.calculate_LER()
-        print("Final LER: ",self._LER)
-        self.plot_scurve(figname,titlename)
 
+        self.determine_range_to_sample(3)
+        self.subspace_sampling()
+
+
+        self.determine_saturated_w()
+        self.subspace_sampling_to_fit_curve(self._sampleBudget)
+        self.fit_linear()
+        #tmp.fit_Scurve()
+        self.calc_logical_error_rate_after_curve_fitting()
+        print("Final LER: ",self._LER)
+
+        self.plot_scurve(figname,titlename)
 
 
 
@@ -863,30 +906,26 @@ if __name__ == "__main__":
     #generate_all_square_code_figure()
     #generate_all_hexagon_code_figure()
     p=0.0005
-    sample_buget=1000000
-    tmp=stratified_Scurve_LERcalc(p,sampleBudget=sample_buget,num_subspace=20)
+    sample_buget=5000000
+    tmp=stratified_Scurve_LERcalc(p,sampleBudget=sample_buget,num_subspace=8)
 
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface9"
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/square/square5"
     figname="S5.png"
-    titlename="Surface5"
-    tmp.parse_from_file(filepath)
-    tmp.determine_saturated_w()
-    tmp.subspace_sampling_to_fit_curve(sample_buget)
-    # k=3
-    # while not tmp._stratified_succeed:
-    #     print("------------------------k=",k,"------------------------")
-    #     tmp.determine_range_to_sample(k)
-    #     tmp.subspace_sampling()
-    #     k=k*2
-    #     # 
-    #     # tmp.subspace_sampling_to_fit_curve(sample_buget)
-
-    tmp.fit_linear()
-    #tmp.fit_Scurve()
-    #tmp.calc_logical_error_rate_after_curve_fitting()
-    #print("Final LER: ",tmp._LER)
-    #tmp.plot_scurve(figname,titlename)
+    titlename="Square5"
 
 
-    #tmp.calculate_R_square_score()
+    tmp.calculate_LER_from_file(filepath,p,1,figname,titlename)
+    # tmp.parse_from_file(filepath)
+
+    # tmp.determine_range_to_sample(3)
+    # tmp.subspace_sampling()
+
+
+    # tmp.determine_saturated_w()
+    # tmp.subspace_sampling_to_fit_curve(sample_buget)
+    # tmp.fit_linear()
+    # #tmp.fit_Scurve()
+    # tmp.calc_logical_error_rate_after_curve_fitting()
+    # print("Final LER: ",tmp._LER)
+
