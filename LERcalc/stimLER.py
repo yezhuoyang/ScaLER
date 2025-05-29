@@ -2,6 +2,9 @@ from LERcalc.clifford import *
 import pymatching
 from LERcalc.stimparser import *
 import time
+import os
+from contextlib import redirect_stdout
+
 
 def count_logical_errors(circuit: stim.Circuit, num_shots: int) -> int:
     # Sample the circuit.
@@ -27,9 +30,9 @@ def count_logical_errors(circuit: stim.Circuit, num_shots: int) -> int:
 
 
 
-MIN_NUM_LE_EVENT = 2
+MIN_NUM_LE_EVENT = 10
 SAMPLE_GAP_INITIAL = 1000
-MAX_SAMPLE_GAP = 1000000
+MAX_SAMPLE_GAP = 10000000
 
 
 '''
@@ -49,7 +52,7 @@ class stimLERcalc:
 
 
 
-    def calculate_LER_from_file(self,samplebudget,filepath,pvalue):
+    def calculate_LER_from_file(self,samplebudget,filepath,pvalue, repeat=1):
         circuit=CliffordCircuit(2)
         circuit.set_error_rate(pvalue)
         self._samplebudget=samplebudget
@@ -69,43 +72,61 @@ class stimLERcalc:
         matcher = pymatching.Matching.from_detector_error_model(detector_error_model)        
 
 
-        self._num_LER=0
-        current_sample_gap=SAMPLE_GAP_INITIAL
-        while self._num_LER<MIN_NUM_LE_EVENT:
-            if self._num_LER==0 and self._sample_used>0:
-                current_sample_gap*=2
-            elif self._num_LER>0:
-                current_sample_gap=min(int(MIN_NUM_LE_EVENT/self._num_LER)*self._sample_used, MAX_SAMPLE_GAP)
-            self._sample_used+=current_sample_gap
-            #self._num_LER+=count_logical_errors(new_stim_circuit,SAMPLE_GAP)
+        Ler_list=[]
+        samples_list=[]
 
 
-            detection_events, observable_flips = sampler.sample(current_sample_gap, separate_observables=True)
-            predictions = matcher.decode_batch(detection_events)
-                # 3. count mismatches in vectorised form ---------------------------------
-            num_errors = np.count_nonzero(observable_flips != predictions)
-            self._num_LER+=num_errors
+        for i in range(repeat):
+            self._num_LER=0
+            self._sample_used=0
+            current_sample_gap=SAMPLE_GAP_INITIAL
+            while self._num_LER<MIN_NUM_LE_EVENT:
+                if self._num_LER==0 and self._sample_used>0:
+                    current_sample_gap*=2
+                    current_sample_gap=min(current_sample_gap, MAX_SAMPLE_GAP)
+                elif self._num_LER>0:
+                    current_sample_gap=min(int(MIN_NUM_LE_EVENT/self._num_LER)*self._sample_used, MAX_SAMPLE_GAP)
+                self._sample_used+=current_sample_gap
+                #self._num_LER+=count_logical_errors(new_stim_circuit,SAMPLE_GAP)
 
-            self._estimated_LER=self._num_LER/self._sample_used
-            self.calculate_standard_error()
-            print("Current LER: ", self._num_LER)
-            print("Current logical error rate: ", self._num_LER/self._sample_used)
-            print("Current stdandard error: ", self._uncertainty)
-            print("Current sample used: ", self._sample_used)
 
-            if self._sample_used>self._samplebudget:
-                print("Sample budget reached, stop sampling")
-                if(self._num_LER>0):
-                    self._sample_needed=int(self._sample_used*(100/self._num_LER))
-                else:
-                    self._sample_needed=-1
-                break
-            self._sample_needed=self._sample_used
+                detection_events, observable_flips = sampler.sample(current_sample_gap, separate_observables=True)
+                predictions = matcher.decode_batch(detection_events)
+                    # 3. count mismatches in vectorised form ---------------------------------
+                num_errors = np.count_nonzero(observable_flips != predictions)
+                self._num_LER+=num_errors
 
-        self.calculate_standard_error()
+                self._estimated_LER=self._num_LER/self._sample_used
+                #self.calculate_standard_error()
+                # print("Current LER: ", self._num_LER)
+                # print("Current logical error rate: ", self._num_LER/self._sample_used)
+                # print("Current stdandard error: ", self._uncertainty)
+                # print("Current sample used: ", self._sample_used)
+
+                if self._sample_used>self._samplebudget:
+                    print("Sample budget reached, stop sampling")
+                    if(self._num_LER>0):
+                        self._sample_needed=int(self._sample_used*(100/self._num_LER))
+                    else:
+                        self._sample_needed=-1
+                    break
+                self._sample_needed=self._sample_used
+            Ler_list.append(self._estimated_LER)
+            samples_list.append(self._sample_used)
+
+        self._estimated_LER=np.mean(Ler_list)
+        self._sample_used=np.mean(samples_list)
+        """
+        Standard deviation
+        """
+        std_ler=np.std(Ler_list)
+        std_sample=np.std(samples_list)
+        #self.calculate_standard_error()
         print("Final LER: ", self._num_LER)
-        print("Final logical error rate: ",  self._num_LER/self._sample_used)
-        print("Final sample needed: ",  self._sample_needed)
+        print("Final logical error rate: ",  self._estimated_LER)
+        print("Standard deviation of LER: ", std_ler)
+        print("Final sample needed: ",  self._sample_used)
+        print("Standard deviation of sample used: ", std_sample)
         return self._estimated_LER
     
 
@@ -123,12 +144,15 @@ class stimLERcalc:
 
 
 
-#filepath_list=["surface/surface9","square/square7","square/square9","hexagon/hexagon7","hexagon/hexagon9","repetition/repetition5","repetition/repetition7","repetition/repetition9"]
-filepath_list=["surface/surface11"]
+# filepath_list=["repetition/repetition5","square/square7","hexagon/hexagon7","repetition/repetition7","square/square9","hexagon/hexagon9","repetition/repetition9","surface/surface9"]
+filepath_list=["surface/surface5"]
+
+
+
+# filepath_list=["repetition/repetition7","square/square9","hexagon/hexagon9","surface/surface9","surface/surface11","hexagon/hexagon11","square/square11","surface/surface13","hexagon/hexagon13","square/square13"]
 
 
 if __name__ == "__main__":
-    calculator=stimLERcalc()
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition5"
     #filepath="C:/Users/yezhu/GitRepos/Sampling/stimprograms/surface/surface5"
     #filepath="C:/Users/yezhu/GitRepos/Sampling/stimprograms/surface/surface7"
@@ -136,12 +160,22 @@ if __name__ == "__main__":
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/1cnoth"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/simpleh"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/2cnot2R"
+    base_dir = "C:/Users/yezhu/Documents/Sampling/stimprograms/"
 
-    for filepath in filepath_list:
-        print(f"----------------Processing {filepath}...-------------------------")
-        filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/"+filepath
-        current_time = time.time()
-        ler=calculator.calculate_LER_from_file(100000000,filepath,0.0005)
-        elapsed_time = time.time() - current_time
-        print(f"Elapsed time for {filepath}: {elapsed_time:.2f} seconds")
-        print(f"LER for {filepath}: {ler}\n")
+    for rel in filepath_list:
+        # rel might be "surface/surface3" or "repetition/repetition5", etc.
+        stim_path = base_dir+rel
+
+        # 3) build your output filename:
+        out_fname = stim_path + "-result.txt"     # e.g. "surface3-result.txt"
+
+        # 4) redirect prints for just this file:
+        with open(out_fname, "w") as outf, redirect_stdout(outf):
+            print(f"---- Processing {stim_path} ----")
+            start = time.time()
+            calculator=stimLERcalc()
+            # pass the string path into your function:
+            ler = calculator.calculate_LER_from_file(1000_000_000000, str(stim_path), 0.0005,5)
+            elapsed = time.time() - start
+            print(f"Elapsed time: {elapsed:.2f}s")
+            print(f"LER: {ler}\n")

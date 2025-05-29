@@ -42,6 +42,7 @@ namespace LERcalculator{
     std::vector<py::array_t<bool>> return_samples_many_weights_numpy(const std::string& prog_str,const std::vector<size_t>& weight, const std::vector<size_t>& shots);
     QEPG::QEPG compile_QEPG(const std::string& prog_str);
     std::pair<py::array_t<bool>,py::array_t<bool>> return_samples_many_weights_separate_obs_with_QEPG(const QEPG::QEPG& graph,const std::vector<size_t>& weight, const std::vector<size_t>& shots);
+    std::vector<std::vector<bool>> return_samples_with_fixed_QEPG(const QEPG::QEPG& graph,size_t weight, size_t shots);
 }
    
 
@@ -123,6 +124,10 @@ PYBIND11_MODULE(QEPG, m) { // Use the module name 'QEPG' as seen in your build o
           py::return_value_policy::move,
           "Function that returns samples based on a circuit and parameters");
 
+    m.def("return_samples_with_fixed_QEPG", &LERcalculator::return_samples_with_fixed_QEPG, // Use &SAMPLE::return_samples
+          py::arg("graph"), py::arg("weight"), py::arg("shots"),
+          py::return_value_policy::move,
+          "Function that returns samples based on a QEPG");
 
     m.def("return_samples_numpy", &LERcalculator::return_samples_numpy, 
           py::arg("prog_str"), py::arg("weight"), py::arg("shots"),

@@ -213,6 +213,15 @@ inline void convert_bitset_row_to_boolean_separate_obs_numpy(
 
 
 
+std::vector<std::vector<bool>> return_samples_with_fixed_QEPG(const QEPG::QEPG& graph,size_t weight, size_t shots){
+    SAMPLE::sampler sampler(graph.get_total_noise());
+    std::vector<QEPG::Row> samplecontainer;
+    sampler.generate_many_output_samples(graph,samplecontainer,weight,shots);
+    std::vector<std::vector<bool>> result;
+    convert_bitset_row_to_boolean(result,samplecontainer);
+    return std::move(result);
+}
+
 
 
 
@@ -221,38 +230,13 @@ inline void convert_bitset_row_to_boolean_separate_obs_numpy(
  std::vector<std::vector<bool>> return_samples(const std::string& prog_str,size_t weight, size_t shots){
     clifford::cliffordcircuit c;
     c.compile_from_rewrited_stim_string(prog_str);
-
     QEPG::QEPG graph(c,c.get_num_detector(),c.get_num_noise());
     graph.backward_graph_construction();
-
-
     SAMPLE::sampler sampler(c.get_num_noise());
-
     std::vector<QEPG::Row> samplecontainer;
-
-    using clock     = std::chrono::steady_clock;          // monotonic, good for benchmarking
-    using microsec  = std::chrono::microseconds;
-    auto t0 = clock::now();                               // start timer
     sampler.generate_many_output_samples(graph,samplecontainer,weight,shots);
-
-
-
-    // auto t1 = clock::now();                               // stop section‑1
-    // auto compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
-    // std::cout << "[Time to generate these samples:] " << compile_us / 1'000.0 << "ms\n";
-
-
     std::vector<std::vector<bool>> result;
-    // t0 = clock::now();                               // start timer
     convert_bitset_row_to_boolean(result,samplecontainer);
-    // t1 = clock::now();                               // stop section‑1
-    // compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
-    // std::cout << "[Time to convert it to bit vector:] " << compile_us / 1'000.0 << "ms\n";
-
-
-    // for(QEPG::Row parityresult: samplecontainer){
-    //     QEPG::print_bit_row(parityresult);
-    // }
     return std::move(result);
 }
 

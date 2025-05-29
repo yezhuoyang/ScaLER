@@ -18,6 +18,9 @@ namespace py = pybind11;
 
  std::vector<std::vector<bool>> return_samples(const std::string & prog_str,size_t weight, size_t shots);
 
+ std::vector<std::vector<bool>> return_samples_with_fixed_QEPG(const QEPG::QEPG& graph,size_t weight, size_t shots);
+
+
 
  std::pair<std::vector<std::vector<std::pair<int,int>>> ,std::vector<std::vector<bool>>>  return_samples_with_noise_vector(const std::string & prog_str,size_t weight, size_t shots);
 
