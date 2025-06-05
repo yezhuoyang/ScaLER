@@ -289,6 +289,8 @@ class symbolicLER:
             self._LER+=simplify(subLER)
         self._LER=simplify(self._LER).expand()
         #LER=LER.series(p, 0, MAX_degree).removeO()    # no .expand()
+
+        print("LER polynomial: ", latex(self._LER))
         return self._LER
 
 
@@ -345,13 +347,14 @@ if __name__=="__main__":
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/simpleh"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/surface3r1"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/2cnot2R"
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
+    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/simple"
     print(tmp.calculate_LER_from_file(filepath,0.001))
 
 
     num_noise=tmp._num_noise
 
-    for weight in range(1,5):
+    for weight in range(1,11):
         print("LER in the subspace {} is {}".format(weight,tmp.evaluate_LER_subspace(0.001,weight)))        
 
     

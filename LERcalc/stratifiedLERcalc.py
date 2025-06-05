@@ -260,6 +260,9 @@ class stratifiedLERcalc:
                 self._LER+=self._estimated_subspaceLER[weight]*binomial_weight(self._num_noise, weight,self._error_rate)
         return self._LER    
 
+    def get_LER_subspace_no_weight(self,weight):
+        return self._estimated_subspaceLER[weight]
+
 
     def get_LER_subspace(self,weight):
         return self._estimated_subspaceLER[weight]*binomial_weight(self._num_noise, weight,self._error_rate)
@@ -273,9 +276,9 @@ class stratifiedLERcalc:
 
 
 if __name__ == "__main__":
-    tmp=stratifiedLERcalc(0.0005,sampleBudget=15000000,num_subspace=5)
+    tmp=stratifiedLERcalc(0.001,sampleBudget=15000000,num_subspace=5)
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition7"
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
+    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface7"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/1cnot"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/surface3r1"
@@ -284,11 +287,11 @@ if __name__ == "__main__":
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/simpleh"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/1cnot1R"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/2cnot2R"
-    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/simple"
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/simple"
     tmp.parse_from_file(filepath)
-    #tmp.sample_all_subspace(5000)
+    tmp.sample_all_subspace(11*1000000)
 
-    tmp.subspace_sampling()
+    #tmp.subspace_sampling()
 
 
 
@@ -298,7 +301,7 @@ if __name__ == "__main__":
 
     # num_noise=tmp._num_noise
 
-    # for weight in range(1,3):
-    #     print("LER in the subspace {} is {}".format(weight,tmp.get_LER_subspace(weight)))    
-
+    for weight in range(1,12):
+        #print("LER in the subspace {} is {}".format(weight,tmp.get_LER_subspace_no_weight(weight)))    
+        print("LER in the subspace {} is {}".format(weight,tmp.get_LER_subspace(weight)))
 

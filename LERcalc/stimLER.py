@@ -29,9 +29,22 @@ def count_logical_errors(circuit: stim.Circuit, num_shots: int) -> int:
 
 
 
+def format_with_uncertainty(value, std):
+    """
+    Format a value and its standard deviation in the form:
+    1.23(±0.45)×10^k
+    """
+    if value == 0:
+        return f"0(+{std:.2e})"
+    exponent = int(np.floor(np.log10(abs(value))))
+    coeff = value / (10**exponent)
+    std_coeff = std / (10**exponent)
+    return f"{coeff:.2f}(+{std_coeff:.2f})*10^{exponent}"
 
-MIN_NUM_LE_EVENT = 10
-SAMPLE_GAP_INITIAL = 1000
+
+
+MIN_NUM_LE_EVENT = 1
+SAMPLE_GAP_INITIAL = 100
 MAX_SAMPLE_GAP = 10000000
 
 
@@ -74,9 +87,11 @@ class stimLERcalc:
 
         Ler_list=[]
         samples_list=[]
-
-
+        time_list=[]
+        ler_count_list=[]
         for i in range(repeat):
+            
+            start = time.time()
             self._num_LER=0
             self._sample_used=0
             current_sample_gap=SAMPLE_GAP_INITIAL
@@ -104,15 +119,22 @@ class stimLERcalc:
                 # print("Current sample used: ", self._sample_used)
 
                 if self._sample_used>self._samplebudget:
-                    print("Sample budget reached, stop sampling")
+                    #print("Sample budget reached, stop sampling")
                     if(self._num_LER>0):
                         self._sample_needed=int(self._sample_used*(100/self._num_LER))
                     else:
                         self._sample_needed=-1
                     break
                 self._sample_needed=self._sample_used
+            ler_count_list.append(self._num_LER)
             Ler_list.append(self._estimated_LER)
             samples_list.append(self._sample_used)
+            elapsed = time.time() - start
+            time_list.append(elapsed)
+
+        ler_count_average=np.mean(ler_count_list)
+        #print("Average number of logical errors: ", ler_count_average)
+        std_ler_count=np.std(ler_count_list)
 
         self._estimated_LER=np.mean(Ler_list)
         self._sample_used=np.mean(samples_list)
@@ -122,11 +144,13 @@ class stimLERcalc:
         std_ler=np.std(Ler_list)
         std_sample=np.std(samples_list)
         #self.calculate_standard_error()
-        print("Final LER: ", self._num_LER)
-        print("Final logical error rate: ",  self._estimated_LER)
-        print("Standard deviation of LER: ", std_ler)
-        print("Final sample needed: ",  self._sample_used)
-        print("Standard deviation of sample used: ", std_sample)
+        time_mean=np.mean(time_list)
+        time_std=np.std(time_list)
+        
+        print("Time(STIM): ", format_with_uncertainty(time_mean, time_std))
+        print("PL(STIM): ", format_with_uncertainty(self._estimated_LER, std_ler))
+        print("Nerror(STIM): ", format_with_uncertainty(ler_count_average, std_ler_count))
+        print("Sample(STIM): ", format_with_uncertainty(self._sample_used, std_sample))        
         return self._estimated_LER
     
 
@@ -143,10 +167,13 @@ class stimLERcalc:
         return self._sample_used
 
 
+#,0.0001,0.0000
+#filepath_list=["surface/surface13","hexagon/hexagon13","square/square11","square/square13","square/square13"]
+p_list=[0.0001,0.00005]
+#filepath_list=["repetition/repetition3","repetition/repetition5","repetition/repetition7","square/square9","hexagon/hexagon9","repetition/repetition9","surface/surface9"]
 
-# filepath_list=["repetition/repetition5","square/square7","hexagon/hexagon7","repetition/repetition7","square/square9","hexagon/hexagon9","repetition/repetition9","surface/surface9"]
-filepath_list=["surface/surface5"]
 
+#"surface/surface9","hexagon/hexagon9","square/square9","square/square7"
 
 
 # filepath_list=["repetition/repetition7","square/square9","hexagon/hexagon9","surface/surface9","surface/surface11","hexagon/hexagon11","square/square11","surface/surface13","hexagon/hexagon13","square/square13"]
@@ -161,21 +188,31 @@ if __name__ == "__main__":
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/simpleh"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/2cnot2R"
     base_dir = "C:/Users/yezhu/Documents/Sampling/stimprograms/"
+    result_dir = "C:/Users/yezhu/Documents/Sampling/Stimresult7/"
+    # for rel in filepath_list:
+    #     # rel might be "surface/surface3" or "repetition/repetition5", etc.
+    #     stim_path = base_dir+rel
+    #     # 3) build your output filename:
+    #     out_fname = stim_path + "-result.txt"     # e.g. "surface3-result.txt"
+    #     # 4) redirect prints for just this file:
+    #     with open(out_fname, "w") as outf, redirect_stdout(outf):
+    #         print(f"---- Processing {stim_path} ----")
 
-    for rel in filepath_list:
-        # rel might be "surface/surface3" or "repetition/repetition5", etc.
-        stim_path = base_dir+rel
+    #         calculator=stimLERcalc()
+    #         # pass the string path into your function:
+    #         ler = calculator.calculate_LER_from_file(1000000000, str(stim_path), 0.0005,5)
+    code_type_list=["surface","hexagon","square"]
+    rel_list=["surface/surface7","hexagon/hexagon7","square/square7"]
+    for code_type, rel in zip(code_type_list, rel_list):
+        for p in p_list:
+            # rel might be "surface/surface3" or "repetition/repetition5", etc.
+            stim_path = base_dir+rel
+            # 3) build your output filename:
+            out_fname =  result_dir+str(p)+"-"+str(code_type)+"-result.txt"     # e.g. "surface3-result.txt"
+            # 4) redirect prints for just this file:
+            with open(out_fname, "w") as outf, redirect_stdout(outf):
+                print(f"---- Processing {stim_path} ----")
 
-        # 3) build your output filename:
-        out_fname = stim_path + "-result.txt"     # e.g. "surface3-result.txt"
-
-        # 4) redirect prints for just this file:
-        with open(out_fname, "w") as outf, redirect_stdout(outf):
-            print(f"---- Processing {stim_path} ----")
-            start = time.time()
-            calculator=stimLERcalc()
-            # pass the string path into your function:
-            ler = calculator.calculate_LER_from_file(1000_000_000000, str(stim_path), 0.0005,5)
-            elapsed = time.time() - start
-            print(f"Elapsed time: {elapsed:.2f}s")
-            print(f"LER: {ler}\n")
+                calculator=stimLERcalc()
+                # pass the string path into your function:
+                ler = calculator.calculate_LER_from_file(5000000000, str(stim_path), p,5)
