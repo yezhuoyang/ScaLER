@@ -22,3 +22,11 @@ output2.txt
 .ipynb_checkpoints/
 *.ipynb
 *.txt
+myresults/*
+myresults2/*
+myresults3/*
+myresultTot/*
+myresultsAll/*
+myresultNew/*
+myresultAll/*
+output2

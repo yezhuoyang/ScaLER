@@ -57,12 +57,19 @@ def linear_function(x, a, b):
 #     return a * x + b+c/(x-d)
 
 
-# Strategy A: keep the model safe near the pole
-def modified_linear_function(x, a, b, c, d):
+def modified_linear_function_with_d(x, a, b, c, d):
     eps   = 1e-12
     delta = x - d
     delta = np.where(np.abs(delta) < eps, np.sign(delta)*eps, delta)
     return a * x + b + c / delta
+
+
+
+# Strategy A: keep the model safe near the pole
+def modified_linear_function(d):
+    def tempfunc(x,a,b,c,d=d):
+        return modified_linear_function_with_d(x, a, b, c, d)
+    return tempfunc
 
 
 
@@ -91,11 +98,11 @@ def poly_function(x, a, b,c,d):
     return a * x**3+b*x**2 + c*x+d
 
 
-MIN_NUM_LE_EVENT = 100
-MIN_NUM_LE_EVENT_TOTAL =800
+MIN_NUM_LE_EVENT = 20
+MIN_NUM_LE_EVENT_TOTAL = 160
 SAMPLE_GAP=100
-MAX_SAMPLE_GAP=1000000
-MAX_SUBSPACE_SAMPLE=80000000
+MAX_SAMPLE_GAP=100000
+MAX_SUBSPACE_SAMPLE=3000000
 
 
 
@@ -205,6 +212,7 @@ class stratified_Scurve_LERcalc:
         self._sampleBudget=sampleBudget
         self._sample_used=0
         self._circuit_level_code_distance=1
+        self._t=1
         self._num_subspace=num_subspace
         """
         minw and maxw store the range of subspace we need to fit.
@@ -245,7 +253,7 @@ class stratified_Scurve_LERcalc:
         self._LER=0        
         self._estimated_wlist=[]
         self._saturatew=10000000000000               
-        self._minw=1
+        self._minw=self._t+1
         self._maxw=10000000000000
         self._cliffordcircuit=CliffordCircuit(4)  
         self._R_square_score=0
@@ -336,7 +344,7 @@ class stratified_Scurve_LERcalc:
         if sigma==0:
             sigma=1
         ep=int(self._error_rate*self._num_noise)
-        self._minw=max(1,ep-self._k_range*sigma)
+        self._minw=max(self._t+1,ep-self._k_range*sigma)
         self._maxw=max(self._num_subspace,ep+self._k_range*sigma)
         self._maxw=min(self._maxw,self._num_noise)
         # print("Needed Minw:    ")
@@ -439,16 +447,6 @@ class stratified_Scurve_LERcalc:
                 """
                 if(self._subspace_sample_used[weight]>MAX_SUBSPACE_SAMPLE):
                     continue
-                
-                if weight<=self._circuit_level_code_distance:
-                    self._estimated_subspaceLER[weight]=0
-                    continue
-                if(self._subspace_LE_count[weight]==0):
-                    if(subspace_size(self._num_noise, weight)<=3*self._subspace_sample_used[weight]):
-                        self._circuit_level_code_distance=weight
-                        #print("Circuit level code distance changed!: ",self._circuit_level_code_distance)
-                        self._estimated_subspaceLER[weight]=0
-                        continue         
 
 
                 if(self._subspace_LE_count[weight]<MIN_NUM_LE_EVENT):
@@ -488,8 +486,8 @@ class stratified_Scurve_LERcalc:
             if(len(wlist)==0):
                 break
 
-            # print("wlist: ",wlist)
-            # print("slist: ",slist)
+            print("wlist: ",wlist)
+            print("slist: ",slist)
             #detector_result,obsresult=return_samples_many_weights_separate_obs(self._stim_str_after_rewrite,wlist,slist)
             detector_result,obsresult=return_samples_many_weights_separate_obs_with_QEPG(self._QEPG_graph,wlist,slist)
             predictions_result = self._matcher.decode_batch(detector_result)
@@ -512,14 +510,14 @@ class stratified_Scurve_LERcalc:
                 # print(f"Logical error rate when w={w}: {self._estimated_subspaceLER[w]*binomial_weight(self._num_noise, w,self._error_rate):.6g}")
 
                 begin_index+=quota
-            # print(self._subspace_LE_count)
-            # print(self._subspace_sample_used)
+            print(self._subspace_LE_count)
+            print("Subspace LE count: ",self._subspace_LE_count)
+            print("self._subspace_sample_used: ",self._subspace_sample_used)
 
         
         # print("Samples used:{}".format(self._sample_used))
-        # print("circuit level code distance:{}".format(self._circuit_level_code_distance))
-        # print(self._estimated_wlist)
-        # print(self._estimated_subspaceLER)
+        print("circuit level code distance:{}".format(self._circuit_level_code_distance))
+        print(self._subspace_LE_count)
 
 
 
@@ -633,8 +631,8 @@ class stratified_Scurve_LERcalc:
         y_list = [np.log(0.5/self._estimated_subspaceLER[x]-1) for x in x_list]
         #x_list=np.log(x_list)  # Take the log of the weights
 
-        # print("x_list: ",x_list)
-        # print("y_list: ",y_list)
+        print("x_list: ",x_list)
+        print("y_list: ",y_list)
 
 
         non_zero_indices=[x for x in x_list if self._estimated_subspaceLER[x]>0]
@@ -649,20 +647,20 @@ class stratified_Scurve_LERcalc:
         b=self._b
         a=self._a
         c=self._beta
-        initial_guess  = (a, b ,c,int((self._circuit_level_code_distance+upper_bound_code_distance)/2))
+        initial_guess  = (a, b ,c)
 
         #print("Initial guess d: ",int((self._circuit_level_code_distance+upper_bound_code_distance)/2))
 
         # ── lower bounds for [param1, param2, param3, param4]
-        lower = [ min(self._a*0.5,self._a*1.5), min(self._b*0.5,self._b*1.5),  self._beta-15,                 self._circuit_level_code_distance]
+        lower = [ min(self._a*0.5,self._a*1.5), min(self._b*0.5,self._b*1.5),  0]
 
         # ── upper bounds for [param1, param2, param3, param4]
-        upper = [ max(self._a*0.5,self._a*1.5), max(self._b*0.5,self._b*1.5)  , self._beta+15,        max(self._circuit_level_code_distance+1e-5,upper_bound_code_distance-1)]
+        upper = [ max(self._a*0.5,self._a*1.5), max(self._b*0.5,self._b*1.5)  , np.inf]
 
 
 
         popt, pcov = curve_fit(
-            modified_linear_function,
+            modified_linear_function(self._t),
             x_list,
             y_list,
             p0=initial_guess,          # len(initial_guess) must be 4 and within the bounds above
@@ -672,20 +670,20 @@ class stratified_Scurve_LERcalc:
 
         self._codedistance = 0
         # Extract the best-fit parameter (alpha)
-        self._a,self._b,self._c,self._d= popt[0] , popt[1], popt[2], popt[3]
+        self._a,self._b,self._c= popt[0] , popt[1], popt[2]
 
 
         #print("circuit d:",self._circuit_level_code_distance)
         y_list = [np.log(0.5/self._estimated_subspaceLER[x]-1) for x in x_list]
-        y_predicted = [modified_linear_function(x,self._a,self._b,self._c,self._d) for x in x_list]
+        y_predicted = [modified_linear_function_with_d(x,self._a,self._b,self._c,self._t) for x in x_list]
         #y_predicted = [scurve_function_with_distance(x,self._mu,self._sigma) for x in self._estimated_wlist]
         self._R_square_score = r_squared(y_list, y_predicted)
         #print("R^2 score: ", self._R_square_score)
 
         #Plot the fitted line
-        x_fit = np.linspace(max(min(x_list),self._d*1.01), max(x_list), 1000)
+        x_fit = np.linspace(max(min(x_list),self._t+1), max(x_list), 1000)
 
-        y_fit = modified_linear_function(x_fit, self._a, self._b,self._c,self._d)
+        y_fit = modified_linear_function_with_d(x_fit, self._a, self._b,self._c,self._t)
 
         #print("Fitted parameters: a={}, b={}, c={}, d={}".format(self._a, self._b, self._c, self._d))
         plt.figure()
@@ -746,13 +744,10 @@ class stratified_Scurve_LERcalc:
         if sigma==0:
             sigma=1
         ep=int(self._error_rate*self._num_noise)
-        self._minw=max(1,ep-self._k_range*sigma)
+        self._minw=max(self._t+1,ep-self._k_range*sigma)
         self._maxw=max(2,ep+self._k_range*sigma)
 
-        min_non_zero_weight=min([x for x in self._estimated_subspaceLER.keys() if self._estimated_subspaceLER[x]>0],default=1)
-
-
-        for weight in range(min_non_zero_weight,self._maxw+1):
+        for weight in range(self._minw,self._maxw+1):
             """
             If the weight is in the estimated list, we use the estimated value
             Else, we use the curve fitting value
@@ -764,7 +759,7 @@ class stratified_Scurve_LERcalc:
                 #print("Weight: ",weight," LER: ",self._estimated_subspaceLER[weight]*binomial_weight(self._num_noise, weight,self._error_rate))
             else:
                 subspace_size_value=subspace_size(self._num_noise, weight)
-                fitted_subspace_LER=modified_sigmoid_function(weight,self._a,self._b,self._c,self._d)
+                fitted_subspace_LER=modified_sigmoid_function(weight,self._a,self._b,self._c,self._t)
                 self._LER+=fitted_subspace_LER*binomial_weight(self._num_noise,weight,self._error_rate)
                 #print("Weight: ",weight," LER: ",fitted_subspace_LER*binomial_weight(self._num_noise, weight,self._error_rate))
             #self._LER+=scurve_function(weight,self._mu,self._sigma)*binomial_weight(self._num_noise,weight,self._error_rate)
@@ -792,7 +787,7 @@ class stratified_Scurve_LERcalc:
         # smooth curve ── fitted S-curve
         x = np.linspace(1.001, self._saturatew, 1000)
         #x = np.linspace(self._d*1.01, self._saturatew, 1000)
-        y = modified_sigmoid_function(x, self._a, self._b,self._c,self._d)
+        y = modified_sigmoid_function(x, self._a, self._b,self._c,self._t)
 
         plt.plot(x, y,
                 color='tab:orange',
@@ -814,11 +809,18 @@ class stratified_Scurve_LERcalc:
         plt.close(fig)
 
 
+    def set_t(self, t):
+        """
+        Set the t value for the S-curve fitting.
+        This is used to determine the range of subspace we need to sample.
+        """
+        self._t = t
+
+
     def calculate_LER_from_file(self,filepath,pvalue,codedistance,figname,titlename, repeat=1):
         self._error_rate=pvalue
         self._circuit_level_code_distance=codedistance
         ler_list=[]
-        code_distance_list=[]
         sample_used_list=[]
         r_squared_list=[]
         Nerror_list=[]
@@ -842,18 +844,15 @@ class stratified_Scurve_LERcalc:
             # print("Final LER: ",self._LER)
             # print("Total samples used: ",self._sample_used)
             ler_list.append(self._LER)
-            code_distance_list.append(self._d)
             sample_used_list.append(self._sample_used)
             Nerror_list.append(sum(self._subspace_LE_count.values()))
 
         # Compute means
         self._LER = np.mean(ler_list)
-        self._d = np.mean(code_distance_list)
         self._sample_used = np.mean(sample_used_list)
 
         # Compute standard deviations
         ler_std = np.std(ler_list)
-        d_std = np.std(code_distance_list)
         sample_used_std = np.std(sample_used_list)
         r2_mean = np.mean(r_squared_list)
         r2_std = np.std(r_squared_list)
@@ -866,7 +865,6 @@ class stratified_Scurve_LERcalc:
         # Print with scientific ± formatting
         print("k: ", self._k_range)
         print("beta: ",self._beta)
-        print("dfitted: ", format_with_uncertainty(self._d, d_std))
         print("Subspaces: ", self._num_subspace)
         print("R2: ", format_with_uncertainty(r2_mean, r2_std))
         print("Samples(ours): ", format_with_uncertainty(self._sample_used, sample_used_std))
@@ -1072,91 +1070,154 @@ def generate_all_square_code_figure():
 
 
 import time
-p_list=[0.001,0.0005,0.0001,0.00005]
+p_list=[0.005,0.001,0.0005,0.0001,0.00005]
 
 
 
 
 
-# surface_file_list=["surface/surface"+str(d) for d in [3,5,7,9,11,13,15]]
-# surface_code_name_list=["surface3","surface5","surface7","surface9","surface11","surface13","surface15"]
-# surface_beta_list=[4,4,4,4,4,4,4]
-# surface_k_list=[5,5,5,15,20,20,20]
-# surface_subspace_list=[10,10,15,25,25,25,28]  # All surface codes have num_subspace=10
+surface_file_list=["surface/surface"+str(d) for d in [15,17,19,21]]
+surface_code_name_list=["surface"+str(d) for d in [15,17,19,21]]
+surface_t_list=[7,8,9,10]
+surface_k_list=[16,20,24,28]
+surface_subspace_list=[8,8,8,8]  # All surface codes have num_subspace=10
 
 
-# surface_file_list=["surface/surface"+str(d) for d in [3,5,7]]
-# surface_code_name_list=["surface3","surface5","surface7"]
-# surface_beta_list=[5,5,5]
-# surface_k_list=[5,5,5]
-# surface_subspace_list=[10,10,15]  # All surface codes have num_subspace=10
+hexagon_file_list=["hexagon/hexagon"+str(d) for d in [9,11,13,15,17,19,21]]
+hexagon_code_name_list=["hexagon"+str(d) for d in [9,11,13,15,17,19,21]]
+hexagon_t_list=[4,5,6,7,8,9,10]  # All hexagon codes have beta=3
+hexagon_k_list=[10,12,16,20,24,28,32]
+hexagon_subspace_list=[8,8,8,8,8,8,8]  # All surface codes have num_subspace=10
 
+square_file_list=["square/square"+str(d) for d in [9,11,13,15,17,19,21]]
+square_code_name_list=["square"+str(d) for d in [9,11,13,15,17,19,21]]
+square_t_list=[4,5,6,7,8,9,10]  # All square codes have beta=3
+square_k_list=[10,12,16,20,24,28,32]
+square_subspace_list=[8,8,8,8,8,8,8]  # All surface codes have num_subspace=10
 
-# hexagon_file_list=["hexagon/hexagon"+str(d) for d in [3,5,7]]
-# hexagon_code_name_list=["hexagon3","hexagon5","hexagon7"]
-# hexagon_beta_list=[5,5,30]  # All hexagon codes have beta=3
-# hexagon_k_list=[5,5,5]
-# hexagon_subspace_list=[10,10,12]  # All surface codes have num_subspace=10
+# repetition_file_list=["repetition/repetition"+str(d) for d in [9,11,13,15,17,19,21]]
+# repetition_code_name_list=["repetition9","repetition11","repetition13","repetition15"]
+# repetition_t_list=[4,5,6,7]
+# repetition_k_list=[8,12,12,12]
+# repetition_subspace_list=[12,15,15,15]  # All surface codes have num_subspace=10
 
-# square_file_list=["square/square"+str(d) for d in [3,5,7]]
-# square_code_name_list=["square3","square5","square7"]
-# square_beta_list=[5,5,12]  # All square codes have beta=3
-# square_k_list=[5,5,5]
-# square_subspace_list=[10,10,12]  # All surface codes have num_subspace=10
-
-# repetition_file_list=["repetition/repetition"+str(d) for d in [3,5,7]]
-# repetition_code_name_list=["repetition3","repetition5","repetition7"]
-# repetition_beta_list=[5,5,4]
-# repetition_k_list=[5,5,5]
-# repetition_subspace_list=[10,10,15]  # All surface codes have num_subspace=10
-
-# all_file_list=surface_file_list+hexagon_file_list+square_file_list+repetition_file_list
-# all_k_list=surface_k_list+hexagon_k_list+square_k_list+repetition_k_list
-# all_beta_list=surface_beta_list+hexagon_beta_list+square_beta_list+repetition_beta_list
-# all_subspace_list=surface_subspace_list+hexagon_subspace_list+square_subspace_list+repetition_subspace_list
-# all_code_name_list=surface_code_name_list+hexagon_code_name_list+square_code_name_list+repetition_code_name_list
+all_file_list=surface_file_list+hexagon_file_list+square_file_list
+all_k_list=surface_k_list+hexagon_k_list+square_k_list
+all_t_list=surface_t_list+hexagon_t_list+square_t_list
+all_subspace_list=surface_subspace_list+hexagon_subspace_list+square_subspace_list
+all_code_name_list=surface_code_name_list+hexagon_code_name_list+square_code_name_list
 
 
 if __name__ == "__main__":
     #generate_all_repetition_code_figure()
     #generate_all_square_code_figure()
     #generate_all_hexagon_code_figure()
+
+
     base_dir = "C:/Users/yezhu/Documents/Sampling/stimprograms/"
-    result_dir = "C:/Users/yezhu/Documents/Sampling/myresults3/"
-    # p=0.0005
-    # index=0
-    # for file in all_file_list:
-    #     # 1) build your input filename:
-    #     stim_path = base_dir + file
-    #     # 2) build your output filename:
-    #     out_fname =  result_dir + all_code_name_list[index]     # e.g. "surface3-result.txt"
-    #     # 4) redirect prints for just this file:
-    #     #with open(out_fname, "w") as outf, redirect_stdout(outf):
-    #     print("---------------Processing code: ", all_code_name_list[index], " with p: ", p, "-----------------")
-    #     sample_buget=10**9
-    #     tmp=stratified_Scurve_LERcalc(p,sampleBudget=sample_buget,k_range=all_k_list[index],num_subspace=all_subspace_list[index],beta=all_beta_list[index])
-    #     figname="tmp.png"
-    #     titlename="tmp"
-
-    #     tmp.calculate_LER_from_file(stim_path,p,0,figname,titlename,5)
-    #     index+=1
-
-
-    code_type_list=["surface","repetition"]
-    rel_list=["surface/surface7","repetition/repetition7"]
-    for code_type, rel in zip(code_type_list, rel_list):
-        for p in p_list:
-            # rel might be "surface/surface3" or "repetition/repetition5", etc.
-            stim_path = base_dir+rel
-            # 3) build your output filename:
-
-            print("---------------Processing code type: ", code_type, " with p: ", p, "-----------------")
-            sample_buget=1000000000
-            tmp=stratified_Scurve_LERcalc(p,sampleBudget=sample_buget,k_range=5,num_subspace=12,beta=4)
+    result_dir = "C:/Users/yezhu/Documents/Sampling/myresultTot/"
+    p=0.001
+    index=0
+    for file in all_file_list:
+        # 1) build your input filename:
+        stim_path = base_dir + file
+        # 2) build your output filename:
+       
+        out_fname =  result_dir + all_code_name_list[index]     # e.g. "surface3-result.txt"
+        # 4) redirect prints for just this file:
+        with open(out_fname, "w") as outf, redirect_stdout(outf):
+            print("---------------Processing code: ", all_code_name_list[index], " with p: ", p, "-----------------")
+            sample_buget=5*10**8
+            tmp=stratified_Scurve_LERcalc(p,sampleBudget=sample_buget,k_range=all_k_list[index],num_subspace=all_subspace_list[index])
             figname="tmp.png"
             titlename="tmp"
+            tmp.set_t(all_t_list[index])
             tmp.calculate_LER_from_file(stim_path,p,0,figname,titlename,5)
- 
+            index+=1
+
+
+      
+
+    # p_list=[0.005,0.001,0.0005,0.0001,0.00005]
+    # code_type_list=["square"]
+    # rel_list=["square/square7"]
+    # for code_type, rel in zip(code_type_list, rel_list):
+    #     for p in p_list:
+    #         # rel might be "surface/surface3" or "repetition/repetition5", etc.
+    #         stim_path = base_dir+rel
+    #         # 3) build your output filename:
+    #         out_fname =  result_dir+str(p)+"-"+str(code_type)+"-result.txt"     # e.g. "surface3-result.txt"
+    #         # 4) redirect prints for just this file:
+    #         with open(out_fname, "w") as outf, redirect_stdout(outf):
+    #             print("---------------Processing code type: ", code_type, " with p: ", p, "-----------------")
+    #             sample_buget=1000000000
+    #             tmp=stratified_Scurve_LERcalc(p,sampleBudget=sample_buget,k_range=5,num_subspace=12,beta=21)
+    #             tmp.set_t(3)
+    #             figname="tmp.png"
+    #             titlename="tmp"
+    #             tmp.calculate_LER_from_file(stim_path,p,0,figname,titlename,5)
+
+
+    # code_type_list=["hexagon"]
+    # rel_list=["hexagon/hexagon7"]
+    # for code_type, rel in zip(code_type_list, rel_list):
+    #     for p in p_list:
+    #         # rel might be "surface/surface3" or "repetition/repetition5", etc.
+    #         stim_path = base_dir+rel
+    #         # 3) build your output filename:
+    #         out_fname =  result_dir+str(p)+"-"+str(code_type)+"-result.txt"     # e.g. "surface3-result.txt"
+    #         # 4) redirect prints for just this file:
+    #         with open(out_fname, "w") as outf, redirect_stdout(outf):
+    #             print("---------------Processing code type: ", code_type, " with p: ", p, "-----------------")
+    #             sample_buget=1000000000
+    #             tmp=stratified_Scurve_LERcalc(p,sampleBudget=sample_buget,k_range=5,num_subspace=12,beta=21)
+    #             tmp.set_t(3)
+    #             figname="tmp.png"
+    #             titlename="tmp"
+    #             tmp.calculate_LER_from_file(stim_path,p,0,figname,titlename,5)
+
+
+
+    # code_type_list=["square"]
+    # rel_list=["square/square7"]
+    # for code_type, rel in zip(code_type_list, rel_list):
+    #     for p in p_list:
+    #         # rel might be "surface/surface3" or "repetition/repetition5", etc.
+    #         stim_path = base_dir+rel
+    #         # 3) build your output filename:
+    #         out_fname =  result_dir+str(p)+"-"+str(code_type)+"-result.txt"     # e.g. "surface3-result.txt"
+    #         # 4) redirect prints for just this file:
+    #         with open(out_fname, "w") as outf, redirect_stdout(outf):
+    #             print("---------------Processing code type: ", code_type, " with p: ", p, "-----------------")
+    #             sample_buget=1000000000
+    #             tmp=stratified_Scurve_LERcalc(p,sampleBudget=sample_buget,k_range=5,num_subspace=12,beta=12)
+    #             tmp.set_t(3)
+    #             figname="tmp.png"
+    #             titlename="tmp"
+    #             tmp.calculate_LER_from_file(stim_path,p,0,figname,titlename,5)
+
+
+
+    # code_type_list=["repetition"]
+    # rel_list=["repetition/repetition7"]
+    # for code_type, rel in zip(code_type_list, rel_list):
+    #     for p in p_list:
+    #         # rel might be "surface/surface3" or "repetition/repetition5", etc.
+    #         stim_path = base_dir+rel
+    #         # 3) build your output filename:
+    #         out_fname =  result_dir+str(p)+"-"+str(code_type)+"-result.txt"     # e.g. "surface3-result.txt"
+    #         # 4) redirect prints for just this file:
+    #         with open(out_fname, "w") as outf, redirect_stdout(outf):
+    #             print("---------------Processing code type: ", code_type, " with p: ", p, "-----------------")
+    #             sample_buget=1000000000
+    #             tmp=stratified_Scurve_LERcalc(p,sampleBudget=sample_buget,k_range=5,num_subspace=12,beta=4)
+    #             tmp.set_t(3)
+    #             figname="tmp.png"
+    #             titlename="tmp"
+    #             tmp.calculate_LER_from_file(stim_path,p,0,figname,titlename,5)
+
+
+
     # p=0.0001
     # sample_buget=1000000
     # tmp=stratified_Scurve_LERcalc(p,sampleBudget=sample_buget,k_range=5,num_subspace=10,beta=4)
