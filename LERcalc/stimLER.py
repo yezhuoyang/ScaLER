@@ -45,7 +45,7 @@ def format_with_uncertainty(value, std):
 
 
 SAMPLE_GAP_INITIAL = 100
-MAX_SAMPLE_GAP = 10000000
+MAX_SAMPLE_GAP = 500000
 
 
 '''
@@ -204,29 +204,13 @@ if __name__ == "__main__":
 
 
 
-    # p=0.001
-    # code_type="surface"
-    # rel="surface/surface"
-    # dlist=[3,5,7,9,11,13,15]
-    # for d in dlist:
-    #     stim_path = base_dir+rel+str(d)
-    #     # 3) build your output filename:
-    #     out_fname =  result_dir+str(p)+"-"+str(code_type)+str(d)+"-result.txt"     # e.g. "surface3-result.txt"
-    #     # 4) redirect prints for just this file:
-    #     with open(out_fname, "w") as outf, redirect_stdout(outf):
-    #         print(f"---- Processing {stim_path} ----")
-
-    #         calculator=stimLERcalc(100)
-    #         # pass the string path into your function:
-    #         ler = calculator.calculate_LER_from_file(5000000000, str(stim_path), p,5)
-
 
 
 
     p=0.001
     code_type="hexagon"
     rel="hexagon/hexagon"
-    dlist=[3,5,7,9]
+    dlist=[11]
     for d in dlist:
         stim_path = base_dir+rel+str(d)
         # 3) build your output filename:
@@ -243,7 +227,7 @@ if __name__ == "__main__":
     p=0.001
     code_type="square"
     rel="square/square"
-    dlist=[3,5,7,9]
+    dlist=[11]
     for d in dlist:
         stim_path = base_dir+rel+str(d)
         # 3) build your output filename:
@@ -258,10 +242,12 @@ if __name__ == "__main__":
 
 
 
+
+
     p=0.001
-    code_type="repetition"
-    rel="repetition/repetition"
-    dlist=[3,5,7,9]
+    code_type="surface"
+    rel="surface/surface"
+    dlist=[13,15]
     for d in dlist:
         stim_path = base_dir+rel+str(d)
         # 3) build your output filename:
