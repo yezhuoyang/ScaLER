@@ -188,7 +188,7 @@ if __name__ == "__main__":
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/simpleh"
     #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/2cnot2R"
     base_dir = "C:/Users/yezhu/Documents/Sampling/stimprograms/"
-    result_dir = "C:/Users/yezhu/Documents/Sampling/StimresultTot/"
+    result_dir = "C:/Users/yezhu/Documents/Sampling/"
     # for rel in filepath_list:
     #     # rel might be "surface/surface3" or "repetition/repetition5", etc.
     #     stim_path = base_dir+rel
@@ -210,7 +210,7 @@ if __name__ == "__main__":
     p=0.001
     code_type="hexagon"
     rel="hexagon/hexagon"
-    dlist=[11]
+    dlist=[13]
     for d in dlist:
         stim_path = base_dir+rel+str(d)
         # 3) build your output filename:
@@ -221,13 +221,13 @@ if __name__ == "__main__":
 
             calculator=stimLERcalc(100)
             # pass the string path into your function:
-            ler = calculator.calculate_LER_from_file(5000000000, str(stim_path), p,5)
+            ler = calculator.calculate_LER_from_file(5000000, str(stim_path), p,5)
 
 
     p=0.001
     code_type="square"
     rel="square/square"
-    dlist=[11]
+    dlist=[13]
     for d in dlist:
         stim_path = base_dir+rel+str(d)
         # 3) build your output filename:
@@ -238,16 +238,13 @@ if __name__ == "__main__":
 
             calculator=stimLERcalc(100)
             # pass the string path into your function:
-            ler = calculator.calculate_LER_from_file(5000000000, str(stim_path), p,5)
-
-
-
+            ler = calculator.calculate_LER_from_file(5000000, str(stim_path), p,5)
 
 
     p=0.001
     code_type="surface"
     rel="surface/surface"
-    dlist=[13,15]
+    dlist=[13]
     for d in dlist:
         stim_path = base_dir+rel+str(d)
         # 3) build your output filename:
@@ -258,5 +255,42 @@ if __name__ == "__main__":
 
             calculator=stimLERcalc(100)
             # pass the string path into your function:
-            ler = calculator.calculate_LER_from_file(5000000000, str(stim_path), p,5)
+            ler = calculator.calculate_LER_from_file(5000000, str(stim_path), p,5)
+
+
+    # p=0.0001
+    # code_type="square"
+    # rel="square/square"
+    # dlist=[7]
+    # for d in dlist:
+    #     stim_path = base_dir+rel+str(d)
+    #     # 3) build your output filename:
+    #     out_fname =  result_dir+str(p)+"-"+str(code_type)+str(d)+"-result.txt"     # e.g. "surface3-result.txt"
+    #     # 4) redirect prints for just this file:
+    #     with open(out_fname, "w") as outf, redirect_stdout(outf):
+    #         print(f"---- Processing {stim_path} ----")
+
+    #         calculator=stimLERcalc(3)
+    #         # pass the string path into your function:
+    #         ler = calculator.calculate_LER_from_file(5000000, str(stim_path), p,1)
+
+
+
+
+
+    # p=0.0001
+    # code_type="surface"
+    # rel="surface/surface"
+    # dlist=[7]
+    # for d in dlist:
+    #     stim_path = base_dir+rel+str(d)
+    #     # 3) build your output filename:
+    #     out_fname =  result_dir+str(p)+"-"+str(code_type)+str(d)+"-result.txt"     # e.g. "surface3-result.txt"
+    #     # 4) redirect prints for just this file:
+    #     with open(out_fname, "w") as outf, redirect_stdout(outf):
+    #         print(f"---- Processing {stim_path} ----")
+
+    #         calculator=stimLERcalc(3)
+    #         # pass the string path into your function:
+    #         ler = calculator.calculate_LER_from_file(5000000, str(stim_path), p,1)
 

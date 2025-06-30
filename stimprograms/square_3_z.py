@@ -318,8 +318,8 @@ def generate_circuit(filepath: str | Path, distance: int = 3) -> Path:
 
 if __name__ == '__main__':
 
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/square/square3"
-    generate_circuit(filepath,3)  
+    # filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/square/square3"
+    # generate_circuit(filepath,3)  
 
     # filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/square/square5"
     # generate_circuit(filepath,5)  
@@ -339,15 +339,18 @@ if __name__ == '__main__':
     # filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/square/square15"
     # generate_circuit(filepath,15)   
 
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/square/square17"
-    generate_circuit(filepath,17)  
+    # filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/square/square17"
+    # generate_circuit(filepath,17)  
 
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/square/square19"
-    generate_circuit(filepath,19)  
+    # filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/square/square19"
+    # generate_circuit(filepath,19)  
 
 
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/square/square21"
-    generate_circuit(filepath,21)  
+    # filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/square/square21"
+    # generate_circuit(filepath,21)  
 
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/square/square23"
-    generate_circuit(filepath,23)  
+    # filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/square/square23"
+    # generate_circuit(filepath,23)  
+
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/square/square25"
+    generate_circuit(filepath,25)  

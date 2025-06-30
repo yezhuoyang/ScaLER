@@ -39,6 +39,10 @@ def format_with_uncertainty(value, std):
     return f"{coeff:.2f}(+{std_coeff:.2f})*10^{exponent}"
 
 
+# Define the inverse transform: y → 1/2 * 1 / (1 + e^y)
+def inv_logit_half(y):
+    return 0.5 / (1 + np.exp(y))
+
 def binomial_weight(N, W, p):
     return binom.pmf(W, N, p)
     #return math.comb(N, W) * (p**W) * ((1 - p)**(N - W))
@@ -100,13 +104,20 @@ def poly_function(x, a, b,c,d):
 
 
 # Redefine turning point where the 2nd term is still significant in dy/dw
-def refined_sweat_spot(alpha, beta, t, ratio=2):
+def refined_sweat_spot(alpha, beta, t, ratio=0.05):
     # We define turning point by solving: 1/alpha = ratio * (1/2) * beta / (w - t)^{3/2}
     # => (w - t)^{3/2} = (ratio * beta * alpha) / 2
     # => w = t + [(ratio * beta * alpha / 2)]^{2/3}
     return t + ((ratio * beta * alpha / 2) ** (2 / 3))
 
 
+
+
+"""
+Return the estimated sigma of y(w)
+"""
+def sigma_estimator(N,M):
+    return np.sqrt(N**2*(N-M)/(M*(N-1)*(N-2*M)**2))
 
 
 
@@ -257,6 +268,10 @@ class stratified_Scurve_LERcalc:
         self._MAX_SAMPLE_GAP=1000000
         self._MAX_SUBSPACE_SAMPLE=5000000
 
+        self._ratio=0.05
+        self._max_PL= 0.15
+        
+
 
     def set_sample_bound(self, MIN_NUM_LE_EVENT,SAMPLE_GAP, MAX_SAMPLE_GAP, MAX_SUBSPACE_SAMPLE):
         """
@@ -289,18 +304,18 @@ class stratified_Scurve_LERcalc:
         TODO: Optimize this function
         """
         result= return_samples_with_fixed_QEPG(self._QEPG_graph,w,shots)
-        self._sample_used+=shots
-        if w not in self._subspace_LE_count.keys():
-            self._subspace_LE_count[w]=0
-            self._subspace_sample_used[w]=shots
-        else:
-            self._subspace_sample_used[w]+=shots
+        # self._sample_used+=shots
+        # if w not in self._subspace_LE_count.keys():
+        #     self._subspace_LE_count[w]=0
+        #     self._subspace_sample_used[w]=shots
+        # else:
+        #     self._subspace_sample_used[w]+=shots
         arr=np.asarray(result)
         states=arr[:,:-1]
         observables=arr[:,-1]
         predictions =np.squeeze(self._matcher.decode_batch(states))
         num_errors = np.count_nonzero(observables != predictions)
-        self._subspace_LE_count[w]+=num_errors
+        # self._subspace_LE_count[w]+=num_errors
         return num_errors/shots
 
 
@@ -315,7 +330,7 @@ class stratified_Scurve_LERcalc:
     def binary_search_upper(self,low,high, shots):
         left=low
         right=high
-        epsion=0.3
+        epsion=self._max_PL
         while left<right:
             mid=(left+right)//2
             er=self.calc_logical_error_rate_with_fixed_w(shots,mid)
@@ -326,13 +341,11 @@ class stratified_Scurve_LERcalc:
         return left
 
 
-    def binary_search_lower(self,low,high, shots=10000):
+    def binary_search_lower(self,low,high, shots=5000):
         left=low
         right=high
-        epsion=3e-3
+        epsion=0.002
         while left<right:
-            print("left: ",left)
-            print("right: ",right)
             mid=(left+right)//2
             er=self.calc_logical_error_rate_with_fixed_w(shots,mid)
             if er>epsion:
@@ -344,9 +357,10 @@ class stratified_Scurve_LERcalc:
 
     def determine_lower_w(self):
         self._has_logical_errorw=self.binary_search_lower(self._t+1,self._num_noise//10)
+        #self._has_logical_errorw=self._t+100
 
 
-    def determine_saturated_w(self,shots=100):
+    def determine_saturated_w(self,shots=1000):
         """
         Use binary search to determine the minw and maxw
         """
@@ -408,7 +422,12 @@ class stratified_Scurve_LERcalc:
         In each subspace, we stop sampling until 100 logical error events are detected, or we hit the total budget.
         """
         #wlist_need_to_sample = list(range(self._minw, self._maxw + 1))
+        #wlist_need_to_sample=evenly_spaced_ints(self._sweat_spot,self._saturatew,self._num_subspace)
+        
+        
         wlist_need_to_sample=evenly_spaced_ints(self._sweat_spot,self._saturatew,self._num_subspace)
+        
+        
         #print("wlist_need_to_sample: ",wlist_need_to_sample)
         for weight in wlist_need_to_sample:
             if not weight in self._estimated_wlist:
@@ -467,8 +486,8 @@ class stratified_Scurve_LERcalc:
             if(len(wlist)==0):
                 break
 
-            print("wlist: ",wlist)
-            print("slist: ",slist)
+            # print("wlist: ",wlist)
+            # print("slist: ",slist)
             #detector_result,obsresult=return_samples_many_weights_separate_obs(self._stim_str_after_rewrite,wlist,slist)
             detector_result,obsresult=return_samples_many_weights_separate_obs_with_QEPG(self._QEPG_graph,wlist,slist)
             predictions_result = self._matcher.decode_batch(detector_result)
@@ -491,9 +510,9 @@ class stratified_Scurve_LERcalc:
                 # print(f"Logical error rate when w={w}: {self._estimated_subspaceLER[w]*binomial_weight(self._num_noise, w,self._error_rate):.6g}")
 
                 begin_index+=quota
-            print(self._subspace_LE_count)
-            print("Subspace LE count: ",self._subspace_LE_count)
-            print("self._subspace_sample_used: ",self._subspace_sample_used)
+            # print(self._subspace_LE_count)
+            # print("Subspace LE count: ",self._subspace_LE_count)
+            # print("self._subspace_sample_used: ",self._subspace_sample_used)
 
         
         # print("Samples used:{}".format(self._sample_used))
@@ -616,6 +635,18 @@ class stratified_Scurve_LERcalc:
         # ───────────────────────────────────────────────────────────────────────
 
 
+        alpha = -1 / self._a
+        mu = alpha * self._b
+
+        # ── NEW: annotate alpha and mu ─────────────────────────────────────
+        textstr = '\n'.join((
+            r'$\alpha=%.4f$' % alpha,
+            r'$\mu=%.4f$' % mu
+        ))
+        plt.text(0.05, 0.95, textstr, transform=plt.gca().transAxes,
+                 fontsize=10, verticalalignment='top', bbox=dict(facecolor='white', alpha=0.8, edgecolor='black'))
+        # ───────────────────────────────────────────────────────────────────
+
         plt.xlabel('Weight')
         plt.ylabel('Linear')
         plt.title('Linear Fit of S-curve')
@@ -624,16 +655,20 @@ class stratified_Scurve_LERcalc:
         plt.close()
 
 
-    def fit_log_S_model(self,filename):
-        
+ 
+    def fit_log_S_model(self,filename,time=None):
+            
         #print("circuit d:",self._circuit_level_code_distance)
         x_list = [x for x in self._estimated_subspaceLER.keys() if (self._estimated_subspaceLER[x] < 0.5 and self._estimated_subspaceLER[x]>0)]
+
+        sigma_list= [sigma_estimator( self._subspace_sample_used[x],self._subspace_LE_count[x]) for x in x_list]
+
 
         y_list = [np.log(0.5/self._estimated_subspaceLER[x]-1) for x in x_list]
         #x_list=np.log(x_list)  # Take the log of the weights
 
-        print("x_list: ",x_list)
-        print("y_list: ",y_list)
+        # print("x_list: ",x_list)
+        # print("y_list: ",y_list)
 
 
         non_zero_indices=[x for x in x_list if self._estimated_subspaceLER[x]>0]
@@ -648,7 +683,8 @@ class stratified_Scurve_LERcalc:
         b=self._b
         a=self._a
         c=self._beta
-        initial_guess  = (a, b ,c)
+        alpha= -1/self._a
+        initial_guess  = (a, b ,alpha)
 
         #print("Initial guess d: ",int((self._circuit_level_code_distance+upper_bound_code_distance)/2))
         sigma=int(np.sqrt(self._error_rate*(1-self._error_rate)*self._num_noise))
@@ -662,13 +698,30 @@ class stratified_Scurve_LERcalc:
         self._num_detector
         self._num_noise
 
+
+        # # ── lower bounds for [param1, param2, param3, param4]
+        # lower = [ min(self._a*0.1,self._a*10), min(self._b*0.1,self._b*10),  alpha*0.8]
+
+        # # ── upper bounds for [param1, param2, param3, param4]
+        # upper = [ max(self._a*0.1,self._a*10), max(self._b*0.1,self._b*10)  , alpha*1.2]
+        
+        beta=alpha
+        initial_guess  = (a, b ,beta)
         # ── lower bounds for [param1, param2, param3, param4]
-        lower = [ min(self._a*0.5,self._a*1.5), min(self._b*0.5,self._b*1.5),  0]
+        lower = [ self._a*5, self._b*0.2,  beta*0.2]
 
         # ── upper bounds for [param1, param2, param3, param4]
-        upper = [ max(self._a*0.5,self._a*1.5), max(self._b*0.5,self._b*1.5)  , np.inf]
+        upper = [ self._a*0.2, self._b*5 , beta*5]
 
 
+
+
+        # a=1/600
+        # initial_guess  = (-a, self._b ,600)
+        # lower = [ -a*4,  min(self._b*0.0001,self._b*10000),  600*0.2]
+
+        # # ── upper bounds for [param1, param2, param3, param4]
+        # upper = [ -a*0.2, max(self._b*0.0001,self._b*10000)  , 600*4]
 
         popt, pcov = curve_fit(
             modified_linear_function(self._t),
@@ -699,16 +752,58 @@ class stratified_Scurve_LERcalc:
         self.calc_logical_error_rate_after_curve_fitting()
         
         alpha= -1/self._a
-        self._sweat_spot = refined_sweat_spot(alpha, self._c, self._t, ratio=0.2)
+        self._sweat_spot = int(refined_sweat_spot(alpha, self._c, self._t, ratio=self._ratio))
+        if self._sweat_spot<ep:
+            self._sweat_spot=ep
+        if self._sweat_spot<=self._t:
+            self._sweat_spot=self._t+1
+        #self._sweat_spot=self._t+100
+        
+
+
+
+
         sweat_spot_y = modified_linear_function_with_d(self._sweat_spot, self._a, self._b, self._c, self._t)
+
+
+        sample_cost_list= [self._subspace_sample_used[x] for x in x_list]
 
         #print("Fitted parameters: a={}, b={}, c={}, d={}".format(self._a, self._b, self._c, self._d))
         plt.figure()
-        plt.scatter(x_list, y_list, label='Data points', color='blue')
+        plt.errorbar(
+            x_list,
+            y_list,
+            yerr=sigma_list,
+            fmt='o',
+            color='blue',
+            label='Data points with error bars',
+            capsize=3,
+            markersize=4,
+            elinewidth=1
+        )
         plt.plot(x_fit, y_fit, label=f'Fitted line, R2={self._R_square_score}', color='orange')
 
+
+
+        # Select 5 uniformly spaced indices from the available data points
+        num_points_to_annotate = 5
+        indices = np.linspace(0, len(x_list) - 1, num=num_points_to_annotate, dtype=int)
+
+        # Annotate only the selected points
+        for i in indices:
+            x, y, s = x_list[i], y_list[i], sample_cost_list[i]
+            if s == 0:
+                continue
+            s_str = "{0:.1e}".format(s)  # Scientific notation like 1.2e+03
+            base, exp = s_str.split('e')
+            exp = int(exp)
+            label = r'${0}\times 10^{{{1}}}$'.format(base, exp)
+            plt.annotate(label, (x, y), textcoords="offset points", xytext=(0, 10), ha='center', fontsize=7)
+
+
+
         # ── NEW: highlight sweat spot ────────────────────────────────────────
-       
+    
         plt.scatter(self._sweat_spot, sweat_spot_y, color='purple', marker='o', s=50, label='Sweat Spot')
 
         # ground_x=self._ground_estimated_subspaceLER.keys()
@@ -730,7 +825,13 @@ class stratified_Scurve_LERcalc:
 
         pl_formatted = r'$P_L={0}\times 10^{{{1}}}$'.format(base, exp)
 
-        textstr = '\n'.join((
+
+        text_lines = [
+            r'$N_{LE}^{Clip}=%d$' % self._MIN_NUM_LE_EVENT,
+            r'$N_{sub}^{Gap}=%d$' % self._MAX_SAMPLE_GAP,
+            r'$N_{sub}^{Max}=%d$' % self._MAX_SUBSPACE_SAMPLE,      
+            r'$N_{total}=%d$' % self._sample_used,     
+            r'$r_{sweat}=%.2f$' % self._ratio,                         
             r'$\alpha=%.4f$' % alpha,
             r'$\mu =%.4f$' % (alpha*self._b),
             r'$\beta=%.4f$' % self._c,
@@ -740,12 +841,17 @@ class stratified_Scurve_LERcalc:
             r'$\#\mathrm{detector}=%d$' % self._num_detector,
             r'$\#\mathrm{noise}=%d$' % self._num_noise,
             pl_formatted
-        ))
+        ]
+        if time is not None:
+            time_str = r'$\mathrm{Time}=%.2f\,\mathrm{s}$' % time
+            text_lines.append(time_str)
+
+        textstr = '\n'.join(text_lines)
 
         fig = plt.gcf()
         fig.subplots_adjust(right=0.75)  # Make room on the right
         fig.text(0.78, 0.5, textstr,
-                fontsize=10,
+                fontsize=7,
                 va='center', ha='left',
                 bbox=dict(boxstyle='round', facecolor='white', alpha=0.95))
         # ──────────────────────────────────────────────────────────────────
@@ -753,11 +859,10 @@ class stratified_Scurve_LERcalc:
         plt.xlabel('Weight')
         plt.ylabel(r'$\log\left(\frac{0.5}{\mathrm{LER}} - 1\right)$')
         plt.title('Linear Fit of S-curve')
-        plt.legend()
+        plt.legend(fontsize=9)
         plt.tight_layout()
         plt.savefig(filename, dpi=300)
         plt.close()
-
 
 
     '''
@@ -831,7 +936,7 @@ class stratified_Scurve_LERcalc:
                     continue
                 if(self._ground_subspace_LE_count[weight]==0):
                     wlist.append(weight)
-                    sample_num_required=max(self._MAX_SAMPLE_GAP,self._ground_subspace_sample_used[weight]*10)
+                    sample_num_required=min(self._MAX_SAMPLE_GAP,self._ground_subspace_sample_used[weight]*10)
                     self._ground_subspace_sample_used[weight]+=sample_num_required  
                     self._ground_sample_used+=sample_num_required
                     slist.append(sample_num_required)
@@ -927,7 +1032,7 @@ class stratified_Scurve_LERcalc:
         #print("Saturate w: ",self._saturatew)
 
         # smooth curve ── fitted S-curve
-        x = np.linspace(1.001, self._saturatew, 1000)
+        x = np.linspace(self._t+0.1, self._saturatew, 1000)
         #x = np.linspace(self._d*1.01, self._saturatew, 1000)
         y = modified_sigmoid_function(x, self._a, self._b,self._c,self._t)
 
@@ -958,6 +1063,71 @@ class stratified_Scurve_LERcalc:
         """
         self._t = t
 
+    
+    """
+    In this function, we just try to sample the linear area
+    """
+    def fast_calculate_LER_from_file(self,filepath,pvalue,codedistance,figname,titlename, repeat=1):
+        self._error_rate=pvalue
+        self._circuit_level_code_distance=codedistance
+        ler_list=[]
+        sample_used_list=[]
+        r_squared_list=[]
+        Nerror_list=[]
+        time_list=[]
+        for i in range(repeat):
+            self.clear_all()
+            self.parse_from_file(filepath)
+            start = time.time()
+            self.determine_lower_w()
+            self.determine_saturated_w()
+            self.subspace_sampling()
+            self.fit_linear_area()
+            tmptime=time.time()
+
+
+            self.fit_log_S_model(figname+"-R"+str(i)+"Final.png",tmptime-start)
+            self.calc_logical_error_rate_after_curve_fitting()
+
+            end = time.time()
+            time_list.append(end - start)
+
+            self.plot_scurve(figname,titlename)
+            r_squared_list.append(self._R_square_score)
+            self._sample_used=np.sum(list(self._subspace_sample_used.values()))
+            # print("Final LER: ",self._LER)
+            # print("Total samples used: ",self._sample_used)
+            ler_list.append(self._LER)
+            sample_used_list.append(self._sample_used)
+            Nerror_list.append(sum(self._subspace_LE_count.values()))
+
+        # Compute means
+        self._LER = np.mean(ler_list)
+        self._sample_used = np.mean(sample_used_list)
+
+        # Compute standard deviations
+        ler_std = np.std(ler_list)
+        sample_used_std = np.std(sample_used_list)
+        r2_mean = np.mean(r_squared_list)
+        r2_std = np.std(r_squared_list)
+        Nerror_mean = np.mean(Nerror_list)
+        Nerror_std = np.std(Nerror_list)
+
+        time_mean = np.mean(time_list)
+        time_std = np.std(time_list)
+
+        # Print with scientific ± formatting
+        print("k: ", self._k_range)
+        print("beta: ",self._beta)
+        print("Subspaces: ", self._num_subspace)
+        print("R2: ", format_with_uncertainty(r2_mean, r2_std))
+        print("Samples(ours): ", format_with_uncertainty(self._sample_used, sample_used_std))
+        print("Time(our): ", format_with_uncertainty(time_mean, time_std))
+        print("PL(ours): ", format_with_uncertainty(self._LER, ler_std))
+        print("Nerror(ours): ", format_with_uncertainty(Nerror_mean, Nerror_std))
+
+
+
 
     def calculate_LER_from_file(self,filepath,pvalue,codedistance,figname,titlename, repeat=1):
         self._error_rate=pvalue
@@ -976,26 +1146,31 @@ class stratified_Scurve_LERcalc:
             self.determine_lower_w()
 
             #self.ground_truth_subspace_sampling()
-            #self._has_logical_errorw=self._t+50
+            #self._has_logical_errorw=self._t+4
             self.determine_saturated_w()
 
 
-            self.subspace_sampling_to_fit_curve(10000*self._num_subspace)
+            self.subspace_sampling_to_fit_curve(1000*self._num_subspace)
             '''
             Fit the curve first time just to get the estimated sweat spot
             '''
             self.fit_linear_area()
-            self.fit_log_S_model(figname+"First.png")
+            tmptime=time.time()
+            self.fit_log_S_model(figname+"-R"+str(i)+"First.png",tmptime-start)
             '''
             Second round of samples
             '''
             self.subspace_sampling()
+
             self.fit_linear_area()
-            self.fit_log_S_model(figname+"Final.png")
+            tmptime=time.time()
+            self.fit_log_S_model(figname+"-R"+str(i)+"Final.png",tmptime-start)
 
             self.calc_logical_error_rate_after_curve_fitting()
+
             end = time.time()
             time_list.append(end - start)
+
             self.plot_scurve(figname,titlename)
             r_squared_list.append(self._R_square_score)
             self._sample_used=np.sum(list(self._subspace_sample_used.values()))
@@ -1058,11 +1233,9 @@ def generate_all_surface_code_figure():
     ler=tmp.calculate_LER_from_file(filepath,p,"S9.png","Surface9")
 
 
-
     tmp=stratified_Scurve_LERcalc(p,sampleBudget=120000,num_subspace=10)
     filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface11"
     ler=tmp.calculate_LER_from_file(filepath,p,"S11.png","Surface11")
-
 
 
     tmp=stratified_Scurve_LERcalc(p,sampleBudget=140000,num_subspace=10)
@@ -1376,27 +1549,305 @@ if __name__ == "__main__":
 
 
 
-    p = 0.001
-    sample_budget = 100_000_000
+    # p = 0.0005
+    # sample_budget = 100_000_0000
 
-    for d in range(3, 28, 2):
+    # for d in range(9,17,2):
+    #     t = (d - 1) // 2
+
+    #     stim_path = f"C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface{d}"
+    #     figname = f"Surface{d}"
+    #     titlename = f"Surface{d}"
+    #     output_filename = f"Surface{d}.txt"
+
+    #     tmp = stratified_Scurve_LERcalc(p, sampleBudget=sample_budget, k_range=5, num_subspace=30, beta=4)
+    #     tmp.set_t(t)
+    #     tmp.set_sample_bound(
+    #         MIN_NUM_LE_EVENT=200,
+    #         SAMPLE_GAP=100,
+    #         MAX_SAMPLE_GAP=5000,
+    #         MAX_SUBSPACE_SAMPLE=2000000
+    #     )
+
+    #     with open(output_filename, "w") as f:
+    #         with redirect_stdout(f):
+    #             tmp.calculate_LER_from_file(stim_path, p, 0, figname, titlename, 5)
+    #             #tmp.fast_calculate_LER_from_file(stim_path, p, 0, figname, titlename, 1)
+
+
+
+
+    # p = 0.0005
+    # sample_budget = 100_000_0000
+
+    # for d in range(9,17,2):
+    #     t = (d - 1) // 2
+
+    #     stim_path = f"C:/Users/yezhu/Documents/Sampling/stimprograms/square/square{d}"
+    #     figname = f"Square{d}"
+    #     titlename = f"Square{d}"
+    #     output_filename = f"Square{d}.txt"
+
+    #     tmp = stratified_Scurve_LERcalc(p, sampleBudget=sample_budget, k_range=5, num_subspace=30, beta=4)
+    #     tmp.set_t(t)
+    #     tmp.set_sample_bound(
+    #         MIN_NUM_LE_EVENT=200,
+    #         SAMPLE_GAP=100,
+    #         MAX_SAMPLE_GAP=5000,
+    #         MAX_SUBSPACE_SAMPLE=2000000
+    #     )
+
+    #     with open(output_filename, "w") as f:
+    #         with redirect_stdout(f):
+    #             tmp.calculate_LER_from_file(stim_path, p, 0, figname, titlename, 5)
+    #             #tmp.fast_calculate_LER_from_file(stim_path, p, 0, figname, titlename, 1)
+
+
+    # p = 0.0005
+    # sample_budget = 100_000_0000
+
+    # for d in range(15,17,2):
+    #     t = (d - 1) // 2
+
+    #     stim_path = f"C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon{d}"
+    #     figname = f"Hexagon"
+    #     titlename = f"Hexagon"
+    #     output_filename = f"Hexagon.txt"
+
+    #     tmp = stratified_Scurve_LERcalc(p, sampleBudget=sample_budget, k_range=5, num_subspace=20, beta=4)
+    #     tmp.set_t(t)
+    #     tmp.set_sample_bound(
+    #         MIN_NUM_LE_EVENT=150,
+    #         SAMPLE_GAP=100,
+    #         MAX_SAMPLE_GAP=5000,
+    #         MAX_SUBSPACE_SAMPLE=1500000
+    #     )
+
+    #     with open(output_filename, "w") as f:
+    #         with redirect_stdout(f):
+    #             tmp.calculate_LER_from_file(stim_path, p, 0, figname, titlename, 5)
+    #             #tmp.fast_calculate_LER_from_file(stim_path, p, 0, figname, titlename, 1)
+
+
+
+    # p = 0.001
+    # sample_budget = 100_000_0000
+    # for d in range(13, 17, 2):
+    #     t = (d - 1) // 2
+
+    #     stim_path = f"C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon{d}"
+    #     figname = f"Hexagon{d}-{p}"
+    #     titlename = f"Hexagon{d}-{p}"
+    #     output_filename = f"Hexagon{d}-{p}.txt"
+
+    #     tmp = stratified_Scurve_LERcalc(p, sampleBudget=sample_budget, k_range=5, num_subspace=8, beta=4)
+    #     tmp.set_t(t)
+    #     tmp.set_sample_bound(
+    #         MIN_NUM_LE_EVENT=100,
+    #         SAMPLE_GAP=100_000,
+    #         MAX_SAMPLE_GAP=5000,
+    #         MAX_SUBSPACE_SAMPLE=1500000
+    #     )
+
+    #     with open(output_filename, "w") as f:
+    #         with redirect_stdout(f):
+    #             tmp.calculate_LER_from_file(stim_path, p, 0, figname, titlename, 5)
+
+
+    # p = 0.001
+    # sample_budget = 100_000_0000
+    # for d in range(13, 17, 2):
+    #     t = (d - 1) // 2
+
+    #     stim_path = f"C:/Users/yezhu/Documents/Sampling/stimprograms/square/square{d}"
+    #     figname = f"square{d}-{p}"
+    #     titlename = f"square{d}-{p}"
+    #     output_filename = f"square{d}-{p}.txt"
+
+    #     tmp = stratified_Scurve_LERcalc(p, sampleBudget=sample_budget, k_range=5, num_subspace=8, beta=4)
+    #     tmp.set_t(t)
+    #     tmp.set_sample_bound(
+    #         MIN_NUM_LE_EVENT=100,
+    #         SAMPLE_GAP=100_000,
+    #         MAX_SAMPLE_GAP=5000,
+    #         MAX_SUBSPACE_SAMPLE=1500000
+    #     )
+
+    #     with open(output_filename, "w") as f:
+    #         with redirect_stdout(f):
+    #             tmp.calculate_LER_from_file(stim_path, p, 0, figname, titlename, 5)
+
+
+
+    # p = 0.0001
+    # sample_budget = 100_000_0000
+    # for d in range(9, 11, 2):
+    #     t = (d - 1) // 2
+
+    #     stim_path = f"C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface{d}"
+    #     figname = f"Surface{d}"
+    #     titlename = f"Surface{d}"
+    #     output_filename = f"surface{d}.txt"
+
+    #     tmp = stratified_Scurve_LERcalc(p, sampleBudget=sample_budget, k_range=5, num_subspace=30, beta=4)
+    #     tmp.set_t(t)
+    #     tmp.set_sample_bound(
+    #         MIN_NUM_LE_EVENT=800,
+    #         SAMPLE_GAP=100,
+    #         MAX_SAMPLE_GAP=50000,
+    #         MAX_SUBSPACE_SAMPLE=30000000
+    #     )
+
+    #     with open(output_filename, "w") as f:
+    #         with redirect_stdout(f):
+    #             tmp.calculate_LER_from_file(stim_path, p, 0, figname, titlename, 5)
+
+
+
+    # for d in range(5, 9, 2):
+    #     t = (d - 1) // 2
+
+    #     stim_path = f"C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon{d}"
+    #     figname = f"hexagon{d}"
+    #     titlename = f"hexagon{d}"
+    #     output_filename = f"hexagon{d}.txt"
+
+    #     tmp = stratified_Scurve_LERcalc(p, sampleBudget=sample_budget, k_range=5, num_subspace=30, beta=4)
+    #     tmp.set_t(t)
+    #     tmp.set_sample_bound(
+    #         MIN_NUM_LE_EVENT=300,
+    #         SAMPLE_GAP=100,
+    #         MAX_SAMPLE_GAP=50000,
+    #         MAX_SUBSPACE_SAMPLE=5000000
+    #     )
+
+    #     with open(output_filename, "w") as f:
+    #         with redirect_stdout(f):
+    #             tmp.calculate_LER_from_file(stim_path, p, 0, figname, titlename, 5)
+
+
+    # p = 0.0001
+    # sample_budget = 100_000_0000
+    # for d in range(3, 7, 2):
+    #     t = (d - 1) // 2
+
+    #     stim_path = f"C:/Users/yezhu/Documents/Sampling/stimprograms/square/square{d}"
+    #     figname = f"square{d}"
+    #     titlename = f"square{d}"
+    #     output_filename = f"square{d}.txt"
+
+    #     tmp = stratified_Scurve_LERcalc(p, sampleBudget=sample_budget, k_range=5, num_subspace=30, beta=4)
+    #     tmp.set_t(t)
+    #     tmp.set_sample_bound(
+    #         MIN_NUM_LE_EVENT=300,
+    #         SAMPLE_GAP=100,
+    #         MAX_SAMPLE_GAP=50000,
+    #         MAX_SUBSPACE_SAMPLE=5000000
+    #     )
+
+    #     with open(output_filename, "w") as f:
+    #         with redirect_stdout(f):
+    #             tmp.calculate_LER_from_file(stim_path, p, 0, figname, titlename, 5)
+
+
+
+
+
+    # p = 0.001
+    # sample_budget = 100_000_0000
+    # for d in range(15, 17, 2):
+    #     t = (d - 1) // 2
+
+    #     stim_path = f"C:/Users/yezhu/Documents/Sampling/stimprograms/square/square{d}"
+    #     figname = f"square{d}"
+    #     titlename = f"square{d}"
+    #     output_filename = f"square{d}.txt"
+
+    #     tmp = stratified_Scurve_LERcalc(p, sampleBudget=sample_budget, k_range=5, num_subspace=15, beta=4)
+    #     tmp.set_t(t)
+    #     tmp.set_sample_bound(
+    #         MIN_NUM_LE_EVENT=300,
+    #         SAMPLE_GAP=100,
+    #         MAX_SAMPLE_GAP=50000,
+    #         MAX_SUBSPACE_SAMPLE=1000000
+    #     )
+
+    #     with open(output_filename, "w") as f:
+    #         with redirect_stdout(f):
+    #             tmp.calculate_LER_from_file(stim_path, p, 0, figname, titlename, 5)
+
+
+
+    p = 0.001
+    sample_budget = 100_000_0000
+    for d in range(17, 19, 2):
         t = (d - 1) // 2
 
-        stim_path = f"C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface{d}"
-        figname = f"Surface{d}"
-        titlename = f"Surface{d}"
-        output_filename = f"surface{d}.txt"
+        stim_path = f"C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon{d}"
+        figname = f"hexagon{d}"
+        titlename = f"hexagon{d}"
+        output_filename = f"hexagon{d}.txt"
 
-        tmp = stratified_Scurve_LERcalc(p, sampleBudget=sample_budget, k_range=5, num_subspace=8, beta=4)
+        tmp = stratified_Scurve_LERcalc(p, sampleBudget=sample_budget, k_range=5, num_subspace=12, beta=4)
         tmp.set_t(t)
         tmp.set_sample_bound(
-            MIN_NUM_LE_EVENT=100,
-            SAMPLE_GAP=100_000,
-            MAX_SAMPLE_GAP=1_000_000,
-            MAX_SUBSPACE_SAMPLE=1_000_000
+            MIN_NUM_LE_EVENT=200,
+            SAMPLE_GAP=100,
+            MAX_SAMPLE_GAP=10000,
+            MAX_SUBSPACE_SAMPLE=300000
         )
 
         with open(output_filename, "w") as f:
             with redirect_stdout(f):
                 tmp.calculate_LER_from_file(stim_path, p, 0, figname, titlename, 5)
 
+
+    p = 0.001
+    sample_budget = 100_000_0000
+
+    for d in range(17,19,2):
+        t = (d - 1) // 2
+
+        stim_path = f"C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface{d}"
+        figname = f"Surface{d}"
+        titlename = f"Surface{d}"
+        output_filename = f"Surface{d}.txt"
+
+        tmp = stratified_Scurve_LERcalc(p, sampleBudget=sample_budget, k_range=5, num_subspace=30, beta=4)
+        tmp.set_t(t)
+        tmp.set_sample_bound(
+            MIN_NUM_LE_EVENT=200,
+            SAMPLE_GAP=100,
+            MAX_SAMPLE_GAP=10000,
+            MAX_SUBSPACE_SAMPLE=300000
+        )
+
+        with open(output_filename, "w") as f:
+            with redirect_stdout(f):
+                tmp.calculate_LER_from_file(stim_path, p, 0, figname, titlename, 5)
+                #tmp.fast_calculate_LER_from_file(stim_path, p, 0, figname, titlename, 1)
+
+
+
+    p = 0.001
+    sample_budget = 100_000_0000
+    for d in range(17, 19, 2):
+        t = (d - 1) // 2
+
+        stim_path = f"C:/Users/yezhu/Documents/Sampling/stimprograms/square/square{d}"
+        figname = f"square{d}"
+        titlename = f"square{d}"
+        output_filename = f"square{d}.txt"
+
+        tmp = stratified_Scurve_LERcalc(p, sampleBudget=sample_budget, k_range=5, num_subspace=15, beta=4)
+        tmp.set_t(t)
+        tmp.set_sample_bound(
+            MIN_NUM_LE_EVENT=200,
+            SAMPLE_GAP=100,
+            MAX_SAMPLE_GAP=50000,
+            MAX_SUBSPACE_SAMPLE=300000
+        )
+
+        with open(output_filename, "w") as f:
+            with redirect_stdout(f):
+                tmp.calculate_LER_from_file(stim_path, p, 0, figname, titlename, 5)

@@ -24,7 +24,7 @@ def generate_circuit(filepath: str | Path, distance: int = 3) -> Path:
     # 1. Make the circuit and rewrite it
     stim_circuit = stim.Circuit.generated(
         "surface_code:rotated_memory_z",
-        rounds=3,
+        rounds=3* distance,
         distance=distance
     ).flattened()
 
@@ -43,8 +43,16 @@ def generate_circuit(filepath: str | Path, distance: int = 3) -> Path:
 
 
 if __name__=="__main__":
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/surface3r3"
-    generate_circuit(filepath, distance= 3)
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface37"
+    generate_circuit(filepath, distance= 37)
+
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface39"
+    generate_circuit(filepath, distance= 39)
+
+    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface41"
+    generate_circuit(filepath, distance= 41)
+
+
     # filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition7"
     # generate_circuit(filepath, distance= 7)
 
