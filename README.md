@@ -155,34 +155,64 @@ if __name__ == "__main__":
 
 
 
-# Use Monte to test any circuit
+# Use Monte random fault injection we implemeted to test any circuit
 
 In this part, I explain how to test any circuit with the widely use random fault injection method.
 
 
 
 ```python
-from ScaLER import stimLERcalc
+from contextlib import redirect_stdout
+from ScaLER.stimLER import stimLERcalc
+
+if __name__ == "__main__":
 
 
-p=0.001
-filepath="your/file/path/to/circuit"
-dlist=[15]
-repeat=5
-stim_path = base_dir+rel+str(d)
-# 3) build your output filename:
-out_fname =  result_dir+str(p)+"-"+str(code_type)+str(d)+"-resultMonte.txt"     # e.g. "surface3-result.txt"
-# 4) redirect prints for just this file:
+    p=0.001
+    filepath="C:/Users/yezhu/Documents/ScaLER/stimprograms/surface/surface3"
+    d=3
+    repeat=5
+    sampleBudget=500000
+    # 3) build your output filename:
+    out_fname ="resultMonte.txt"     # e.g. "surface3-result.txt"
+    # 4) redirect prints for just this file:
 
-with open(out_fname, "w") as outf, redirect_stdout(outf):
-    print(f"---- Processing {stim_path} ----")
+    with open(out_fname, "w") as outf, redirect_stdout(outf):
 
-    calculator=stimLERcalc(10)
-    # pass the string path into your function:
-    ler = calculator.calculate_LER_from_my_random_sampler(500000000, filepath, p,repeat)
+        calculator=stimLERcalc(MIN_NUM_LE_EVENT=10)
+        # pass the string path into your function:
+        ler = calculator.calculate_LER_from_my_random_sampler(sampleBudget,filepath, p, repeat)    
 ```
 
 
+# Use Stim and Sinter to test any circuit
+
+
+You can also test the circuit with Stim optimized by Sinter. 
+
+
+```python
+from contextlib import redirect_stdout
+from ScaLER.stimLER import stimLERcalc
+
+if __name__ == "__main__":
+
+
+    p=0.001
+    filepath=f"your/path/stimprograms/surface/surface7"
+    d=3
+    repeat=5
+    sampleBudget=500000
+    # 3) build your output filename:
+    out_fname ="resultSinter.txt"     # e.g. "surface3-result.txt"
+    # 4) redirect prints for just this file:
+
+    with open(out_fname, "w") as outf, redirect_stdout(outf):
+
+        calculator=stimLERcalc(MIN_NUM_LE_EVENT=10)
+        # pass the string path into your function:   
+        ler  = calculator.calculate_LER_from_file_sinter(sampleBudget,filepath, p, repeat)
+```
 
 
 # Use ScaLER to test any circuit
