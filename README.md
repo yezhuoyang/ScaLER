@@ -1,5 +1,6 @@
-# Sampling
-This is the compiler implemented in C++ that sampling and calculate logical error rate. 
+# ScaLER
+
+Scalable testing of logical error rate for QEC circuit. 
 
 
 
@@ -89,21 +90,96 @@ The python code is divided into different modules. For example, to run the test_
 
 
 
-# Plan of development
+# Symbolic calculator of LER
+
+In this part, I explain how to get the ground truth of logical error rate by Symbolic calculator. Reader can reproduce Table 2
 
 
-- [X] **Integrate pybind11**: Enable Python to directly call C++ functions  
-- [X] **Optimize python interface**: Optimize the interface which convert C++ generated samples to python samples
-- [X] **Verify QEPG correctness on small-scale examples**  
-- [X] **Construct the parity propagation matrix directly** during detector matrix construction  
-- [X] **Validate QEPG at larger scale** by comparing simulation results with STIM  
-- [ ] **Optimize performance** using multithreading or other parallelism strategies  
-- [X] **LER symbolic calculator** Calculate logical error rate(of small circuit) by dynamic algorithm
-- [X] **LER calculation benchmark(Exact)** Set up a benchmark of small circuit with known logical error rate
-- [X] **LER calculation benchmark(Compare with STIM)** Set up a benchmark of surface code/repetition code
-- [ ] **QEPG generating speed benchmark** Set up a benchmark comparing the time used to generate the QEPG graph
-- [ ] **Sampling rate benchmark** Set up a benchmark comparing the time used to get 1 million samples
-- [X] **Truncate weight of symbolic calculator**  Add a maximum weight in the dynamic algorithm, since we only care about small weight(W=1,2,3)
-- [ ] **Use Neyman allocation to distribute samples**  Add a maximum weight in the dynamic algorithm, since we only care about small weight(W=1,2,3)
-- [ ] **Decide number of samples automatically** Let the sampler to decide how many sample it takes
-- [ ] **Return QEPG graph** Return QEPG graph so it doesn't have to be reconstructed again
+
+```python
+from ScaLER import symbolicLER
+
+tmp=symbolicLER(0.001)
+filepath="your/file/path/to/circuit"
+print(tmp.calculate_LER_from_file(filepath,0.001))
+p=0.001
+
+num_noise=tmp._num_noise
+
+# for weight in range(1,11):
+#     print("LER in the subspace {} is {}".format(weight,tmp.evaluate_LER_subspace(p,weight)))        
+
+
+for weight in range(1,12):
+    print("SubspaceLER {} is {}".format(weight,tmp.subspace_LER(weight)))     
+```
+
+
+
+
+# Use Monte to test any circuit
+
+In this part, I explain how to test any circuit with the widely use random fault injection method.
+
+
+
+```python
+from ScaLER import stimLERcalc
+
+
+p=0.001
+filepath="your/file/path/to/circuit"
+dlist=[15]
+repeat=5
+stim_path = base_dir+rel+str(d)
+# 3) build your output filename:
+out_fname =  result_dir+str(p)+"-"+str(code_type)+str(d)+"-resultMonte.txt"     # e.g. "surface3-result.txt"
+# 4) redirect prints for just this file:
+
+with open(out_fname, "w") as outf, redirect_stdout(outf):
+    print(f"---- Processing {stim_path} ----")
+
+    calculator=stimLERcalc(10)
+    # pass the string path into your function:
+    ler = calculator.calculate_LER_from_my_random_sampler(500000000, filepath, p,repeat)
+```
+
+
+
+
+# Use ScaLER to test any circuit
+
+In this part, I explain how to use ScaLER to test and input circuit. I will explain how to change hyper parameters. In a python script, run the folloing code:
+
+
+```python
+from ScaLER import stratified_Scurve_LERcalc
+p = 0.001
+repeat=5
+sample_budget = 100_000_0000
+t = (d - 1) // 2
+stim_path = f"C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface{d}"
+figname = f"Surface{d}"
+titlename = f"Surface{d}"
+output_filename = f"Surface{d}.txt"
+testinstance = stratified_Scurve_LERcalc(p, sampleBudget=sample_budget, k_range=5, num_subspace=6, beta=4)
+testinstance.set_t(t)
+testinstance.set_sample_bound(
+    MIN_NUM_LE_EVENT=100,
+    SAMPLE_GAP=100,
+    MAX_SAMPLE_GAP=5000,
+    MAX_SUBSPACE_SAMPLE=50000
+)
+with open(output_filename, "w") as f:
+    with redirect_stdout(f):
+        testinstance.calculate_LER_from_file(stim_path, p, 0, figname, titlename, repeat)
+```
+
+Under the same directory, you will see a output figure which shows the fitted curve, and a output.txt file which shows all results. 
+
+
+
+
+
+
+
