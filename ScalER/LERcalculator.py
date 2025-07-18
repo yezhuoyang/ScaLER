@@ -1,9 +1,9 @@
 import stim
 import pymatching
-from LERcalc.interface import *
+from ScaLER.interface import *
 from pathlib import Path
 import numpy as np
-from LERcalc.stimparser import rewrite_stim_code
+from ScaLER.stimparser import rewrite_stim_code
 
 
 

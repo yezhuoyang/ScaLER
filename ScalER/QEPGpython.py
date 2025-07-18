@@ -1,4 +1,4 @@
-from LERcalc.clifford import *
+from ScaLER.clifford import *
 
 
 

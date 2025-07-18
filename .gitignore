@@ -35,3 +35,4 @@ hexagonresults/*
 squareresults/*
 *.pdf
 ScalER/__pycache__/*
+tmp.py

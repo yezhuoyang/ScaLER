@@ -1,6 +1,6 @@
 
 from QEPG.QEPG import return_samples,return_samples_many_weights,return_detector_matrix,return_samples_many_weights_numpy,return_samples_many_weights_separate_obs, compile_QEPG, return_samples_many_weights_separate_obs_with_QEPG, return_samples_with_fixed_QEPG
-from LERcalc.clifford import *
+from ScaLER.clifford import *
 import math
 import pymatching
 from scipy.optimize import curve_fit
@@ -13,6 +13,8 @@ from contextlib import redirect_stdout
 import warnings
 from scipy.optimize import OptimizeWarning
 import pickle
+import time
+
 
 
 def format_with_uncertainty(value, std):

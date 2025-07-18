@@ -1,6 +1,6 @@
-from LERcalc.clifford import *
+from ScaLER.clifford import *
 import pymatching
-from LERcalc.stimparser import *
+from ScaLER.stimparser import *
 import time
 import os
 from contextlib import redirect_stdout

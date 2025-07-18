@@ -1,8 +1,8 @@
 import sys
 from sympy import symbols, binomial, Rational, simplify, latex
-from LERcalc.clifford import *
-from LERcalc.stimparser import *
-from LERcalc.QEPGpython import *
+from ScaLER.clifford import *
+from ScaLER.stimparser import *
+from ScaLER.QEPGpython import *
 import pymatching
 
 # ----------------------------------------------------------------------
