@@ -33,3 +33,5 @@ output2
 Allresults/*
 hexagonresults/*
 squareresults/*
+*.pdf
+ScalER/__pycache__/*
