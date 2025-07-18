@@ -186,26 +186,31 @@ In this part, I explain how to use ScaLER to test and input circuit. I will expl
 
 
 ```python
-from ScaLER import stratified_Scurve_LERcalc
-p = 0.001
-repeat=5
-sample_budget = 100_000_0000
-t = (d - 1) // 2
-stim_path = f"C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface{d}"
-figname = f"Surface{d}"
-titlename = f"Surface{d}"
-output_filename = f"Surface{d}.txt"
-testinstance = stratified_Scurve_LERcalc(p, sampleBudget=sample_budget, k_range=5, num_subspace=6, beta=4)
-testinstance.set_t(t)
-testinstance.set_sample_bound(
-    MIN_NUM_LE_EVENT=100,
-    SAMPLE_GAP=100,
-    MAX_SAMPLE_GAP=5000,
-    MAX_SUBSPACE_SAMPLE=50000
-)
-with open(output_filename, "w") as f:
-    with redirect_stdout(f):
-        testinstance.calculate_LER_from_file(stim_path, p, 0, figname, titlename, repeat)
+from ScaLER.stratifiedScurve import stratified_Scurve_LERcalc
+from contextlib import redirect_stdout
+
+if __name__ == "__main__":
+
+    d=7
+    p = 0.001
+    repeat=5
+    sample_budget = 100_000_0000
+    t = (d - 1) // 2
+    stim_path = f"Relative/Path/ScaLER/stimprograms/surface/surface{d}"
+    figname = f"Surface{d}"
+    titlename = f"Surface{d}"
+    output_filename = f"Surface{d}.txt"
+    testinstance = stratified_Scurve_LERcalc(p, sampleBudget=sample_budget, k_range=5, num_subspace=6, beta=4)
+    testinstance.set_t(t)
+    testinstance.set_sample_bound(
+        MIN_NUM_LE_EVENT=100,
+        SAMPLE_GAP=100,
+        MAX_SAMPLE_GAP=5000,
+        MAX_SUBSPACE_SAMPLE=50000
+    )
+    with open(output_filename, "w") as f:
+        with redirect_stdout(f):
+            testinstance.calculate_LER_from_file(stim_path, p, 0, figname, titlename, repeat)
 ```
 
 Under the same directory, you will see a output figure which shows the fitted curve, and a output.txt file which shows all results. 
