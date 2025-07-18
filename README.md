@@ -130,21 +130,26 @@ In this part, I explain how to get the ground truth of logical error rate by Sym
 
 
 ```python
-from ScaLER import symbolicLER
-
-tmp=symbolicLER(0.001)
-filepath="your/file/path/to/circuit"
-print(tmp.calculate_LER_from_file(filepath,0.001))
-p=0.001
-
-num_noise=tmp._num_noise
-
-# for weight in range(1,11):
-#     print("LER in the subspace {} is {}".format(weight,tmp.evaluate_LER_subspace(p,weight)))        
+from ScaLER.stratifiedScurve import stratified_Scurve_LERcalc
+from contextlib import redirect_stdout
+from ScaLER.symbolicLER import symbolicLER
 
 
-for weight in range(1,12):
-    print("SubspaceLER {} is {}".format(weight,tmp.subspace_LER(weight)))     
+if __name__ == "__main__":
+
+    testinstance=symbolicLER(0.001)
+    filepath="your/file/path/to/circuit"
+    print(testinstance.calculate_LER_from_file(filepath,0.001))
+    p=0.001
+
+    num_noise=testinstance._num_noise
+
+    for weight in range(1,num_noise):
+        print("LER in the subspace {} is {}".format(weight,testinstance.evaluate_LER_subspace(p,weight)))        
+
+
+    for weight in range(1,num_noise):
+        print("SubspaceLER {} is {}".format(weight,testinstance.subspace_LER(weight)))     
 ```
 
 
