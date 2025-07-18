@@ -109,9 +109,6 @@ void QEPG::backward_graph_construction(){
     Store the propagation from pauli noise to qubits
     */
     const size_t total_meas=circuit_.get_num_meas();
-    // std::vector<Row> current_x_prop(circuit_.get_num_qubit(),Row(total_meas));
-    // std::vector<Row> current_y_prop(circuit_.get_num_qubit(),Row(total_meas));
-    // std::vector<Row> current_z_prop(circuit_.get_num_qubit(),Row(total_meas));
 
 
     /*
@@ -192,30 +189,18 @@ void QEPG::backward_graph_construction(){
         */
         if(name=="R"){
             size_t qindex=gate.qubits[0];
-            // current_x_prop[qindex].reset();
-            // current_y_prop[qindex].reset();
-            // current_z_prop[qindex].reset();     
 
             current_x_parity_prop[qindex].reset();
             current_y_parity_prop[qindex].reset();  
             current_z_parity_prop[qindex].reset();                      
 
-            // for(size_t j=0;j<total_meas;j++){
-            //         current_x_prop[qindex].set(j,false);
-            //         current_y_prop[qindex].set(j,false);   
-            //         current_z_prop[qindex].set(j,false);       
-            // }
         }
         /*
         *   When the gate is a CNOT
         */
         if(name=="cnot"){
             size_t qcontrol=gate.qubits[0];           
-            size_t qtarget=gate.qubits[1];
-            // current_x_prop[qcontrol]^=current_x_prop[qtarget];
-            // current_z_prop[qtarget]^=current_z_prop[qcontrol];        
-            // current_y_prop[qcontrol]^=current_x_prop[qtarget];           
-            // current_y_prop[qtarget]^=current_z_prop[qcontrol];     
+            size_t qtarget=gate.qubits[1];   
             current_x_parity_prop[qcontrol]^=current_x_parity_prop[qtarget];
             current_z_parity_prop[qtarget]^=current_z_parity_prop[qcontrol];
             current_y_parity_prop[qcontrol]^=current_x_parity_prop[qtarget];
@@ -225,13 +210,9 @@ void QEPG::backward_graph_construction(){
 
         if(name=="h"){
             size_t qindex=gate.qubits[0];
-            // current_x_prop[qindex].swap(current_z_prop[qindex]);   // fast, no copy
             current_x_parity_prop[qindex].swap(current_z_parity_prop[qindex]);
         }
     }
-    // auto t1 = clock::now();                               // stop section‑1
-    // auto compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
-    // std::cout << "[Backword detector matrix construction:] " << compile_us / 1'000.0 << "ms\n";
 } 
 
 
@@ -377,28 +358,6 @@ void QEPG::backward_graph_construction_Eigen(){
             rowx.swap(rowz);
         }
     }
-    // auto t1 = clock::now();                               // stop section‑1
-    // auto compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
-    // std::cout << "[Backword detector matrix construction:] " << compile_us / 1'000.0 << "ms\n";
-    /*
-    Compute the transpose of detectorMatrix for future calculation
-    */
-    // t0 = clock::now();                               // start timer
-
-    // //transpose_matrix(detectorMatrix_,detectorMatrixTranspose_);
-   
-
-    // t1 = clock::now();                               // stop section‑1
-    // compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
-    // std::cout << "[Transpose matrix:] " << compile_us / 1'000.0 << "ms\n";
-    // t0 = clock::now();                               // start timer
-    
-    //compute_parityPropMatrix_Eigen();
-    // t1 = clock::now();                               // stop section‑1
-    // compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
-    // std::cout << "[ compute_parityPropMatrix:] " << compile_us / 1'000.0 << "ms\n";    
-
-
 }
 
 
@@ -457,12 +416,6 @@ void QEPG::backward_parity_matrix_construction_Eigen(){
         */
         if(name=="DEPOLARIZE1"){
                 size_t qindex=gate.qubits[0];
-
-
-                
-                // detectorMatrixTransposeEigen_.row(current_noise_index)=current_x_prop.row(qindex);
-                // detectorMatrixTransposeEigen_.row(total_noise_+current_noise_index)=current_y_prop.row(qindex);
-                // detectorMatrixTransposeEigen_.row(total_noise_*2+current_noise_index)=current_z_prop.row(qindex);
 
                 current_noise_index--;
                 continue;

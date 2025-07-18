@@ -277,29 +277,13 @@ class stratifiedLERcalc:
 
 if __name__ == "__main__":
     tmp=stratifiedLERcalc(0.001,sampleBudget=15000000,num_subspace=5)
-    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/repetition/repetition7"
-    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
-    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface7"
-    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/1cnot"
-    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/surface3r1"
-    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/cnot01h01"
-    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/1cnoth"
-    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/simpleh"
-    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/1cnot1R"
-    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/2cnot2R"
     filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/simple"
     tmp.parse_from_file(filepath)
     tmp.sample_all_subspace(11*1000000)
 
-    #tmp.subspace_sampling()
-
-
-
     LER=tmp.calculate_LER()
 
     print(LER)
-
-    # num_noise=tmp._num_noise
 
     for weight in range(1,12):
         #print("LER in the subspace {} is {}".format(weight,tmp.get_LER_subspace_no_weight(weight)))    

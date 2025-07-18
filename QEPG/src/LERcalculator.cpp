@@ -34,18 +34,7 @@ inline py::array_t<bool> bitset_rows_to_numpy(const std::vector<QEPG::Row>& rows
     if(n_cols==0)
         return py::array_t<bool>({n_rows, n_cols});
 
-    // create a NumPy array of shape (n_rows, n_cols), dtype=bool
     py::array_t<bool> out({n_rows, n_cols});
-    // auto buf = out.mutable_unchecked<2>();     // raw, bounds-checked only in debug
-
-    // for (std::size_t r = 0; r < n_rows; ++r) {
-    //     const auto& bits = rows[r];            // the current bitset
-    //     for (std::size_t c = 0; c < n_cols; ++c) {
-    //         buf(r, c) = bits[c];               // copy bit by bit
-    //     }
-    // }
-    // return out;                                // pybind11 returns the array by value
-    //Raw buffer pointer(One row=n_cols bytes)
     auto req=out.request();
     auto* base=static_cast<std::uint8_t*>(req.ptr);
     const auto row_stride=n_cols;
@@ -56,7 +45,6 @@ inline py::array_t<bool> bitset_rows_to_numpy(const std::vector<QEPG::Row>& rows
 
     //How many bits stored in this block, either 32 or 64
     constexpr std::size_t WORD_BITS = std::numeric_limits<block_t>::digits;
-
 
 
     //-----parallel over rows-------------------------------
@@ -108,23 +96,6 @@ inline void convert_bitset_row_to_boolean_separate_obs(std::vector<std::vector<b
         }
 }
 
-
-/*
-Return a three 
-*/
-// inline void convert_bitset_row_to_boolean_separate_obs_numpy(py::array_t<bool>& detectionresult,py::array_t<bool>& obsresult,const size_t& begin_index,const std::vector<QEPG::Row>& samplecontainer){
-//         auto detector_buf = detectionresult.mutable_unchecked<2>();     // raw, bounds-checked only in debug
-//         auto observable_buf = obsresult.mutable_unchecked<1>(); 
-//         auto row_index=0;
-//         for (const auto& bitset_row : samplecontainer) {
-//             std::vector<bool> bool_row(bitset_row.size()-1);
-//             for (size_t i = 0; i < bitset_row.size()-1; ++i) {
-//                 detector_buf(begin_index+row_index,i)= bitset_row[i]; 
-//             }
-//             observable_buf(begin_index+row_index)=bitset_row[bitset_row.size()-1];
-//             row_index++;
-//         }
-// }
 
 
 inline void convert_bitset_row_to_boolean_separate_obs_numpy(
@@ -255,29 +226,10 @@ py::array_t<bool> return_samples_numpy(const std::string& prog_str,size_t weight
 
     std::vector<QEPG::Row> samplecontainer;
 
-    // using clock     = std::chrono::steady_clock;          // monotonic, good for benchmarking
-    // using microsec  = std::chrono::microseconds;
-    // auto t0 = clock::now();                               // start timer
     sampler.generate_many_output_samples(graph,samplecontainer,weight,shots);
 
-
-
-    // auto t1 = clock::now();                               // stop section‑1
-    // auto compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
-    // std::cout << "[Time to generate these samples:] " << compile_us / 1'000.0 << "ms\n";
-
-
     py::array_t<bool>  result;
-    // t0 = clock::now();                               // start timer
     result=bitset_rows_to_numpy(samplecontainer);
-    // t1 = clock::now();                               // stop section‑1
-    // compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
-    // std::cout << "[Time to convert it to bit vector:] " << compile_us / 1'000.0 << "ms\n";
-
-
-    // for(QEPG::Row parityresult: samplecontainer){
-    //     QEPG::print_bit_row(parityresult);
-    // }
     return std::move(result);    
 }
 
@@ -298,26 +250,12 @@ py::array_t<bool> return_samples_numpy(const std::string& prog_str,size_t weight
 
     std::vector<QEPG::Row> samplecontainer;
 
-    // using clock     = std::chrono::steady_clock;          // monotonic, good for benchmarking
-    // using microsec  = std::chrono::microseconds;
-    // auto t0 = clock::now();       
-    
-    // start timer
     sampler.generate_all_samples_with_fixed_weight(graph,samplecontainer,weight);
-
-
-
-    // auto t1 = clock::now();                               // stop section‑1
-    // auto compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
-    // std::cout << "[Time to generate these samples:] " << compile_us / 1'000.0 << "ms\n";
 
 
     std::vector<std::vector<bool>> result;
     convert_bitset_row_to_boolean(result,samplecontainer);
 
-    // for(QEPG::Row parityresult: samplecontainer){
-    //     QEPG::print_bit_row(parityresult);
-    // }
     return result;
 }
 
@@ -336,17 +274,7 @@ return_samples_with_noise_vector(const std::string & prog_str,size_t weight, siz
     std::vector<QEPG::Row> samplecontainer;
     std::vector<std::vector<SAMPLE::singlePauli>> noisecontainer;
 
-
-    // using clock     = std::chrono::steady_clock;          // monotonic, good for benchmarking
-    // using microsec  = std::chrono::microseconds;
-    // auto t0 = clock::now();                               // start timer
-    //sampler.generate_many_output_samples(graph,samplecontainer,weight,shots);
     sampler.generate_many_output_samples_with_noise_vector(graph,noisecontainer,samplecontainer,weight,shots);
-
-
-    // auto t1 = clock::now();                               // stop section‑1
-    // auto compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
-    // std::cout << "[Time to generate these samples:] " << compile_us / 1'000.0 << "ms\n";
 
 
     std::vector<std::vector<bool>> sampleresult;
@@ -383,16 +311,12 @@ std::vector<std::vector<std::vector<bool>>> return_samples_many_weights(const st
     result.reserve(weight.size());
 
     for(size_t i=0;i<weight.size();++i){
-        // std::cout<<"Weight="<<weight[i]<<"\n";
         samplecontainer.clear();
         tmpresult.clear();
         sampler.generate_many_output_samples(graph,samplecontainer,weight[i],shots[i]);
         convert_bitset_row_to_boolean(tmpresult,samplecontainer);
         result.emplace_back(tmpresult);
     }
-    // for(QEPG::Row parityresult: samplecontainer){
-    //     QEPG::print_bit_row(parityresult);
-    // }
     return std::move(result);
 }
 
@@ -420,16 +344,12 @@ std::vector<py::array_t<bool>> return_samples_many_weights_numpy(const std::stri
     result.reserve(weight.size());
 
     for(size_t i=0;i<weight.size();++i){
-        // std::cout<<"Weight="<<weight[i]<<"\n";
         samplecontainer.clear();
         py::array_t<bool> tmpresult;
         sampler.generate_many_output_samples(graph,samplecontainer,weight[i],shots[i]);
         tmpresult=bitset_rows_to_numpy(samplecontainer);
         result.emplace_back(std::move(tmpresult));
     }
-    // for(QEPG::Row parityresult: samplecontainer){
-    //     QEPG::print_bit_row(parityresult);
-    // }
     return std::move(result);
 }
 
@@ -490,15 +410,11 @@ std::pair<py::array_t<bool>,py::array_t<bool>> return_samples_many_weights_separ
 
     auto begin_index=0;
     for(size_t i=0;i<weight.size();++i){
-        // std::cout<<"Weight="<<weight[i]<<"\n";
         samplecontainer.clear();
         sampler.generate_many_output_samples(graph,samplecontainer,weight[i],shots[i]);
         convert_bitset_row_to_boolean_separate_obs_numpy(detectorresult,obsresult,begin_index,samplecontainer);
         begin_index+=shots[i];
     }
-    // for(QEPG::Row parityresult: samplecontainer){
-    //     QEPG::print_bit_row(parityresult);
-    // }
     return std::pair<py::array_t<bool>,py::array_t<bool>>{std::move(detectorresult),std::move(obsresult)};
 }
 

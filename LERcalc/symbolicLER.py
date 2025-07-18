@@ -353,14 +353,7 @@ class symbolicLER:
 if __name__=="__main__":
 
 
-    #print(idx_to_bool_list(5, 3))
     tmp=symbolicLER(0.001)
-    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/cnot01h01"
-    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/1cnoth"
-    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/simpleh"
-    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/surface3r1"
-    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/2cnot2R"
-    #filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface3"
     filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/simple"
     print(tmp.calculate_LER_from_file(filepath,0.001))
 
@@ -370,7 +363,6 @@ if __name__=="__main__":
     # for weight in range(1,11):
     #     print("LER in the subspace {} is {}".format(weight,tmp.evaluate_LER_subspace(0.001,weight)))        
 
-    
 
     for weight in range(1,12):
         print("SubspaceLER {} is {}".format(weight,tmp.subspace_LER(weight)))        
