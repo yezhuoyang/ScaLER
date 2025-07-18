@@ -82,11 +82,44 @@ The python code is divided into different modules. For example, to run the test_
 (Under Sampling folder)py -m test.test_by_stim   
 ```
 
-# How to run tests
+# How to run tests?
 
 
-# How to run benchmark
+All test script are kept under test/ folder. You can test the correct ness of our QEPG implementation, test with ground truth for small scale circuit. 
 
+
+
+
+
+# How to run benchmark circuit and reproduce the table?
+
+All our benchmark circuit are stored undered stimprograms/ folder. To reproduce one circuit, for example, for surface code with distance 7, execute the following python script:
+
+
+
+```python
+from ScaLER import stratified_Scurve_LERcalc
+d=7
+p = 0.001
+repeat=5
+sample_budget = 100_000_0000
+t = (d - 1) // 2
+stim_path = f"your/path/stimprograms/surface/surface7"
+figname = f"Surface{d}"
+titlename = f"Surface{d}"
+output_filename = f"Surface{d}.txt"
+testinstance = stratified_Scurve_LERcalc(p, sampleBudget=sample_budget, k_range=5, num_subspace=6, beta=4)
+testinstance.set_t(t)
+testinstance.set_sample_bound(
+    MIN_NUM_LE_EVENT=100,
+    SAMPLE_GAP=100,
+    MAX_SAMPLE_GAP=5000,
+    MAX_SUBSPACE_SAMPLE=50000
+)
+with open(output_filename, "w") as f:
+    with redirect_stdout(f):
+        testinstance.calculate_LER_from_file(stim_path, p, 0, figname, titlename, repeat)
+```
 
 
 
