@@ -91,7 +91,7 @@ def xor_vec(vec_a, vec_b):
 
 
 MAX_degree=100
-MAX_weight=1
+MAX_weight=12
 
 '''
 Use symbolic algorithm to calculate the probability.
@@ -301,6 +301,19 @@ class symbolicLER:
     def evaluate_LER_subspace(self,pval,weight):
         return self._subspace_LER[weight].evalf(subs={p:pval})
 
+
+    def subspace_LER(self,weight):
+        """
+        Get the subspace LER for a given weight
+        """
+        if weight in self._subspace_LER:
+            bernolli_coeff = binomial(self._num_noise, weight) * (p**weight) * ((1-p)**(self._num_noise-weight))
+            subspaceLER=simplify(self._subspace_LER[weight]/bernolli_coeff)
+            return subspaceLER.expand()
+        else:
+            raise ValueError("Subspace LER for weight {} is not calculated.".format(weight))
+
+
     
     def calculate_LER_from_file(self,filepath,pvalue):
         """
@@ -354,7 +367,10 @@ if __name__=="__main__":
 
     num_noise=tmp._num_noise
 
-    for weight in range(1,11):
-        print("LER in the subspace {} is {}".format(weight,tmp.evaluate_LER_subspace(0.001,weight)))        
+    # for weight in range(1,11):
+    #     print("LER in the subspace {} is {}".format(weight,tmp.evaluate_LER_subspace(0.001,weight)))        
 
     
+
+    for weight in range(1,12):
+        print("SubspaceLER {} is {}".format(weight,tmp.subspace_LER(weight)))        

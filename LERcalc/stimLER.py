@@ -5,6 +5,14 @@ import time
 import os
 from contextlib import redirect_stdout
 
+from QEPG.QEPG import compile_QEPG,return_samples_Monte_separate_obs_with_QEPG
+
+
+import sinter
+import os
+
+
+
 
 def count_logical_errors(circuit: stim.Circuit, num_shots: int) -> int:
     # Sample the circuit.
@@ -63,6 +71,164 @@ class stimLERcalc:
         self._estimated_LER=0
         self._samplebudget=0
         self._MIN_NUM_LE_EVENT = MIN_NUM_LE_EVENT
+        self._QEPG=None
+
+    def calculate_LER_from_my_random_sampler(self, samplebudget, filepath, pvalue, repeat=1):
+        circuit=CliffordCircuit(2)
+        circuit.set_error_rate(pvalue)
+        self._samplebudget=samplebudget
+
+        stim_str=""
+        with open(filepath, "r", encoding="utf-8") as f:
+            stim_str = f.read()
+        self._QEPG=compile_QEPG(stim_str)
+
+        stim_circuit=rewrite_stim_code(stim_str)
+        circuit.set_stim_str(stim_circuit)
+        circuit.compile_from_stim_circuit_str(stim_circuit)           
+        new_stim_circuit=circuit.get_stim_circuit()      
+
+
+        detector_error_model = new_stim_circuit.detector_error_model(decompose_errors=True)
+        matcher = pymatching.Matching.from_detector_error_model(detector_error_model)       
+
+        Ler_list=[]
+        samples_list=[]
+        time_list=[]
+        ler_count_list=[]
+        for i in range(repeat):
+            
+            ler_count=0
+            sampleused=0
+            start = time.time()
+
+
+            detector_result,obsresult=return_samples_Monte_separate_obs_with_QEPG(self._QEPG,pvalue,SAMPLE_GAP_INITIAL)
+            predictions_result = matcher.decode_batch(detector_result)
+            observables =  np.asarray(obsresult).ravel()                    # (shots,)
+            predictions = np.asarray(predictions_result).ravel()
+            num_errors = np.count_nonzero(observables != predictions)
+            # 3. count mismatches in vectorised form ---------------------------------
+
+
+            ler_count+=num_errors
+            sampleused+=SAMPLE_GAP_INITIAL
+            while ler_count<self._MIN_NUM_LE_EVENT and sampleused<self._samplebudget:
+
+                if ler_count==0:
+                    current_sample_gap=sampleused*10
+                    current_sample_gap=min(current_sample_gap, MAX_SAMPLE_GAP)
+                else:
+                    current_sample_gap=min(int(self._MIN_NUM_LE_EVENT/ler_count)*sampleused, MAX_SAMPLE_GAP)
+
+                detector_result,obsresult=return_samples_Monte_separate_obs_with_QEPG(self._QEPG,pvalue,current_sample_gap)
+                predictions_result = matcher.decode_batch(detector_result)
+                observables =  np.asarray(obsresult).ravel()                    # (shots,)
+                predictions = np.asarray(predictions_result).ravel()
+                num_errors = np.count_nonzero(observables != predictions)
+                ler_count+=num_errors
+                sampleused+=current_sample_gap
+
+            ler_count_list.append(ler_count)
+            Ler_list.append(ler_count/sampleused)
+            samples_list.append(sampleused)
+            elapsed = time.time() - start
+            time_list.append(elapsed)
+
+        ler_count_average=np.mean(ler_count_list)
+        #print("Average number of logical errors: ", ler_count_average)
+        std_ler_count=np.std(ler_count_list)
+
+        self._estimated_LER=np.mean(Ler_list)
+        self._sample_used=np.mean(samples_list)
+        """
+        Standard deviation
+        """
+        std_ler=np.std(Ler_list)
+        std_sample=np.std(samples_list)
+        #self.calculate_standard_error()
+        time_mean=np.mean(time_list)
+        time_std=np.std(time_list)
+        
+        print("Time(STIM): ", format_with_uncertainty(time_mean, time_std))
+        print("PL(STIM): ", format_with_uncertainty(self._estimated_LER, std_ler))
+        print("Nerror(STIM): ", format_with_uncertainty(ler_count_average, std_ler_count))
+        print("Sample(STIM): ", format_with_uncertainty(self._sample_used, std_sample))        
+        return self._estimated_LER
+
+
+
+    def calculate_LER_from_file_sinter(self,samplebudget,filepath,pvalue, repeat=1):
+        circuit=CliffordCircuit(2)
+        circuit.set_error_rate(pvalue)
+        self._samplebudget=samplebudget
+
+        stim_str=""
+        with open(filepath, "r", encoding="utf-8") as f:
+            stim_str = f.read()
+
+        stim_circuit=rewrite_stim_code(stim_str)
+        circuit.set_stim_str(stim_circuit)
+        circuit.compile_from_stim_circuit_str(stim_circuit)           
+        new_stim_circuit=circuit.get_stim_circuit()      
+
+             
+        Ler_list=[]
+        samples_list=[]
+        time_list=[]
+        ler_count_list=[]
+        for i in range(repeat):
+            
+            start = time.time()
+            self._num_LER=0
+            self._sample_used=0
+
+            mytask=sinter.Task(
+                            circuit=new_stim_circuit,
+                            json_metadata={
+                                'p': pvalue,
+                                'd': 0,
+                            },
+                        )            
+            samples = sinter.collect(
+                num_workers=os.cpu_count(),
+                max_shots=samplebudget,
+                max_errors=100,
+                tasks=[mytask],
+                decoders=['pymatching'],
+            )
+
+            self._num_LER=samples[0].errors
+            ler_count_list.append(self._num_LER)
+            self._sample_used=samples[0].shots
+            
+
+            Ler_list.append(self._num_LER/self._sample_used)
+            samples_list.append(self._sample_used)
+            elapsed = time.time() - start
+            time_list.append(elapsed)
+
+        ler_count_average=np.mean(ler_count_list)
+        #print("Average number of logical errors: ", ler_count_average)
+        std_ler_count=np.std(ler_count_list)
+
+        self._estimated_LER=np.mean(Ler_list)
+        self._sample_used=np.mean(samples_list)
+        """
+        Standard deviation
+        """
+        std_ler=np.std(Ler_list)
+        std_sample=np.std(samples_list)
+        #self.calculate_standard_error()
+        time_mean=np.mean(time_list)
+        time_std=np.std(time_list)
+        
+        print("Time(STIM): ", format_with_uncertainty(time_mean, time_std))
+        print("PL(STIM): ", format_with_uncertainty(self._estimated_LER, std_ler))
+        print("Nerror(STIM): ", format_with_uncertainty(ler_count_average, std_ler_count))
+        print("Sample(STIM): ", format_with_uncertainty(self._sample_used, std_sample))        
+        return self._estimated_LER
+            
 
 
     def calculate_LER_from_file(self,samplebudget,filepath,pvalue, repeat=1):
@@ -207,55 +373,306 @@ if __name__ == "__main__":
 
 
 
+    # p=0.001
+    # code_type="hexagon"
+    # rel="hexagon/hexagon"
+    # dlist=[13]
+    # for d in dlist:
+    #     stim_path = base_dir+rel+str(d)
+    #     # 3) build your output filename:
+    #     out_fname =  result_dir+str(p)+"-"+str(code_type)+str(d)+"-result.txt"     # e.g. "surface3-result.txt"
+    #     # 4) redirect prints for just this file:
+    #     with open(out_fname, "w") as outf, redirect_stdout(outf):
+    #         print(f"---- Processing {stim_path} ----")
+
+    #         calculator=stimLERcalc(100)
+    #         # pass the string path into your function:
+    #         ler = calculator.calculate_LER_from_file(500000000, str(stim_path), p,5)
+
+
+    # p=0.001
+    # code_type="surface"
+    # rel="surface/surface"
+    # dlist=[11]
+    # for d in dlist:
+    #     stim_path = base_dir+rel+str(d)
+    #     # 3) build your output filename:
+    #     out_fname =  result_dir+str(p)+"-"+str(code_type)+str(d)+"-resultMonte.txt"     # e.g. "surface3-result.txt"
+    #     # 4) redirect prints for just this file:
+    #     with open(out_fname, "w") as outf, redirect_stdout(outf):
+    #         print(f"---- Processing {stim_path} ----")
+
+    #         calculator=stimLERcalc(100)
+    #         # pass the string path into your function:
+    #         ler = calculator.calculate_LER_from_my_random_sampler(500000000, str(stim_path), p,5)
+
+
+
+    # p=0.001
+    # code_type="hexagon"
+    # rel="hexagon/hexagon"
+    # dlist=[7,9,11]
+    # for d in dlist:
+    #     stim_path = base_dir+rel+str(d)
+    #     # 3) build your output filename:
+    #     out_fname =  result_dir+str(p)+"-"+str(code_type)+str(d)+"-resultMonte.txt"     # e.g. "surface3-result.txt"
+    #     # 4) redirect prints for just this file:
+    #     with open(out_fname, "w") as outf, redirect_stdout(outf):
+    #         print(f"---- Processing {stim_path} ----")
+
+    #         calculator=stimLERcalc(100)
+    #         # pass the string path into your function:
+    #         ler = calculator.calculate_LER_from_my_random_sampler(500000000, str(stim_path), p,5)
+
+
+    # p=0.001
+    # code_type="square"
+    # rel="square/square"
+    # dlist=[7,9,11]
+    # for d in dlist:
+    #     stim_path = base_dir+rel+str(d)
+    #     # 3) build your output filename:
+    #     out_fname =  result_dir+str(p)+"-"+str(code_type)+str(d)+"-resultMonte.txt"     # e.g. "surface3-result.txt"
+    #     # 4) redirect prints for just this file:
+    #     with open(out_fname, "w") as outf, redirect_stdout(outf):
+    #         print(f"---- Processing {stim_path} ----")
+
+    #         calculator=stimLERcalc(100)
+    #         # pass the string path into your function:
+    #         ler = calculator.calculate_LER_from_my_random_sampler(500000000, str(stim_path), p,5)
+
+
+
+    # p=0.0005
+    # code_type="surface"
+    # rel="surface/surface"
+    # dlist=[5,7,9]
+    # for d in dlist:
+    #     stim_path = base_dir+rel+str(d)
+    #     # 3) build your output filename:
+    #     out_fname =  result_dir+str(p)+"-"+str(code_type)+str(d)+"-resultMonte.txt"     # e.g. "surface3-result.txt"
+    #     # 4) redirect prints for just this file:
+    #     with open(out_fname, "w") as outf, redirect_stdout(outf):
+    #         print(f"---- Processing {stim_path} ----")
+
+    #         calculator=stimLERcalc(100)
+    #         # pass the string path into your function:
+    #         ler = calculator.calculate_LER_from_my_random_sampler(500000000, str(stim_path), p,5)
+
+
+
+
+
+
+    # p=0.0005
+    # code_type="square"
+    # rel="square/square"
+    # dlist=[5,7,9]
+    # for d in dlist:
+    #     stim_path = base_dir+rel+str(d)
+    #     # 3) build your output filename:
+    #     out_fname =  result_dir+str(p)+"-"+str(code_type)+str(d)+"-resultMonte.txt"     # e.g. "surface3-result.txt"
+    #     # 4) redirect prints for just this file:
+    #     with open(out_fname, "w") as outf, redirect_stdout(outf):
+    #         print(f"---- Processing {stim_path} ----")
+
+    #         calculator=stimLERcalc(100)
+    #         # pass the string path into your function:
+    #         ler = calculator.calculate_LER_from_my_random_sampler(500000000, str(stim_path), p,5)
+
+
+
+
+    # p=0.001
+    # code_type="surface"
+    # rel="surface/surface"
+    # dlist=[13]
+    # for d in dlist:
+    #     stim_path = base_dir+rel+str(d)
+    #     # 3) build your output filename:
+    #     out_fname =  result_dir+str(p)+"-"+str(code_type)+str(d)+"-resultMonte.txt"     # e.g. "surface3-result.txt"
+    #     # 4) redirect prints for just this file:
+    #     with open(out_fname, "w") as outf, redirect_stdout(outf):
+    #         print(f"---- Processing {stim_path} ----")
+
+    #         calculator=stimLERcalc(20)
+    #         # pass the string path into your function:
+    #         ler = calculator.calculate_LER_from_my_random_sampler(500000000, str(stim_path), p,5)
+
+
+
+    p=0.0005
+    code_type="hexagon"
+    rel="hexagon/hexagon"
+    dlist=[11]
+    for d in dlist:
+        stim_path = base_dir+rel+str(d)
+        # 3) build your output filename:
+        out_fname =  result_dir+str(p)+"-"+str(code_type)+str(d)+"-resultMonte.txt"     # e.g. "surface3-result.txt"
+        # 4) redirect prints for just this file:
+        with open(out_fname, "w") as outf, redirect_stdout(outf):
+            print(f"---- Processing {stim_path} ----")
+
+            calculator=stimLERcalc(20)
+            # pass the string path into your function:
+            ler = calculator.calculate_LER_from_my_random_sampler(500000000, str(stim_path), p,5)
+
+
+
     p=0.001
     code_type="hexagon"
     rel="hexagon/hexagon"
-    dlist=[13]
+    dlist=[15]
     for d in dlist:
         stim_path = base_dir+rel+str(d)
         # 3) build your output filename:
-        out_fname =  result_dir+str(p)+"-"+str(code_type)+str(d)+"-result.txt"     # e.g. "surface3-result.txt"
+        out_fname =  result_dir+str(p)+"-"+str(code_type)+str(d)+"-resultMonte.txt"     # e.g. "surface3-result.txt"
         # 4) redirect prints for just this file:
         with open(out_fname, "w") as outf, redirect_stdout(outf):
             print(f"---- Processing {stim_path} ----")
 
-            calculator=stimLERcalc(100)
+            calculator=stimLERcalc(10)
             # pass the string path into your function:
-            ler = calculator.calculate_LER_from_file(5000000, str(stim_path), p,5)
+            ler = calculator.calculate_LER_from_my_random_sampler(500000000, str(stim_path), p,5)
 
 
-    p=0.001
-    code_type="square"
-    rel="square/square"
-    dlist=[13]
-    for d in dlist:
-        stim_path = base_dir+rel+str(d)
-        # 3) build your output filename:
-        out_fname =  result_dir+str(p)+"-"+str(code_type)+str(d)+"-result.txt"     # e.g. "surface3-result.txt"
-        # 4) redirect prints for just this file:
-        with open(out_fname, "w") as outf, redirect_stdout(outf):
-            print(f"---- Processing {stim_path} ----")
+    # p=0.001
+    # code_type="square"
+    # rel="square/square"
+    # dlist=[13]
+    # for d in dlist:
+    #     stim_path = base_dir+rel+str(d)
+    #     # 3) build your output filename:
+    #     out_fname =  result_dir+str(p)+"-"+str(code_type)+str(d)+"-resultMonte.txt"     # e.g. "surface3-result.txt"
+    #     # 4) redirect prints for just this file:
+    #     with open(out_fname, "w") as outf, redirect_stdout(outf):
+    #         print(f"---- Processing {stim_path} ----")
 
-            calculator=stimLERcalc(100)
-            # pass the string path into your function:
-            ler = calculator.calculate_LER_from_file(5000000, str(stim_path), p,5)
+    #         calculator=stimLERcalc(20)
+    #         # pass the string path into your function:
+    #         ler = calculator.calculate_LER_from_my_random_sampler(500000000, str(stim_path), p,5)
 
 
-    p=0.001
-    code_type="surface"
-    rel="surface/surface"
-    dlist=[13]
-    for d in dlist:
-        stim_path = base_dir+rel+str(d)
-        # 3) build your output filename:
-        out_fname =  result_dir+str(p)+"-"+str(code_type)+str(d)+"-result.txt"     # e.g. "surface3-result.txt"
-        # 4) redirect prints for just this file:
-        with open(out_fname, "w") as outf, redirect_stdout(outf):
-            print(f"---- Processing {stim_path} ----")
 
-            calculator=stimLERcalc(100)
-            # pass the string path into your function:
-            ler = calculator.calculate_LER_from_file(5000000, str(stim_path), p,5)
+
+    # p=0.0005
+    # code_type="surface"
+    # rel="surface/surface"
+    # dlist=[11]
+    # for d in dlist:
+    #     stim_path = base_dir+rel+str(d)
+    #     # 3) build your output filename:
+    #     out_fname =  result_dir+str(p)+"-"+str(code_type)+str(d)+"-resultMonte.txt"     # e.g. "surface3-result.txt"
+    #     # 4) redirect prints for just this file:
+    #     with open(out_fname, "w") as outf, redirect_stdout(outf):
+    #         print(f"---- Processing {stim_path} ----")
+
+    #         calculator=stimLERcalc(20)
+    #         # pass the string path into your function:
+    #         ler = calculator.calculate_LER_from_my_random_sampler(500000000, str(stim_path), p,5)
+
+
+
+    # p=0.0005
+    # code_type="hexagon"
+    # rel="hexagon/hexagon"
+    # dlist=[11]
+    # for d in dlist:
+    #     stim_path = base_dir+rel+str(d)
+    #     # 3) build your output filename:
+    #     out_fname =  result_dir+str(p)+"-"+str(code_type)+str(d)+"-resultMonte.txt"     # e.g. "surface3-result.txt"
+    #     # 4) redirect prints for just this file:
+    #     with open(out_fname, "w") as outf, redirect_stdout(outf):
+    #         print(f"---- Processing {stim_path} ----")
+
+    #         calculator=stimLERcalc(20)
+    #         # pass the string path into your function:
+    #         ler = calculator.calculate_LER_from_my_random_sampler(500000000, str(stim_path), p,5)
+
+
+    # p=0.0005
+    # code_type="square"
+    # rel="square/square"
+    # dlist=[11]
+    # for d in dlist:
+    #     stim_path = base_dir+rel+str(d)
+    #     # 3) build your output filename:
+    #     out_fname =  result_dir+str(p)+"-"+str(code_type)+str(d)+"-resultMonte.txt"     # e.g. "surface3-result.txt"
+    #     # 4) redirect prints for just this file:
+    #     with open(out_fname, "w") as outf, redirect_stdout(outf):
+    #         print(f"---- Processing {stim_path} ----")
+
+    #         calculator=stimLERcalc(20)
+    #         # pass the string path into your function:
+    #         ler = calculator.calculate_LER_from_my_random_sampler(500000000, str(stim_path), p,5)
+
+
+
+    # p=0.001
+    # code_type="surface"
+    # rel="surface/surface"
+    # dlist=[13,15,17,19]
+    # for d in dlist:
+    #     stim_path = base_dir+rel+str(d)
+    #     # 3) build your output filename:
+    #     out_fname =  result_dir+str(p)+"-"+str(code_type)+str(d)+"-result.txt"     # e.g. "surface3-result.txt"
+    #     # 4) redirect prints for just this file:
+    #     with open(out_fname, "w") as outf, redirect_stdout(outf):
+    #         print(f"---- Processing {stim_path} ----")
+
+    #         calculator=stimLERcalc(100)
+    #         # pass the string path into your function:
+    #         ler = calculator.calculate_LER_from_file_sinter(5000000000, str(stim_path), p,5)
+
+    # p=0.001
+    # code_type="hexagon"
+    # rel="hexagon/hexagon"
+    # dlist=[7,9,11,13,15,17,19]
+    # for d in dlist:
+    #     stim_path = base_dir+rel+str(d)
+    #     # 3) build your output filename:
+    #     out_fname =  result_dir+str(p)+"-"+str(code_type)+str(d)+"-result.txt"     # e.g. "surface3-result.txt"
+    #     # 4) redirect prints for just this file:
+    #     with open(out_fname, "w") as outf, redirect_stdout(outf):
+    #         print(f"---- Processing {stim_path} ----")
+
+    #         calculator=stimLERcalc(100)
+    #         # pass the string path into your function:
+    #         ler = calculator.calculate_LER_from_file_sinter(5000000000, str(stim_path), p,5)
+
+
+    # p=0.001
+    # code_type="square"
+    # rel="square/square"
+    # dlist=[7,9,11,13,15,17,19]
+    # for d in dlist:
+    #     stim_path = base_dir+rel+str(d)
+    #     # 3) build your output filename:
+    #     out_fname =  result_dir+str(p)+"-"+str(code_type)+str(d)+"-result.txt"     # e.g. "surface3-result.txt"
+    #     # 4) redirect prints for just this file:
+    #     with open(out_fname, "w") as outf, redirect_stdout(outf):
+    #         print(f"---- Processing {stim_path} ----")
+
+    #         calculator=stimLERcalc(100)
+    #         # pass the string path into your function:
+    #         ler = calculator.calculate_LER_from_file_sinter(5000000000, str(stim_path), p,5)
+
+
+    # p=0.001
+    # code_type="surface"
+    # rel="surface/surface"
+    # dlist=[13]
+    # for d in dlist:
+    #     stim_path = base_dir+rel+str(d)
+    #     # 3) build your output filename:
+    #     out_fname =  result_dir+str(p)+"-"+str(code_type)+str(d)+"-result.txt"     # e.g. "surface3-result.txt"
+    #     # 4) redirect prints for just this file:
+    #     with open(out_fname, "w") as outf, redirect_stdout(outf):
+    #         print(f"---- Processing {stim_path} ----")
+
+    #         calculator=stimLERcalc(100)
+    #         # pass the string path into your function:
+    #         ler = calculator.calculate_LER_from_file(50000000, str(stim_path), p,5)
 
 
     # p=0.0001

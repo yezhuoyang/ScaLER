@@ -36,6 +36,23 @@ inline std::vector<singlePauli> sampler::generate_sample_Floyd(size_t weight, st
 }
 
 
+inline std::vector<singlePauli> sampler::generate_sample_Monte(double error_prob,size_t ErrorSize,std::mt19937& gen){
+    std::vector<singlePauli> result;
+    result.reserve(size_t(error_prob*ErrorSize));
+    std::uniform_int_distribution<> typedistrib(1, 3);
+    std::bernoulli_distribution dist(error_prob);
+    for(size_t pos=0;pos<ErrorSize;++pos){
+        if(dist(gen)){
+            result.emplace_back(std::move(singlePauli{ pos, (size_t)typedistrib(gen)}));
+        }
+    }
+    return result;
+}
+
+
+
+
+
 
 void sampler::generate_many_output_samples(const QEPG::QEPG& graph,std::vector<QEPG::Row>& samplecontainer, size_t pauliweight, size_t samplenumber){
     //samplecontainer.reserve(samplenumber);
@@ -61,6 +78,30 @@ void sampler::generate_many_output_samples(const QEPG::QEPG& graph,std::vector<Q
         }
     }
 }
+
+
+void sampler::generate_many_output_samples_Monte(const QEPG::QEPG& graph,std::vector<QEPG::Row>& samplecontainer,double error_prob, size_t samplenumber){
+    //samplecontainer.reserve(samplenumber);
+    samplecontainer.resize(samplenumber);
+    size_t total_error=graph.get_total_noise();
+    static const std::uint64_t global_seed = std::random_device{}();   // log this if you need to replay
+    // 2. Parallel region
+    #pragma omp parallel
+    {
+        thread_local std::mt19937 rng{
+            static_cast<std::mt19937::result_type>(
+                global_seed ^                                    // same run → same base
+                std::hash<std::thread::id>{}(std::this_thread::get_id()))  // thread-specific part
+        };
+        // 3. Work-share the loop
+        #pragma omp for schedule(static)
+        for (long long i = 0; i < static_cast<long long>(samplenumber); ++i) {
+            auto sample = generate_sample_Monte(error_prob,total_error, rng);
+            samplecontainer[i] = calculate_parity_output_from_one_sample(graph, sample);
+        }
+    }
+}
+
 
 /*
 Enumerat all possible noise vector with fixed weight

@@ -434,6 +434,15 @@ std::vector<py::array_t<bool>> return_samples_many_weights_numpy(const std::stri
 }
 
 
+std::pair<py::array_t<bool>,py::array_t<bool>> return_samples_Monte_separate_obs_with_QEPG(const QEPG::QEPG& graph,const double& error_rate, const size_t& shot){
+    SAMPLE::sampler sampler(graph.get_total_noise());
+    std::vector<QEPG::Row> samplecontainer;
+    py::array_t<bool> detectorresult({shot,graph.get_total_detector()});
+    py::array_t<bool> obsresult(shot);
+    sampler.generate_many_output_samples_Monte(graph,samplecontainer,error_rate,shot);
+    convert_bitset_row_to_boolean_separate_obs_numpy(detectorresult,obsresult,0,samplecontainer);
+    return std::pair<py::array_t<bool>,py::array_t<bool>>{std::move(detectorresult),std::move(obsresult)};
+}
 
 
 

@@ -48,6 +48,7 @@ class sampler{
         */
         inline std::vector<singlePauli> generate_sample_Floyd(size_t weight,std::mt19937& gen);
 
+        inline std::vector<singlePauli> generate_sample_Monte(double error_prob ,size_t ErrorSize,std::mt19937& gen);
 
         inline QEPG::Row calculate_output_from_one_sample(const QEPG::QEPG& graph,std::vector<singlePauli> sample){
             const auto&dm=graph.get_dectorMatrixTrans();
@@ -96,6 +97,8 @@ class sampler{
 
 
         void generate_many_output_samples(const QEPG::QEPG& graph,std::vector<QEPG::Row>& samplecontainer,size_t pauliweight , size_t samplenumber);
+
+        void generate_many_output_samples_Monte(const QEPG::QEPG& graph,std::vector<QEPG::Row>& samplecontainer,double error_prob, size_t samplenumber);
 
         void generate_all_samples_with_fixed_weight(const QEPG::QEPG& graph,std::vector<QEPG::Row>& samplecontainer,size_t pauliweight);
 
