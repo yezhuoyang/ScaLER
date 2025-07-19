@@ -43,7 +43,7 @@ def test_by_file_name(filepath):
 
 def test_all():
     for test_file in all_test_files:
-        filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/"+test_file
+        filepath="C:/Users/username/Documents/Sampling/stimprograms/small/"+test_file
         print("Testing file: ",test_file)
         test_by_file_name(filepath)
 

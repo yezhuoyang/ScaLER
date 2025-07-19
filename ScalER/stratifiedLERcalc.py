@@ -277,7 +277,7 @@ class stratifiedLERcalc:
 
 if __name__ == "__main__":
     tmp=stratifiedLERcalc(0.001,sampleBudget=15000000,num_subspace=5)
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/simple"
+    filepath="C:/Users/username/Documents/Sampling/stimprograms/small/simple"
     tmp.parse_from_file(filepath)
     tmp.sample_all_subspace(11*1000000)
 

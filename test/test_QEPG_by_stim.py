@@ -280,6 +280,6 @@ def test_small_circuit(circuit_file_path):
 
 
 if __name__ == "__main__":
-    #test_small_circuit("C:/Users/yezhu/GitRepos/Sampling/stimprograms/cnoth0")
+    #test_small_circuit("C:/Users/username/GitRepos/Sampling/stimprograms/cnoth0")
 
     test_with_stim_tableau()    

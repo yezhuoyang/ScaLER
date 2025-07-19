@@ -354,7 +354,7 @@ if __name__=="__main__":
 
 
     tmp=symbolicLER(0.001)
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/simple"
+    filepath="C:/Users/username/Documents/Sampling/stimprograms/small/simple"
     print(tmp.calculate_LER_from_file(filepath,0.001))
 
 

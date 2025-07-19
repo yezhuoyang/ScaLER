@@ -125,7 +125,7 @@ class QEPGpython:
 
 if __name__ == "__main__":
         stim_str=""
-        filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/1cnot"
+        filepath="C:/Users/username/Documents/Sampling/stimprograms/1cnot"
         with open(filepath, "r", encoding="utf-8") as f:
             stim_str = f.read()
         circuit=CliffordCircuit(3)

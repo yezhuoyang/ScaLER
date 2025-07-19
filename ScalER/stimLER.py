@@ -336,8 +336,8 @@ class stimLERcalc:
 
 if __name__ == "__main__":
 
-    base_dir = "C:/Users/yezhu/Documents/Sampling/stimprograms/"
-    result_dir = "C:/Users/yezhu/Documents/Sampling/"
+    base_dir = "C:/Users/username/Documents/Sampling/stimprograms/"
+    result_dir = "C:/Users/username/Documents/Sampling/"
 
 
     p=0.0005

@@ -63,7 +63,7 @@ We also need to convert C++ object to python object directly. So "Python.h" need
 
 
 ```bash
-C:\Users\yezhu\miniconda3\include
+C:\Users\username\miniconda3\include
 ```
 
 
@@ -169,7 +169,7 @@ if __name__ == "__main__":
 
 
     p=0.001
-    filepath="C:/Users/yezhu/Documents/ScaLER/stimprograms/surface/surface3"
+    filepath="C:/Users/username/Documents/ScaLER/stimprograms/surface/surface3"
     d=3
     repeat=5
     sampleBudget=500000

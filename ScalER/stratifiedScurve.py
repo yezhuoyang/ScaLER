@@ -1444,7 +1444,7 @@ if __name__ == "__main__":
     for d in range(7,9,2):
         t = (d - 1) // 2
 
-        stim_path = f"C:/Users/yezhu/Documents/Sampling/stimprograms/surface/surface{d}"
+        stim_path = f"C:/Users/username/Documents/Sampling/stimprograms/surface/surface{d}"
         figname = f"Surface{d}"
         titlename = f"Surface{d}"
         output_filename = f"Surface{d}.txt"

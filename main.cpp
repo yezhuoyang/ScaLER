@@ -83,7 +83,7 @@ void benchmark_surface_million_sample(){
     auto t0 = clock::now();                               // start timer
     clifford::cliffordcircuit c;
     try{
-        std::string stim_str=read_file_to_string("C:/Users/yezhu/OneDrive/Documents/GitHub/Sampling/stimprograms/surface11");
+        std::string stim_str=read_file_to_string("C:/Users/username/OneDrive/Documents/GitHub/Sampling/stimprograms/surface11");
         c.compile_from_rewrited_stim_string(stim_str);
     } catch(const std::exception& e){
         std::cerr<<e.what()<<'\n';
@@ -137,7 +137,7 @@ void store_outputt_to_file(std::string filepath){
 
     clifford::cliffordcircuit c;
     try{
-        std::string stim_str=read_file_to_string("C:/Users/yezhu/OneDrive/Documents/GitHub/Sampling/stimprograms/surface9");
+        std::string stim_str=read_file_to_string("C:/Users/username/OneDrive/Documents/GitHub/Sampling/stimprograms/surface9");
         c.compile_from_rewrited_stim_string(stim_str);
     } catch(const std::exception& e){
         std::cerr<<e.what()<<'\n';
@@ -195,7 +195,7 @@ void print_surface_output(){
 
     clifford::cliffordcircuit c;
     try{
-        std::string stim_str=read_file_to_string("C:/Users/yezhu/OneDrive/Documents/GitHub/Sampling/stimprograms/surface11");
+        std::string stim_str=read_file_to_string("C:/Users/username/OneDrive/Documents/GitHub/Sampling/stimprograms/surface11");
         c.compile_from_rewrited_stim_string(stim_str);
     } catch(const std::exception& e){
         std::cerr<<e.what()<<'\n';
@@ -229,7 +229,7 @@ void test_eigen_QEPG(){
  
     clifford::cliffordcircuit c;
     try{
-        std::string stim_str=read_file_to_string("C:/Users/yezhu/OneDrive/Documents/GitHub/Sampling/stimprograms/surface15");
+        std::string stim_str=read_file_to_string("C:/Users/username/OneDrive/Documents/GitHub/Sampling/stimprograms/surface15");
         c.compile_from_rewrited_stim_string(stim_str);
     } catch(const std::exception& e){
         std::cerr<<e.what()<<'\n';
@@ -401,7 +401,7 @@ int main()
     // std::cout<<"Start compilation!"<<"\n";
     // std::string stim_str;
     // try{
-    //     stim_str=read_file_to_string("C:/Users/yezhu/Documents/Sampling/stimprograms/1cnot");
+    //     stim_str=read_file_to_string("C:/Users/username/Documents/Sampling/stimprograms/1cnot");
     //     c.compile_from_rewrited_stim_string(stim_str);
     // } catch(const std::exception& e){
     //     std::cerr<<e.what()<<'\n';

@@ -212,6 +212,6 @@ def calc_W2_LER_subspace_by_stim(filepath):
 if __name__ == "__main__":
 
 
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon3"
+    filepath="C:/Users/username/Documents/Sampling/stimprograms/hexagon/hexagon3"
     calc_W1_LER_subspace_by_stim(filepath)
     #test_by_file_name(filepath)

@@ -25,10 +25,10 @@ ext_modules=[
             pybind11.get_include(),
             '.',
             'C:/local/boost_1_87_0/',
-            'C:/Users/yezhu/OneDrive/Documents/GitHub/vcpkg/installed/x64-windows/include',
+            'C:/Users/username/OneDrive/Documents/GitHub/vcpkg/installed/x64-windows/include',
             'C:/vcpkg/installed/x64-windows/include',
-            'C:/Users/yezhu/AppData/Local/Programs/Python/Python311/Include',
-            'C:/Users/yezhu/miniconda3/Include',
+            'C:/Users/username/AppData/Local/Programs/Python/Python311/Include',
+            'C:/Users/username/miniconda3/Include',
         ],
         extra_compile_args=extra_compile_args,
         extra_link_args=lflags,
@@ -41,8 +41,8 @@ ext_modules=[
 setuptools.setup(
     name='QEPG', # A package name
     version='0.0.1', # Version number
-    author="johnYe",
-    author_email="yezhuoyang@cs.ucla.edu",
+    author="anonymous",
+    author_email="anonymous",
     description="QEPG",
     ext_modules=ext_modules,
     zip_safe=False, # Important: Set to False for C++ extensions

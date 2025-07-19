@@ -352,41 +352,41 @@ def generate_circuit(filepath: str | Path, distance: int = 3) -> Path:
     return filepath
 
 if __name__ == '__main__':
-    # filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon5"
+    # filepath="C:/Users/username/Documents/Sampling/stimprograms/hexagon/hexagon5"
     # generate_circuit(filepath,5)  
 
-    # filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon7"
+    # filepath="C:/Users/username/Documents/Sampling/stimprograms/hexagon/hexagon7"
     # generate_circuit(filepath,7)   
 
-    # filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon9"
+    # filepath="C:/Users/username/Documents/Sampling/stimprograms/hexagon/hexagon9"
     # generate_circuit(filepath,9)  
 
-    # filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon11"
+    # filepath="C:/Users/username/Documents/Sampling/stimprograms/hexagon/hexagon11"
     # generate_circuit(filepath,11)       
     
-    # filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon13"
+    # filepath="C:/Users/username/Documents/Sampling/stimprograms/hexagon/hexagon13"
     # generate_circuit(filepath,13)  
 
-    # filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon15"
+    # filepath="C:/Users/username/Documents/Sampling/stimprograms/hexagon/hexagon15"
     # generate_circuit(filepath,15)   
 
-    # filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon17"
+    # filepath="C:/Users/username/Documents/Sampling/stimprograms/hexagon/hexagon17"
     # generate_circuit(filepath,17)  
 
-    # filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon19"
+    # filepath="C:/Users/username/Documents/Sampling/stimprograms/hexagon/hexagon19"
     # generate_circuit(filepath,19)  
 
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon21"
+    filepath="C:/Users/username/Documents/Sampling/stimprograms/hexagon/hexagon21"
     generate_circuit(filepath,21)  
 
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon23"
+    filepath="C:/Users/username/Documents/Sampling/stimprograms/hexagon/hexagon23"
     generate_circuit(filepath,23)   
 
-    filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon25"
+    filepath="C:/Users/username/Documents/Sampling/stimprograms/hexagon/hexagon25"
     generate_circuit(filepath,25)  
 
-    # filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon27"
+    # filepath="C:/Users/username/Documents/Sampling/stimprograms/hexagon/hexagon27"
     # generate_circuit(filepath,27)       
     
-    # filepath="C:/Users/yezhu/Documents/Sampling/stimprograms/hexagon/hexagon29"
+    # filepath="C:/Users/username/Documents/Sampling/stimprograms/hexagon/hexagon29"
     # generate_circuit(filepath,29)  

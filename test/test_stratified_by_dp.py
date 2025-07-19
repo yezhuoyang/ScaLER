@@ -48,7 +48,7 @@ def test_by_file_name(filepath):
 if __name__ == "__main__":
 
 
-    rootfilepath="C:/Users/yezhu/Documents/Sampling/stimprograms/small/"
+    rootfilepath="C:/Users/username/Documents/Sampling/stimprograms/small/"
 
     for test_file in all_test_files:
         filepath=rootfilepath+test_file
