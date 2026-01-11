@@ -31,7 +31,7 @@ https://yezhuoyang.github.io/ScaLERQEC/
 ## 🚀 Installation
 ---
 
-**🔧 Option 1 — Install via pip (recommended)**
+**🔧 Option 1 — Install via pip (Not supported yet)**
 
 ```bash
 pip install scalerqec
