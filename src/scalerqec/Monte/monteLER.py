@@ -246,7 +246,7 @@ class MonteLERcalc:
 
     def calculate_LER_from_file_sinter(self, samplebudget: int, filepath: str, pvalue: float, repeat: int = 1) -> float:
         circuit=CliffordCircuit(2)
-        circuit.set_error_rate(pvalue)
+        circuit.error_rate = pvalue
         self._samplebudget=samplebudget
 
         stim_str=""
@@ -282,11 +282,12 @@ class MonteLERcalc:
                 max_errors=self._min_num_ke_event,
                 tasks=[mytask],
                 decoders=['pymatching'],
+                count_observable_error_combos=False,
             )
 
-            self._num_LER=samples[0].errors
+            self._num_LER=int(samples[0].errors)
             ler_count_list.append(self._num_LER)
-            self._sample_used=samples[0].shots
+            self._sample_used=int(samples[0].shots)
             
 
             Ler_list.append(self._num_LER/self._sample_used)

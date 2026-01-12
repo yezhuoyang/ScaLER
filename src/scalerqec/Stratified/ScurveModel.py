@@ -1,3 +1,23 @@
+"""
+Legacy S-curve model functions.
+
+This module contains the original S-curve model functions for backward compatibility.
+For new code, prefer using the model classes from scalerqec.Stratified.models:
+
+    from scalerqec.Stratified.models import OurScurveModel, IBMScurveModel, ModelFactory
+
+The new model classes provide:
+- Abstract base class for polymorphism
+- Support for multiple model types (Our Model, IBM Model)
+- Tunable gamma parameter for sweet spot calculation
+- Better separation of concerns
+
+DEPRECATION NOTE:
+These functions are maintained for backward compatibility but may be removed
+in a future version. Please migrate to the new model classes.
+"""
+
+import warnings
 import numpy as np
 from typing import Callable
 from numpy.typing import NDArray
