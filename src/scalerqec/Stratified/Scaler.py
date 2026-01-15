@@ -127,6 +127,9 @@ class Scaler:
         # Final LER
         self._ler: float = 0.0
 
+        # Iteration log for paper/debugging
+        self._iteration_log: List[Dict] = []
+
     # ------------------------------------------------------------------
     #  Model management
     # ------------------------------------------------------------------
@@ -231,7 +234,7 @@ class Scaler:
 
         # Configure a decoder using the circuit.
         self._detector_error_model = self._cliffordcircuit.stimcircuit.detector_error_model(
-            decompose_errors=True
+            decompose_errors=False
         )
         self._matcher = pymatching.Matching.from_detector_error_model(
             self._detector_error_model
@@ -705,7 +708,7 @@ class Scaler:
         time_val: float | None,
         practical_sweet_spot: int | None = None,
     ) -> None:
-        """Generate debug plot for the fitted S-curve."""
+        """Generate debug plot for the fitted S-curve with error bars."""
         assert self._model is not None
 
         # Build data lists
@@ -721,24 +724,53 @@ class Scaler:
 
         x_list = sorted(x_list)
 
-        # Get y values in transformed space
-        y_list = [float(self._model.transform(self._estimated_subspaceLER[x])) for x in x_list]
+        # Get y values in transformed space and calculate error bars
+        y_list = []
+        y_err_list = []
+        for x in x_list:
+            p_w = self._estimated_subspaceLER[x]
+            n_samples = self._subspace_sample_used.get(x, 1)
+            y_val = float(self._model.transform(p_w))
+            y_list.append(y_val)
+
+            # Calculate standard error for P_w using binomial variance
+            # SE(P_w) = sqrt(P_w * (1 - P_w) / n)
+            se_p = np.sqrt(p_w * (1 - p_w) / n_samples) if n_samples > 0 else 0
+
+            # Propagate error to transformed space using delta method
+            # y = log(0.5/p - 1), dy/dp = -0.5 / (p * (0.5 - p))
+            if 0 < p_w < 0.5 and se_p > 0:
+                dy_dp = -0.5 / (p_w * (0.5 - p_w))
+                y_err = abs(dy_dp) * se_p
+            else:
+                y_err = 0
+            y_err_list.append(y_err)
 
         # x-range for fitted curve
         x_fit = np.linspace(self._t + 1, max(x_list), 1000)
         y_fit = [float(self._model.linear_prediction(x)) for x in x_fit]
 
-        fig, ax = plt.subplots(figsize=(7, 5))
+        fig, ax = plt.subplots(figsize=(10, 6))
 
-        # Bars for y_list (log-space)
+        # Calculate bar width based on data spacing
+        if len(x_list) > 1:
+            bar_width = min(np.diff(sorted(x_list))) * 0.6
+        else:
+            bar_width = 1.0
+
+        # Plot data points as bars with error bars
         ax.bar(
             x_list,
             y_list,
-            width=0.6,
-            align="center",
+            width=bar_width,
             color="orange",
-            edgecolor="orange",
-            label="Data histogram (log-S)",
+            alpha=0.7,
+            edgecolor="darkorange",
+            linewidth=1.2,
+            label="Data points (log-S)",
+            yerr=y_err_list,
+            capsize=3,
+            error_kw={'elinewidth': 1.5, 'capthick': 1.2, 'ecolor': 'black'},
         )
 
         # Fitted curve
@@ -747,7 +779,31 @@ class Scaler:
             y_fit,
             label=f"Fitted ({self._model.name}), R²={self._R_square_score:.4f}",
             color="blue",
-            linestyle="--",
+            linestyle="-",
+            linewidth=2,
+        )
+
+        # w_err (first weight with logical error) annotation
+        if self._has_logical_errorw is not None:
+            ax.axvline(self._has_logical_errorw, color="brown", linestyle=":", linewidth=2)
+            ax.annotate(
+                r'$w_{\mathrm{err}}$' + f'={self._has_logical_errorw}',
+                xy=(self._has_logical_errorw, ax.get_ylim()[1] * 0.95),
+                xytext=(self._has_logical_errorw + 3, ax.get_ylim()[1] * 0.95),
+                fontsize=11,
+                color="brown",
+                arrowprops=dict(arrowstyle='->', color='brown'),
+            )
+
+        # w_sat annotation
+        ax.axvline(self._saturatew, color="darkgreen", linestyle=":", linewidth=2)
+        ax.annotate(
+            r'$w_{\mathrm{sat}}$' + f'={self._saturatew}',
+            xy=(self._saturatew, ax.get_ylim()[1] * 0.85),
+            xytext=(self._saturatew - 8, ax.get_ylim()[1] * 0.85),
+            fontsize=11,
+            color="darkgreen",
+            arrowprops=dict(arrowstyle='->', color='darkgreen'),
         )
 
         # Sweet spot marker (theoretical)
@@ -757,17 +813,18 @@ class Scaler:
                 self._sweet_spot,
                 sweet_spot_y,
                 color="purple",
-                marker="o",
-                s=50,
-                label=f"Theoretical Sweet Spot (w={self._sweet_spot})",
+                marker="*",
+                s=200,
+                zorder=5,
+                label=r'$w_{\mathrm{sweet}}$' + f'={self._sweet_spot}',
             )
-            ax.text(
-                self._sweet_spot * 1.1,
-                sweet_spot_y * 1.1,
-                "Theoretical",
-                ha="center",
+            ax.annotate(
+                r'$w_{\mathrm{sweet}}$' + f'={self._sweet_spot}',
+                xy=(self._sweet_spot, sweet_spot_y),
+                xytext=(self._sweet_spot + 5, sweet_spot_y + 0.5),
+                fontsize=11,
                 color="purple",
-                fontsize=10,
+                arrowprops=dict(arrowstyle='->', color='purple'),
             )
 
         # Practical sweet spot marker (if different from theoretical)
@@ -778,89 +835,298 @@ class Scaler:
                 practical_y,
                 color="red",
                 marker="s",
-                s=50,
-                label=f"Practical Sweet Spot (w={practical_sweet_spot})",
+                s=100,
+                zorder=5,
             )
-            ax.text(
-                practical_sweet_spot * 1.05,
-                practical_y * 1.3,
-                "Practical",
-                ha="center",
-                color="red",
+            ax.annotate(
+                f'Practical={practical_sweet_spot}',
+                xy=(practical_sweet_spot, practical_y),
+                xytext=(practical_sweet_spot + 3, practical_y + 0.3),
                 fontsize=10,
+                color="red",
+                arrowprops=dict(arrowstyle='->', color='red'),
             )
 
         # Fault-tolerant region
         ax.axvspan(0, self._t, color="green", alpha=0.15)
         ax.text(
             self._t / 2,
-            max(y_list) * 1.8 if y_list else 1.0,
+            max(y_list) * 0.9 if y_list else 1.0,
             "Fault\ntolerant",
             ha="center",
             color="green",
-            fontsize=8,
+            fontsize=10,
+            fontweight='bold',
         )
 
-        # Curve fitting region
-        ax.axvspan(self._t, self._saturatew, color="yellow", alpha=0.10)
+        # Critical region annotation (w_min to w_max)
+        ax.axvspan(self._minw, self._maxw, color="lightblue", alpha=0.3)
+        ax.axvline(self._minw, color="red", linestyle="--", linewidth=1.5)
+        ax.axvline(self._maxw, color="red", linestyle="--", linewidth=1.5)
+
+        # Add bracket annotation for critical region
+        mid_critical = (self._minw + self._maxw) / 2
+        ax.annotate(
+            '',
+            xy=(self._minw, ax.get_ylim()[0] + 0.3),
+            xytext=(self._maxw, ax.get_ylim()[0] + 0.3),
+            arrowprops=dict(arrowstyle='<->', color='red', lw=1.5),
+        )
         ax.text(
-            (self._t + self._saturatew) / 2,
-            max(y_list) * 1.2 if y_list else 0.5,
-            "Curve fitting",
+            mid_critical,
+            ax.get_ylim()[0] + 0.6,
+            f'Critical Region\n' + r'$[w_{\min}=' + f'{self._minw}' + r', w_{\max}=' + f'{self._maxw}]$',
             ha="center",
-            fontsize=15,
+            color="red",
+            fontsize=10,
+            fontweight='bold',
         )
-
-        # Critical 5σ region
-        ax.axvspan(self._minw, self._maxw, color="gray", alpha=0.2)
-        ax.axvline(self._minw, color="red", linestyle="--", linewidth=1.2, label=r"$w_{\min}$")
-        ax.axvline(self._maxw, color="green", linestyle="--", linewidth=1.2, label=r"$w_{\max}$")
 
         # Side annotation box
         params = self._model.get_params()
         text_lines = [
             f"Model: {self._model.name}",
-            f"γ (sweet spot): {self._gamma:.3f}",
+            f"γ (gamma): {self._gamma:.3f}",
+            "",
+            "Fitted Parameters:",
         ]
         for name, value in params.items():
-            text_lines.append(f"{name}: {value:.4f}")
+            text_lines.append(f"  {name}: {value:.4f}")
         text_lines.extend([
-            f"w_min: {self._minw}",
-            f"w_max: {self._maxw}",
-            f"w_sweet (theoretical): {self._sweet_spot}",
-        ])
-        if practical_sweet_spot is not None and practical_sweet_spot != self._sweet_spot:
-            text_lines.append(f"w_sweet (practical): {practical_sweet_spot}")
-        text_lines.extend([
-            f"#detector: {self._num_detector}",
-            f"#noise: {self._num_noise}",
+            "",
+            "Key Weights:",
+            f"  w_err: {self._has_logical_errorw}",
+            f"  w_min: {self._minw}",
+            f"  w_max: {self._maxw}",
+            f"  w_sweet: {self._sweet_spot}",
+            f"  w_sat: {self._saturatew}",
+            "",
+            "Circuit Info:",
+            f"  #detector: {self._num_detector}",
+            f"  #noise: {self._num_noise}",
         ])
         if self._ler > 0:
-            text_lines.append(f"P_L: {self._ler:.2e}")
+            text_lines.append(f"  P_L: {self._ler:.2e}")
         if time_val is not None:
-            text_lines.append(f"Time: {time_val:.2f}s")
+            text_lines.append(f"  Time: {time_val:.2f}s")
 
         fig.subplots_adjust(right=0.72)
         fig.text(
-            0.75,
+            0.74,
             0.5,
             "\n".join(text_lines),
-            fontsize=7,
+            fontsize=8,
             va="center",
             ha="left",
+            family='monospace',
             bbox=dict(boxstyle="round", facecolor="white", alpha=0.95),
         )
 
-        ax.set_xlabel("Weight")
-        ax.set_ylabel(r"$\log\left(\frac{0.5}{\mathrm{LER}} - 1\right)$")
-        ax.set_title(f"Fitted log-S-curve ({self._model.name})")
-        ax.legend(fontsize=8)
+        ax.set_xlabel("Weight $w$", fontsize=12)
+        ax.set_ylabel(r"$\log\left(\frac{0.5}{P_L(w)} - 1\right)$", fontsize=12)
+        ax.set_title(f"Log-S Curve Fit (d={self._circuit_level_code_distance}, p={self._error_rate})", fontsize=14)
+        ax.legend(fontsize=9, loc='upper right')
+        ax.grid(True, alpha=0.3)
         fig.tight_layout()
 
         if filename is None:
             filename = f"logS_fit_debug_p{self._error_rate:.3g}_d{self._circuit_level_code_distance}.pdf"
 
-        print(f"Saving log-S fit debug figure to: {filename}")
+        print(f"Saving log-S fit figure to: {filename}")
+        fig.savefig(filename, format="pdf", bbox_inches="tight")
+        plt.close(fig)
+
+        # Also generate Y-curve (S-curve in original probability space)
+        self._plot_scurve(filename.replace('.pdf', '_Scurve.pdf'), time_val, practical_sweet_spot)
+
+    def _plot_scurve(
+        self,
+        filename: str,
+        time_val: float | None,
+        practical_sweet_spot: int | None = None,
+    ) -> None:
+        """Generate the S-curve plot in original probability space (Y-curve)."""
+        assert self._model is not None
+
+        # Build data lists
+        x_list = [
+            x
+            for x in self._estimated_subspaceLER.keys()
+            if 0.0 < self._estimated_subspaceLER[x] < 0.5
+            and self._subspace_LE_count.get(x, 0) > 0
+        ]
+
+        if not x_list:
+            return
+
+        x_list = sorted(x_list)
+
+        # Get y values (P_L(w)) and error bars
+        y_list = []
+        y_err_list = []
+        for x in x_list:
+            p_w = self._estimated_subspaceLER[x]
+            n_samples = self._subspace_sample_used.get(x, 1)
+            y_list.append(p_w)
+
+            # Standard error for P_w
+            se_p = np.sqrt(p_w * (1 - p_w) / n_samples) if n_samples > 0 else 0
+            y_err_list.append(se_p)
+
+        # x-range for fitted curve
+        x_fit = np.linspace(self._t + 1, max(x_list), 1000)
+        y_fit = [float(self._model.predict(x)) for x in x_fit]
+
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+        # Calculate bar width based on data spacing
+        if len(x_list) > 1:
+            bar_width = min(np.diff(sorted(x_list))) * 0.6
+        else:
+            bar_width = 1.0
+
+        # Plot data points as bars with error bars
+        ax.bar(
+            x_list,
+            y_list,
+            width=bar_width,
+            color="orange",
+            alpha=0.7,
+            edgecolor="darkorange",
+            linewidth=1.2,
+            label="Measured $P_L(w)$",
+            yerr=y_err_list,
+            capsize=3,
+            error_kw={'elinewidth': 1.5, 'capthick': 1.2, 'ecolor': 'black'},
+        )
+
+        # Fitted curve
+        ax.plot(
+            x_fit,
+            y_fit,
+            label=f"Fitted S-curve, R²={self._R_square_score:.4f}",
+            color="blue",
+            linestyle="-",
+            linewidth=2,
+        )
+
+        # w_err annotation
+        if self._has_logical_errorw is not None:
+            ax.axvline(self._has_logical_errorw, color="brown", linestyle=":", linewidth=2)
+            ax.annotate(
+                r'$w_{\mathrm{err}}$' + f'={self._has_logical_errorw}',
+                xy=(self._has_logical_errorw, 0.45),
+                xytext=(self._has_logical_errorw + 3, 0.45),
+                fontsize=11,
+                color="brown",
+                arrowprops=dict(arrowstyle='->', color='brown'),
+            )
+
+        # w_sat annotation
+        ax.axvline(self._saturatew, color="darkgreen", linestyle=":", linewidth=2)
+        ax.annotate(
+            r'$w_{\mathrm{sat}}$' + f'={self._saturatew}',
+            xy=(self._saturatew, 0.35),
+            xytext=(self._saturatew - 8, 0.35),
+            fontsize=11,
+            color="darkgreen",
+            arrowprops=dict(arrowstyle='->', color='darkgreen'),
+        )
+
+        # Sweet spot marker
+        if self._sweet_spot is not None:
+            sweet_spot_y = float(self._model.predict(self._sweet_spot))
+            ax.scatter(
+                self._sweet_spot,
+                sweet_spot_y,
+                color="purple",
+                marker="*",
+                s=200,
+                zorder=5,
+                label=r'$w_{\mathrm{sweet}}$' + f'={self._sweet_spot}',
+            )
+            ax.annotate(
+                r'$w_{\mathrm{sweet}}$' + f'={self._sweet_spot}',
+                xy=(self._sweet_spot, sweet_spot_y),
+                xytext=(self._sweet_spot + 5, sweet_spot_y + 0.05),
+                fontsize=11,
+                color="purple",
+                arrowprops=dict(arrowstyle='->', color='purple'),
+            )
+
+        # Fault-tolerant region
+        ax.axvspan(0, self._t, color="green", alpha=0.15)
+        ax.text(
+            self._t / 2,
+            0.4,
+            "Fault\ntolerant",
+            ha="center",
+            color="green",
+            fontsize=10,
+            fontweight='bold',
+        )
+
+        # Critical region
+        ax.axvspan(self._minw, self._maxw, color="lightblue", alpha=0.3)
+        ax.axvline(self._minw, color="red", linestyle="--", linewidth=1.5)
+        ax.axvline(self._maxw, color="red", linestyle="--", linewidth=1.5)
+
+        mid_critical = (self._minw + self._maxw) / 2
+        ax.text(
+            mid_critical,
+            0.02,
+            f'Critical Region\n' + r'$[w_{\min}, w_{\max}]$',
+            ha="center",
+            color="red",
+            fontsize=10,
+            fontweight='bold',
+        )
+
+        # Saturation line at 0.5
+        ax.axhline(0.5, color="gray", linestyle="--", linewidth=1, alpha=0.7)
+        ax.text(max(x_list) + 1, 0.5, "Saturation", fontsize=9, color="gray", va='center')
+
+        # Side annotation box
+        params = self._model.get_params()
+        text_lines = [
+            f"Model: {self._model.name}",
+            "",
+            "Fitted Parameters:",
+        ]
+        for name, value in params.items():
+            text_lines.append(f"  {name}: {value:.4f}")
+        text_lines.extend([
+            "",
+            "Key Weights:",
+            f"  w_sweet: {self._sweet_spot}",
+            f"  w_sat: {self._saturatew}",
+            "",
+            f"Estimated P_L: {self._ler:.2e}",
+        ])
+        if time_val is not None:
+            text_lines.append(f"Time: {time_val:.2f}s")
+
+        fig.subplots_adjust(right=0.75)
+        fig.text(
+            0.77,
+            0.5,
+            "\n".join(text_lines),
+            fontsize=8,
+            va="center",
+            ha="left",
+            family='monospace',
+            bbox=dict(boxstyle="round", facecolor="white", alpha=0.95),
+        )
+
+        ax.set_xlabel("Weight $w$", fontsize=12)
+        ax.set_ylabel(r"$P_L(w)$", fontsize=12)
+        ax.set_title(f"S-Curve (d={self._circuit_level_code_distance}, p={self._error_rate})", fontsize=14)
+        ax.set_ylim(-0.02, 0.55)
+        ax.legend(fontsize=9, loc='upper left')
+        ax.grid(True, alpha=0.3)
+        fig.tight_layout()
+
+        print(f"Saving S-curve figure to: {filename}")
         fig.savefig(filename, format="pdf", bbox_inches="tight")
         plt.close(fig)
 
@@ -1148,6 +1414,27 @@ class Scaler:
         self._calc_LER_from_fit()
         print(f"  Initial LER = {self._ler:.3e}")
 
+        # Log Phase 1
+        self._iteration_log.append({
+            'iteration': 0,
+            'phase': 'phase1_initial',
+            'weights_sampled': wlist_init,
+            'shots_per_weight': shots_per_w,
+            'total_shots': shots_per_w * len(wlist_init),
+            'sweet_spot_after': self._sweet_spot,
+            'r_squared': self._R_square_score,
+            'ler': self._ler,
+            'elapsed_time': elapsed,
+            'weight_status_after': {
+                w: {
+                    'samples': self._subspace_sample_used.get(w, 0),
+                    'le_count': self._subspace_LE_count.get(w, 0),
+                    'p_w': self._estimated_subspaceLER.get(w, 0),
+                }
+                for w in wlist_init
+            },
+        })
+
         # ============================================================
         # PHASE 2: Sample between sweet_spot and w_has_error
         # ============================================================
@@ -1213,6 +1500,28 @@ class Scaler:
             print(f"  Updated sweet_spot = {self._sweet_spot}")
             print(f"  R² = {self._R_square_score:.4f}")
             print(f"  LER = {self._ler:.3e}")
+
+            # Log Phase 2
+            self._iteration_log.append({
+                'iteration': 0,
+                'phase': 'phase2_sweet_spot',
+                'weights_sampled': wlist_phase2,
+                'shots_per_weight': shots_per_w,
+                'total_shots': shots_per_w * len(wlist_phase2),
+                'sweet_spot_after': self._sweet_spot,
+                'practical_sweet_spot': practical_sweet,
+                'r_squared': self._R_square_score,
+                'ler': self._ler,
+                'elapsed_time': elapsed_total,
+                'weight_status_after': {
+                    w: {
+                        'samples': self._subspace_sample_used.get(w, 0),
+                        'le_count': self._subspace_LE_count.get(w, 0),
+                        'p_w': self._estimated_subspaceLER.get(w, 0),
+                    }
+                    for w in wlist_phase2
+                },
+            })
         else:
             print("  No new weights to sample in Phase 2.")
 
@@ -1279,6 +1588,26 @@ class Scaler:
             print(f"  Shots per weight: {shots_per_w} (total: {shots_per_w * len(wlist_refine)})")
             slist_refine = [shots_per_w] * len(wlist_refine)
 
+            # Log this iteration
+            iter_log = {
+                'iteration': iter_idx,
+                'phase': 'refinement',
+                'remaining_budget': self._remaining_time_budget,
+                'theoretical_sweet_spot': theoretical_sweet,
+                'practical_sweet_spot': practical_sweet,
+                'weights_sampled': wlist_refine.copy(),
+                'shots_per_weight': shots_per_w,
+                'total_shots': shots_per_w * len(wlist_refine),
+                'weight_status_before': {
+                    w: {
+                        'samples': self._subspace_sample_used.get(w, 0),
+                        'le_count': self._subspace_LE_count.get(w, 0),
+                        'p_w': self._estimated_subspaceLER.get(w, 0),
+                    }
+                    for w in wlist_refine
+                },
+            }
+
             self._sampling_step(wlist_refine, slist_refine)
 
             # Recalculate practical sweet spot after sampling
@@ -1294,6 +1623,21 @@ class Scaler:
                 practical_sweet_spot=practical_sweet,
             )
             self._calc_LER_from_fit()
+
+            # Update log with results after this iteration
+            iter_log['weight_status_after'] = {
+                w: {
+                    'samples': self._subspace_sample_used.get(w, 0),
+                    'le_count': self._subspace_LE_count.get(w, 0),
+                    'p_w': self._estimated_subspaceLER.get(w, 0),
+                }
+                for w in wlist_refine
+            }
+            iter_log['sweet_spot_after'] = self._sweet_spot
+            iter_log['r_squared'] = self._R_square_score
+            iter_log['ler'] = self._ler
+            iter_log['elapsed_time'] = elapsed_total
+            self._iteration_log.append(iter_log)
 
             print(f"  Updated theoretical sweet_spot = {self._sweet_spot}")
             print(f"  Updated practical sweet_spot = {practical_sweet}")
@@ -1332,7 +1676,73 @@ class Scaler:
         print(f"  Total time: {total_time:.1f}s")
         print("=" * 60)
 
+        # Save iteration log to file
+        if figname:
+            self._save_iteration_log(figname + "iteration_log.json")
+
         return ler_est
+
+    def _save_iteration_log(self, filename: str) -> None:
+        """Save the iteration log to a JSON file."""
+        import json
+
+        log_data = {
+            'circuit_info': {
+                'code_distance': self._circuit_level_code_distance,
+                'error_rate': self._error_rate,
+                'num_noise': self._num_noise,
+                'num_detector': self._num_detector,
+                't': self._t,
+                'w_err': self._has_logical_errorw,
+                'w_sat': self._saturatew,
+                'w_min': self._minw,
+                'w_max': self._maxw,
+            },
+            'model_info': {
+                'model_type': self._model_type.value,
+                'gamma': self._gamma,
+            },
+            'final_results': {
+                'ler': self._ler,
+                'r_squared': self._R_square_score,
+                'sweet_spot': self._sweet_spot,
+                'total_samples': sum(self._subspace_sample_used.values()),
+            },
+            'final_weight_distribution': {
+                str(w): {
+                    'samples': self._subspace_sample_used.get(w, 0),
+                    'le_count': self._subspace_LE_count.get(w, 0),
+                    'p_w': self._estimated_subspaceLER.get(w, 0),
+                }
+                for w in sorted(self._subspace_sample_used.keys())
+            },
+            'iterations': self._iteration_log,
+        }
+
+        # Convert numpy types to Python types for JSON serialization
+        def convert_to_serializable(obj):
+            if isinstance(obj, np.floating):
+                return float(obj)
+            if isinstance(obj, np.integer):
+                return int(obj)
+            if isinstance(obj, np.ndarray):
+                return obj.tolist()
+            if isinstance(obj, dict):
+                return {k: convert_to_serializable(v) for k, v in obj.items()}
+            if isinstance(obj, list):
+                return [convert_to_serializable(i) for i in obj]
+            return obj
+
+        log_data = convert_to_serializable(log_data)
+
+        with open(filename, 'w', encoding='utf-8') as f:
+            json.dump(log_data, f, indent=2)
+
+        print(f"Saved iteration log to: {filename}")
+
+    def get_iteration_log(self) -> List[Dict]:
+        """Get the iteration log for analysis."""
+        return self._iteration_log
 
 
 if __name__ == "__main__":

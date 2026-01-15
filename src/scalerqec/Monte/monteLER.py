@@ -91,7 +91,7 @@ class MonteLERcalc:
         self._QEPG=compile_QEPG(str(stim_circuit))
 
 
-        detector_error_model = stim_circuit.detector_error_model(decompose_errors=True)
+        detector_error_model = stim_circuit.detector_error_model(decompose_errors=False)
         matcher = pymatching.Matching.from_detector_error_model(detector_error_model)       
 
         error_rate = noise_model.error_rate
@@ -175,7 +175,7 @@ class MonteLERcalc:
         new_stim_circuit=circuit.stimcircuit      
 
 
-        detector_error_model = new_stim_circuit.detector_error_model(decompose_errors=True)
+        detector_error_model = new_stim_circuit.detector_error_model(decompose_errors=False)
         matcher = pymatching.Matching.from_detector_error_model(detector_error_model)       
 
         Ler_list: list[float] = []
@@ -334,7 +334,7 @@ class MonteLERcalc:
 
         
         sampler = new_stim_circuit.compile_detector_sampler()
-        detector_error_model = new_stim_circuit.detector_error_model(decompose_errors=True)
+        detector_error_model = new_stim_circuit.detector_error_model(decompose_errors=False)
         matcher = pymatching.Matching.from_detector_error_model(detector_error_model)        
 
 
@@ -403,9 +403,104 @@ class MonteLERcalc:
         print("Time(STIM): ", format_with_uncertainty(time_mean, time_std))
         print("PL(STIM): ", format_with_uncertainty(self._estimated_LER, std_ler))
         print("Nerror(STIM): ", format_with_uncertainty(ler_count_average, std_ler_count))
-        print("Sample(STIM): ", format_with_uncertainty(self._sample_used, std_sample))        
+        print("Sample(STIM): ", format_with_uncertainty(self._sample_used, std_sample))
         return self._estimated_LER
-    
+
+
+    def calculate_LER_with_time_budget(self, time_budget: float, filepath: str, pvalue: float) -> dict:
+        """
+        Calculate the logical error rate with a strict time budget.
+        Returns whatever results are available when time budget is exhausted.
+
+        Args:
+            time_budget: Time budget in seconds
+            filepath: Path to the stim circuit file
+            pvalue: Error rate (probability)
+
+        Returns:
+            Dictionary with:
+                - ler: Estimated logical error rate
+                - le_count: Number of logical errors observed
+                - samples_used: Total number of samples used
+                - time_elapsed: Actual time elapsed
+                - budget_exhausted: True if stopped due to time budget
+        """
+        circuit = CliffordCircuit(2)
+        circuit.error_rate = pvalue
+
+        stim_str = ""
+        with open(filepath, "r", encoding="utf-8") as f:
+            stim_str = f.read()
+
+        stim_circuit = rewrite_stim_code(stim_str)
+        circuit.stimcircuit = stim_circuit
+        circuit.compile_from_stim_circuit_str(stim_circuit)
+        new_stim_circuit = circuit.stimcircuit
+
+        sampler = new_stim_circuit.compile_detector_sampler()
+        detector_error_model = new_stim_circuit.detector_error_model(decompose_errors=False)
+        matcher = pymatching.Matching.from_detector_error_model(detector_error_model)
+
+        start_time = time.perf_counter()
+        ler_count = 0
+        samples_used = 0
+        current_sample_gap = SAMPLE_GAP_INITIAL
+        budget_exhausted = False
+
+        while True:
+            elapsed = time.perf_counter() - start_time
+            remaining = time_budget - elapsed
+
+            # Check if time budget is exhausted
+            if remaining <= 0:
+                budget_exhausted = True
+                break
+
+            # Check if we have enough LE events
+            if ler_count >= self._min_num_ke_event:
+                break
+
+            # Adaptive sample gap
+            if ler_count == 0 and samples_used > 0:
+                current_sample_gap *= 2
+                current_sample_gap = min(current_sample_gap, MAX_SAMPLE_GAP)
+            elif ler_count > 0:
+                current_sample_gap = min(
+                    int(self._min_num_ke_event / ler_count) * samples_used,
+                    MAX_SAMPLE_GAP
+                )
+
+            # Sample and decode
+            detection_events, observable_flips = sampler.sample(
+                current_sample_gap, separate_observables=True
+            )
+            predictions = matcher.decode_batch(detection_events)
+            num_errors = np.count_nonzero(observable_flips != predictions)
+
+            ler_count += num_errors
+            samples_used += current_sample_gap
+
+        elapsed = time.perf_counter() - start_time
+
+        # Calculate LER
+        if samples_used > 0:
+            estimated_ler = ler_count / samples_used
+        else:
+            estimated_ler = 0.0
+
+        # Store in instance variables
+        self._num_LER = ler_count
+        self._sample_used = samples_used
+        self._estimated_LER = estimated_ler
+
+        return {
+            'ler': estimated_ler,
+            'le_count': ler_count,
+            'samples_used': samples_used,
+            'time_elapsed': elapsed,
+            'budget_exhausted': budget_exhausted,
+        }
+
 
     def calculate_standard_error(self) -> float:
         """
