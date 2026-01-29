@@ -49,6 +49,8 @@ class ScalerLDPC(Scaler):
         time_budget: int = 30,
         model_type: ModelType = ModelType.OUR_MODEL,
         gamma: float = 1,
+        num_subspaces_phase2: int = 12,
+        binary_search_shots: int = 100,
         # BPOSD-specific parameters
         max_bp_iters: int = 20,
         bp_method: str = 'product_sum',
@@ -63,12 +65,17 @@ class ScalerLDPC(Scaler):
             time_budget: Time budget in seconds
             model_type: Which S-curve model to use
             gamma: Sweet spot tuning parameter for d²y/dw² = γ * dy/dw
+            num_subspaces_phase2: Number of subspaces to sample between w_sweet and w_err (default: 12)
+            binary_search_shots: Number of shots per binary search iteration (default: 100)
             max_bp_iters: Maximum number of BP iterations
             bp_method: BP method ('product_sum' or 'min_sum')
             osd_method: OSD method ('osd0', 'osd_e', 'osd_cs')
             osd_order: OSD order (only used with osd_e/osd_cs, higher for better accuracy)
         """
-        super().__init__(error_rate, time_budget, model_type, gamma)
+        super().__init__(error_rate, time_budget, model_type, gamma, num_subspaces_phase2)
+
+        # Binary search configuration
+        self._binary_search_shots: int = binary_search_shots
 
         # BPOSD-specific parameters
         self._max_bp_iters: int = max_bp_iters
@@ -160,9 +167,11 @@ class ScalerLDPC(Scaler):
         return left
 
     def binary_search_lower(
-        self, low: int, high: int, shots: int = 100, epsilon: float = 0.002
+        self, low: int, high: int, shots: int | None = None, epsilon: float = 0.002
     ) -> int:
         """Find the smallest w in [low, high] such that PL(w) > epsilon. With verbose output."""
+        if shots is None:
+            shots = self._binary_search_shots
         print(f"\n[ScalerLDPC] Binary search LOWER (first logical error)")
         print(f"  Range: [{low}, {high}], shots={shots}, threshold={epsilon}")
         left = low
@@ -202,7 +211,7 @@ class ScalerLDPC(Scaler):
             print(f"  Small circuit, using w_sat = num_noise = {self._saturatew}")
         else:
             self._saturatew = self.binary_search_upper(
-                self._has_logical_errorw, self._num_noise, shots=100
+                self._has_logical_errorw, self._num_noise, shots=self._binary_search_shots
             )
             if self._saturatew < self._has_logical_errorw + 8:
                 self._saturatew = min(self._num_noise, self._has_logical_errorw + 8)

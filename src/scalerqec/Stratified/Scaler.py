@@ -47,6 +47,7 @@ class Scaler:
         time_budget: int = 30,
         model_type: ModelType = ModelType.OUR_MODEL,
         gamma: float = 1,
+        num_subspaces_phase2: int = 12,
     ):
         """
         Initialize the Scaler.
@@ -56,6 +57,8 @@ class Scaler:
             time_budget: Time budget in seconds
             model_type: Which S-curve model to use
             gamma: Sweet spot tuning parameter for d²y/dw² = γ * dy/dw
+            num_subspaces_phase2: Number of uniform subspaces to sample between
+                                  w_sweet and w_err in Phase 2 (default: 12)
         """
         self._error_rate: float = error_rate
         self._time_budget: float = float(time_budget)
@@ -64,6 +67,7 @@ class Scaler:
         # Model configuration
         self._model_type: ModelType = model_type
         self._gamma: float = gamma
+        self._num_subspaces_phase2: int = num_subspaces_phase2
         self._model: Optional[ScurveModelBase] = None
 
         # For model comparison
@@ -1459,10 +1463,9 @@ class Scaler:
 
         print(f"  w_has_error = {self._has_logical_errorw}")
 
-        # Sample 5 uniform points between sampling_sweet_spot and w_has_error
-        num_subspaces_phase2 = 6
+        # Sample uniform points between sampling_sweet_spot and w_has_error
         wlist_phase2 = evenly_spaced_ints(
-            sampling_sweet_spot, self._has_logical_errorw, num_subspaces_phase2
+            sampling_sweet_spot, self._has_logical_errorw, self._num_subspaces_phase2
         )
         wlist_phase2 = [w for w in wlist_phase2 if w not in self._subspace_sample_used]
 
