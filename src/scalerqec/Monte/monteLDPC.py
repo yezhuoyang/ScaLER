@@ -16,9 +16,7 @@ from ..Clifford.stimparser import rewrite_stim_code
 try:
     from stimbposd import BPOSD
 except ImportError:
-    raise ImportError(
-        "stimbposd is required for MonteLDPC. Install it with: pip install stimbposd"
-    )
+    BPOSD = None
 
 
 def format_with_uncertainty(value: float, std: float) -> str:
@@ -82,6 +80,11 @@ class MonteLDPC:
         self._osd_method: str = osd_method
         self._osd_order: int = osd_order
 
+        if BPOSD is None:
+            raise ImportError(
+                "stimbposd is required for MonteLDPC. "
+                "Install it with: pip install stimbposd"
+            )
         self._decoder: Optional[BPOSD] = None
 
     def calculate_LER_from_file(
