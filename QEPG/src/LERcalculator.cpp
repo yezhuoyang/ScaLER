@@ -139,9 +139,10 @@ inline void convert_bitset_row_to_boolean_separate_obs_numpy(
     py::gil_scoped_release release;
 
     #pragma omp parallel                                                \
-        default(none) shared(samplecontainer, det_base, obs_base)
+        default(none) shared(samplecontainer, det_base, obs_base)       \
+        firstprivate(n_rows, begin_index, det_row_stride, n_det, WORD_BITS)
     {
-        static thread_local std::vector<block_t> tl_buf;   // scratch per thread
+        std::vector<block_t> tl_buf;   // scratch per thread
 
         #pragma omp for schedule(static)
         for (long long r = 0; r < static_cast<long long>(n_rows); ++r)
