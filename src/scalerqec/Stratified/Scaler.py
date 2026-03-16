@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 # ScaLER: Scalable Logical Error Rate estimation
 # Refactored to support multiple S-curve models
 

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 # ScaLERLDPC: ScaLER for LDPC codes using BP+OSD decoder
 # This class extends Scaler to support LDPC codes by replacing
 # PyMatching with the BPOSD decoder from stimbposd.

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 IBM's S-curve model implementation (Definition 2 from the paper).
 

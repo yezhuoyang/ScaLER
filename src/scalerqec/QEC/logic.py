@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 # This is the file define the semantic of logical circuits
 # This is useful for Magic state distillation which works on logical level
 import re

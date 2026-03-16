@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Abstract base class for S-curve models.
 

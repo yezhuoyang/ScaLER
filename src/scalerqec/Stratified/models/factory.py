@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Factory for creating S-curve model instances.
 
