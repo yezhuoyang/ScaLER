@@ -45,7 +45,18 @@ if sys.platform == "win32":
 
 else:
     # --- macOS / Linux flags ---
-    extra_compile_args = ["-std=c++20", "-O3"]
+    extra_compile_args = ["-std=c++20", "-O3", "-fopenmp"]
+    extra_link_args = ["-fopenmp"]
+
+    if sys.platform == "darwin":
+        # Homebrew libomp paths (Apple Clang needs explicit include/lib)
+        homebrew_prefix = os.environ.get("HOMEBREW_PREFIX", "/opt/homebrew")
+        omp_inc = os.path.join(homebrew_prefix, "opt", "libomp", "include")
+        omp_lib = os.path.join(homebrew_prefix, "opt", "libomp", "lib")
+        if os.path.isdir(omp_inc):
+            extra_compile_args.append(f"-I{omp_inc}")
+        if os.path.isdir(omp_lib):
+            extra_link_args.append(f"-L{omp_lib}")
 
     # 1) Try to find Boost (for boost/dynamic_bitset.hpp)
     boost_roots = [

@@ -110,7 +110,7 @@ jobs:
       
       - name: Install system dependencies
         run: |
-          brew install boost eigen
+          brew install boost eigen libomp
       
       - name: Install Python dependencies
         run: |
@@ -145,7 +145,7 @@ jobs:
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
-          vcpkgGitCommitId: 'c8696863d371ab7f46e213d8f5ca923c4aef2a00'
+          vcpkgGitCommitId: '4b77da7fed37817f124936239197833469f1b9a8'
       
       - name: Install system dependencies
         run: |
