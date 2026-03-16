@@ -237,8 +237,10 @@ class Scaler:
         self._stim_str_after_rewrite = stim_str
 
         # Configure a decoder using the circuit.
-        self._detector_error_model = self._cliffordcircuit.stimcircuit.detector_error_model(
-            decompose_errors=False
+        self._detector_error_model = (
+            self._cliffordcircuit.stimcircuit.detector_error_model(
+                decompose_errors=False
+            )
         )
         self._matcher = pymatching.Matching.from_detector_error_model(
             self._detector_error_model
@@ -251,7 +253,9 @@ class Scaler:
         """
         Calculate the logical error rate with fixed Pauli weight w.
         """
-        assert self._QEPG_graph is not None, "QEPG graph must be initialized before sampling"
+        assert self._QEPG_graph is not None, (
+            "QEPG graph must be initialized before sampling"
+        )
         assert self._matcher is not None, "Matcher must be initialized before decoding"
         result = return_samples_with_fixed_QEPG(self._QEPG_graph, w, shots)
         arr = np.asarray(result)
@@ -322,7 +326,9 @@ class Scaler:
         """
         Measure the sampling rate of the given circuit.
         """
-        assert self._QEPG_graph is not None, "QEPG graph must be initialized before sampling"
+        assert self._QEPG_graph is not None, (
+            "QEPG graph must be initialized before sampling"
+        )
         wlist = [max(1, self._num_noise // 2)]
         slist = [1000]
 
@@ -339,7 +345,9 @@ class Scaler:
         self._sampling_rate = 1000.0 / elapsed
         self._remaining_time_budget -= elapsed
 
-        print("Elapsed time for sampling rate measurement: {:.6f} seconds".format(elapsed))
+        print(
+            "Elapsed time for sampling rate measurement: {:.6f} seconds".format(elapsed)
+        )
         print(f"Measured sampling rate: {self._sampling_rate:.2f} shots/second")
 
     def profile_optimal_batch_size(
@@ -367,7 +375,17 @@ class Scaler:
             test_weight = max(1, self._num_noise // 2)
 
         if batch_sizes is None:
-            batch_sizes = [1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000]
+            batch_sizes = [
+                1000,
+                2000,
+                5000,
+                10000,
+                20000,
+                50000,
+                100000,
+                200000,
+                500000,
+            ]
 
         results = {}
         best_throughput = 0
@@ -375,7 +393,9 @@ class Scaler:
 
         print(f"\nProfiling batch sizes at weight={test_weight}...")
         print("=" * 70)
-        print(f"{'Batch Size':>12} | {'Sample Time':>12} | {'Decode Time':>12} | {'Total Time':>12} | {'Throughput':>15}")
+        print(
+            f"{'Batch Size':>12} | {'Sample Time':>12} | {'Decode Time':>12} | {'Total Time':>12} | {'Throughput':>15}"
+        )
         print("-" * 70)
 
         for batch in batch_sizes:
@@ -384,8 +404,10 @@ class Scaler:
 
             # Measure sampling time
             sample_start = time.perf_counter()
-            detector_result, obsresult = return_samples_many_weights_separate_obs_with_QEPG(
-                self._QEPG_graph, wlist, slist
+            detector_result, obsresult = (
+                return_samples_many_weights_separate_obs_with_QEPG(
+                    self._QEPG_graph, wlist, slist
+                )
             )
             sample_end = time.perf_counter()
             sample_time = sample_end - sample_start
@@ -400,13 +422,15 @@ class Scaler:
             throughput = batch / total_time if total_time > 0 else 0
 
             results[batch] = {
-                'throughput': throughput,
-                'sample_time': sample_time,
-                'decode_time': decode_time,
-                'total_time': total_time,
+                "throughput": throughput,
+                "sample_time": sample_time,
+                "decode_time": decode_time,
+                "total_time": total_time,
             }
 
-            print(f"{batch:>12,} | {sample_time:>11.4f}s | {decode_time:>11.4f}s | {total_time:>11.4f}s | {throughput:>12,.0f}/s")
+            print(
+                f"{batch:>12,} | {sample_time:>11.4f}s | {decode_time:>11.4f}s | {total_time:>11.4f}s | {throughput:>12,.0f}/s"
+            )
 
             if throughput > best_throughput:
                 best_throughput = throughput
@@ -418,7 +442,9 @@ class Scaler:
                 break
 
         print("=" * 70)
-        print(f"Optimal batch size: {optimal_batch:,} (throughput: {best_throughput:,.0f} shots/s)")
+        print(
+            f"Optimal batch size: {optimal_batch:,} (throughput: {best_throughput:,.0f} shots/s)"
+        )
 
         # Save plot if requested
         if save_plot:
@@ -434,48 +460,60 @@ class Scaler:
     ) -> None:
         """Plot batch size profiling results."""
         batch_sizes = sorted(results.keys())
-        throughputs = [results[b]['throughput'] for b in batch_sizes]
-        sample_times = [results[b]['sample_time'] for b in batch_sizes]
-        decode_times = [results[b]['decode_time'] for b in batch_sizes]
+        throughputs = [results[b]["throughput"] for b in batch_sizes]
+        sample_times = [results[b]["sample_time"] for b in batch_sizes]
+        decode_times = [results[b]["decode_time"] for b in batch_sizes]
 
         fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 
         # Plot 1: Throughput vs Batch Size
         ax1 = axes[0]
-        ax1.plot(batch_sizes, throughputs, 'b-o', linewidth=2, markersize=8)
-        ax1.axvline(optimal_batch, color='red', linestyle='--', label=f'Optimal: {optimal_batch:,}')
-        ax1.set_xscale('log')
-        ax1.set_xlabel('Batch Size')
-        ax1.set_ylabel('Throughput (shots/s)')
-        ax1.set_title('Throughput vs Batch Size')
+        ax1.plot(batch_sizes, throughputs, "b-o", linewidth=2, markersize=8)
+        ax1.axvline(
+            optimal_batch,
+            color="red",
+            linestyle="--",
+            label=f"Optimal: {optimal_batch:,}",
+        )
+        ax1.set_xscale("log")
+        ax1.set_xlabel("Batch Size")
+        ax1.set_ylabel("Throughput (shots/s)")
+        ax1.set_title("Throughput vs Batch Size")
         ax1.legend()
         ax1.grid(True, alpha=0.3)
 
         # Plot 2: Time breakdown
         ax2 = axes[1]
-        ax2.plot(batch_sizes, sample_times, 'g-o', label='Sample Time', linewidth=2)
-        ax2.plot(batch_sizes, decode_times, 'r-o', label='Decode Time', linewidth=2)
-        ax2.set_xscale('log')
-        ax2.set_xlabel('Batch Size')
-        ax2.set_ylabel('Time (s)')
-        ax2.set_title('Time Breakdown')
+        ax2.plot(batch_sizes, sample_times, "g-o", label="Sample Time", linewidth=2)
+        ax2.plot(batch_sizes, decode_times, "r-o", label="Decode Time", linewidth=2)
+        ax2.set_xscale("log")
+        ax2.set_xlabel("Batch Size")
+        ax2.set_ylabel("Time (s)")
+        ax2.set_title("Time Breakdown")
         ax2.legend()
         ax2.grid(True, alpha=0.3)
 
         # Plot 3: Time per shot
         ax3 = axes[2]
-        time_per_shot = [results[b]['total_time'] / b * 1000 for b in batch_sizes]  # ms per shot
-        ax3.plot(batch_sizes, time_per_shot, 'm-o', linewidth=2, markersize=8)
-        ax3.axvline(optimal_batch, color='red', linestyle='--', label=f'Optimal: {optimal_batch:,}')
-        ax3.set_xscale('log')
-        ax3.set_xlabel('Batch Size')
-        ax3.set_ylabel('Time per Shot (ms)')
-        ax3.set_title('Efficiency: Time per Shot')
+        time_per_shot = [
+            results[b]["total_time"] / b * 1000 for b in batch_sizes
+        ]  # ms per shot
+        ax3.plot(batch_sizes, time_per_shot, "m-o", linewidth=2, markersize=8)
+        ax3.axvline(
+            optimal_batch,
+            color="red",
+            linestyle="--",
+            label=f"Optimal: {optimal_batch:,}",
+        )
+        ax3.set_xscale("log")
+        ax3.set_xlabel("Batch Size")
+        ax3.set_ylabel("Time per Shot (ms)")
+        ax3.set_title("Efficiency: Time per Shot")
         ax3.legend()
         ax3.grid(True, alpha=0.3)
 
         plt.tight_layout()
-        plt.savefig(filename, dpi=150, bbox_inches='tight')
+        plt.savefig(filename, dpi=150, bbox_inches="tight")
         plt.close(fig)
         print(f"Saved batch profile plot to: {filename}")
 
@@ -488,7 +526,9 @@ class Scaler:
         Perform one multi-weight sampling call and update subspace statistics.
         Returns the elapsed time for this step (seconds).
         """
-        assert self._QEPG_graph is not None, "QEPG graph must be initialized before sampling"
+        assert self._QEPG_graph is not None, (
+            "QEPG graph must be initialized before sampling"
+        )
         assert self._matcher is not None, "Matcher must be initialized before decoding"
         if not wlist:
             return 0.0
@@ -534,7 +574,9 @@ class Scaler:
                 self._sampling_rate = inst_rate
             else:
                 alpha = 0.5
-                self._sampling_rate = alpha * inst_rate + (1.0 - alpha) * self._sampling_rate
+                self._sampling_rate = (
+                    alpha * inst_rate + (1.0 - alpha) * self._sampling_rate
+                )
 
         print(f"  Step elapsed: {elapsed:.6f} s")
         print(f"  Updated sampling rate: {self._sampling_rate:.2f} shots/second")
@@ -557,17 +599,17 @@ class Scaler:
         elif self._model is not None:
             pl_w = float(self._model.predict(w))
         else:
-            return float('inf')  # Can't estimate without model
+            return float("inf")  # Can't estimate without model
 
         if pl_w <= 0:
-            return float('inf')  # Can't estimate
+            return float("inf")  # Can't estimate
 
         # Expected samples needed = target_events / P_L(w)
         samples_needed = target_le_events / pl_w
 
         # Time = samples / sampling_rate
         if self._sampling_rate <= 0:
-            return float('inf')
+            return float("inf")
 
         return samples_needed / self._sampling_rate
 
@@ -601,7 +643,9 @@ class Scaler:
         for w in range(theoretical_w + 1, max_w + 1):
             cost = self._estimate_sampling_cost(w, target_le)
             if cost <= remaining_budget:
-                print(f"  Practical sweet_spot: {theoretical_w} -> {w} (budget constraint)")
+                print(
+                    f"  Practical sweet_spot: {theoretical_w} -> {w} (budget constraint)"
+                )
                 return w
 
         # If no weight fits budget, use maximum available (highest P_L)
@@ -638,7 +682,9 @@ class Scaler:
         # Second priority: add more samples to existing weights (prioritize near sweet spot)
         weights_by_distance = []
         for w in self._subspace_sample_used.keys():
-            if self._subspace_sample_used[w] < self._MAX_BATCH_SIZE * 10:  # Can sample more
+            if (
+                self._subspace_sample_used[w] < self._MAX_BATCH_SIZE * 10
+            ):  # Can sample more
                 dist = abs(w - self._sweet_spot)
                 weights_by_distance.append((dist, w))
 
@@ -774,7 +820,7 @@ class Scaler:
             label="Data points (log-S)",
             yerr=y_err_list,
             capsize=3,
-            error_kw={'elinewidth': 1.5, 'capthick': 1.2, 'ecolor': 'black'},
+            error_kw={"elinewidth": 1.5, "capthick": 1.2, "ecolor": "black"},
         )
 
         # Fitted curve
@@ -789,25 +835,27 @@ class Scaler:
 
         # w_err (first weight with logical error) annotation
         if self._has_logical_errorw is not None:
-            ax.axvline(self._has_logical_errorw, color="brown", linestyle=":", linewidth=2)
+            ax.axvline(
+                self._has_logical_errorw, color="brown", linestyle=":", linewidth=2
+            )
             ax.annotate(
-                r'$w_{\mathrm{err}}$' + f'={self._has_logical_errorw}',
+                r"$w_{\mathrm{err}}$" + f"={self._has_logical_errorw}",
                 xy=(self._has_logical_errorw, ax.get_ylim()[1] * 0.95),
                 xytext=(self._has_logical_errorw + 3, ax.get_ylim()[1] * 0.95),
                 fontsize=11,
                 color="brown",
-                arrowprops=dict(arrowstyle='->', color='brown'),
+                arrowprops=dict(arrowstyle="->", color="brown"),
             )
 
         # w_sat annotation
         ax.axvline(self._saturatew, color="darkgreen", linestyle=":", linewidth=2)
         ax.annotate(
-            r'$w_{\mathrm{sat}}$' + f'={self._saturatew}',
+            r"$w_{\mathrm{sat}}$" + f"={self._saturatew}",
             xy=(self._saturatew, ax.get_ylim()[1] * 0.85),
             xytext=(self._saturatew - 8, ax.get_ylim()[1] * 0.85),
             fontsize=11,
             color="darkgreen",
-            arrowprops=dict(arrowstyle='->', color='darkgreen'),
+            arrowprops=dict(arrowstyle="->", color="darkgreen"),
         )
 
         # Sweet spot marker (theoretical)
@@ -820,19 +868,22 @@ class Scaler:
                 marker="*",
                 s=200,
                 zorder=5,
-                label=r'$w_{\mathrm{sweet}}$' + f'={self._sweet_spot}',
+                label=r"$w_{\mathrm{sweet}}$" + f"={self._sweet_spot}",
             )
             ax.annotate(
-                r'$w_{\mathrm{sweet}}$' + f'={self._sweet_spot}',
+                r"$w_{\mathrm{sweet}}$" + f"={self._sweet_spot}",
                 xy=(self._sweet_spot, sweet_spot_y),
                 xytext=(self._sweet_spot + 5, sweet_spot_y + 0.5),
                 fontsize=11,
                 color="purple",
-                arrowprops=dict(arrowstyle='->', color='purple'),
+                arrowprops=dict(arrowstyle="->", color="purple"),
             )
 
         # Practical sweet spot marker (if different from theoretical)
-        if practical_sweet_spot is not None and practical_sweet_spot != self._sweet_spot:
+        if (
+            practical_sweet_spot is not None
+            and practical_sweet_spot != self._sweet_spot
+        ):
             practical_y = float(self._model.linear_prediction(practical_sweet_spot))
             ax.scatter(
                 practical_sweet_spot,
@@ -843,12 +894,12 @@ class Scaler:
                 zorder=5,
             )
             ax.annotate(
-                f'Practical={practical_sweet_spot}',
+                f"Practical={practical_sweet_spot}",
                 xy=(practical_sweet_spot, practical_y),
                 xytext=(practical_sweet_spot + 3, practical_y + 0.3),
                 fontsize=10,
                 color="red",
-                arrowprops=dict(arrowstyle='->', color='red'),
+                arrowprops=dict(arrowstyle="->", color="red"),
             )
 
         # Fault-tolerant region
@@ -860,7 +911,7 @@ class Scaler:
             ha="center",
             color="green",
             fontsize=10,
-            fontweight='bold',
+            fontweight="bold",
         )
 
         # Critical region annotation (w_min to w_max)
@@ -871,19 +922,23 @@ class Scaler:
         # Add bracket annotation for critical region
         mid_critical = (self._minw + self._maxw) / 2
         ax.annotate(
-            '',
+            "",
             xy=(self._minw, ax.get_ylim()[0] + 0.3),
             xytext=(self._maxw, ax.get_ylim()[0] + 0.3),
-            arrowprops=dict(arrowstyle='<->', color='red', lw=1.5),
+            arrowprops=dict(arrowstyle="<->", color="red", lw=1.5),
         )
         ax.text(
             mid_critical,
             ax.get_ylim()[0] + 0.6,
-            f'Critical Region\n' + r'$[w_{\min}=' + f'{self._minw}' + r', w_{\max}=' + f'{self._maxw}]$',
+            f"Critical Region\n"
+            + r"$[w_{\min}="
+            + f"{self._minw}"
+            + r", w_{\max}="
+            + f"{self._maxw}]$",
             ha="center",
             color="red",
             fontsize=10,
-            fontweight='bold',
+            fontweight="bold",
         )
 
         # Side annotation box
@@ -896,19 +951,21 @@ class Scaler:
         ]
         for name, value in params.items():
             text_lines.append(f"  {name}: {value:.4f}")
-        text_lines.extend([
-            "",
-            "Key Weights:",
-            f"  w_err: {self._has_logical_errorw}",
-            f"  w_min: {self._minw}",
-            f"  w_max: {self._maxw}",
-            f"  w_sweet: {self._sweet_spot}",
-            f"  w_sat: {self._saturatew}",
-            "",
-            "Circuit Info:",
-            f"  #detector: {self._num_detector}",
-            f"  #noise: {self._num_noise}",
-        ])
+        text_lines.extend(
+            [
+                "",
+                "Key Weights:",
+                f"  w_err: {self._has_logical_errorw}",
+                f"  w_min: {self._minw}",
+                f"  w_max: {self._maxw}",
+                f"  w_sweet: {self._sweet_spot}",
+                f"  w_sat: {self._saturatew}",
+                "",
+                "Circuit Info:",
+                f"  #detector: {self._num_detector}",
+                f"  #noise: {self._num_noise}",
+            ]
+        )
         if self._ler > 0:
             text_lines.append(f"  P_L: {self._ler:.2e}")
         if time_val is not None:
@@ -922,14 +979,17 @@ class Scaler:
             fontsize=8,
             va="center",
             ha="left",
-            family='monospace',
+            family="monospace",
             bbox=dict(boxstyle="round", facecolor="white", alpha=0.95),
         )
 
         ax.set_xlabel("Weight $w$", fontsize=12)
         ax.set_ylabel(r"$\log\left(\frac{0.5}{P_L(w)} - 1\right)$", fontsize=12)
-        ax.set_title(f"Log-S Curve Fit (d={self._circuit_level_code_distance}, p={self._error_rate})", fontsize=14)
-        ax.legend(fontsize=9, loc='upper right')
+        ax.set_title(
+            f"Log-S Curve Fit (d={self._circuit_level_code_distance}, p={self._error_rate})",
+            fontsize=14,
+        )
+        ax.legend(fontsize=9, loc="upper right")
         ax.grid(True, alpha=0.3)
         fig.tight_layout()
 
@@ -941,7 +1001,9 @@ class Scaler:
         plt.close(fig)
 
         # Also generate Y-curve (S-curve in original probability space)
-        self._plot_scurve(filename.replace('.pdf', '_Scurve.pdf'), time_val, practical_sweet_spot)
+        self._plot_scurve(
+            filename.replace(".pdf", "_Scurve.pdf"), time_val, practical_sweet_spot
+        )
 
     def _plot_scurve(
         self,
@@ -1001,7 +1063,7 @@ class Scaler:
             label="Measured $P_L(w)$",
             yerr=y_err_list,
             capsize=3,
-            error_kw={'elinewidth': 1.5, 'capthick': 1.2, 'ecolor': 'black'},
+            error_kw={"elinewidth": 1.5, "capthick": 1.2, "ecolor": "black"},
         )
 
         # Fitted curve
@@ -1016,25 +1078,27 @@ class Scaler:
 
         # w_err annotation
         if self._has_logical_errorw is not None:
-            ax.axvline(self._has_logical_errorw, color="brown", linestyle=":", linewidth=2)
+            ax.axvline(
+                self._has_logical_errorw, color="brown", linestyle=":", linewidth=2
+            )
             ax.annotate(
-                r'$w_{\mathrm{err}}$' + f'={self._has_logical_errorw}',
+                r"$w_{\mathrm{err}}$" + f"={self._has_logical_errorw}",
                 xy=(self._has_logical_errorw, 0.45),
                 xytext=(self._has_logical_errorw + 3, 0.45),
                 fontsize=11,
                 color="brown",
-                arrowprops=dict(arrowstyle='->', color='brown'),
+                arrowprops=dict(arrowstyle="->", color="brown"),
             )
 
         # w_sat annotation
         ax.axvline(self._saturatew, color="darkgreen", linestyle=":", linewidth=2)
         ax.annotate(
-            r'$w_{\mathrm{sat}}$' + f'={self._saturatew}',
+            r"$w_{\mathrm{sat}}$" + f"={self._saturatew}",
             xy=(self._saturatew, 0.35),
             xytext=(self._saturatew - 8, 0.35),
             fontsize=11,
             color="darkgreen",
-            arrowprops=dict(arrowstyle='->', color='darkgreen'),
+            arrowprops=dict(arrowstyle="->", color="darkgreen"),
         )
 
         # Sweet spot marker
@@ -1047,15 +1111,15 @@ class Scaler:
                 marker="*",
                 s=200,
                 zorder=5,
-                label=r'$w_{\mathrm{sweet}}$' + f'={self._sweet_spot}',
+                label=r"$w_{\mathrm{sweet}}$" + f"={self._sweet_spot}",
             )
             ax.annotate(
-                r'$w_{\mathrm{sweet}}$' + f'={self._sweet_spot}',
+                r"$w_{\mathrm{sweet}}$" + f"={self._sweet_spot}",
                 xy=(self._sweet_spot, sweet_spot_y),
                 xytext=(self._sweet_spot + 5, sweet_spot_y + 0.05),
                 fontsize=11,
                 color="purple",
-                arrowprops=dict(arrowstyle='->', color='purple'),
+                arrowprops=dict(arrowstyle="->", color="purple"),
             )
 
         # Fault-tolerant region
@@ -1067,7 +1131,7 @@ class Scaler:
             ha="center",
             color="green",
             fontsize=10,
-            fontweight='bold',
+            fontweight="bold",
         )
 
         # Critical region
@@ -1079,16 +1143,18 @@ class Scaler:
         ax.text(
             mid_critical,
             0.02,
-            f'Critical Region\n' + r'$[w_{\min}, w_{\max}]$',
+            f"Critical Region\n" + r"$[w_{\min}, w_{\max}]$",
             ha="center",
             color="red",
             fontsize=10,
-            fontweight='bold',
+            fontweight="bold",
         )
 
         # Saturation line at 0.5
         ax.axhline(0.5, color="gray", linestyle="--", linewidth=1, alpha=0.7)
-        ax.text(max(x_list) + 1, 0.5, "Saturation", fontsize=9, color="gray", va='center')
+        ax.text(
+            max(x_list) + 1, 0.5, "Saturation", fontsize=9, color="gray", va="center"
+        )
 
         # Side annotation box
         params = self._model.get_params()
@@ -1099,14 +1165,16 @@ class Scaler:
         ]
         for name, value in params.items():
             text_lines.append(f"  {name}: {value:.4f}")
-        text_lines.extend([
-            "",
-            "Key Weights:",
-            f"  w_sweet: {self._sweet_spot}",
-            f"  w_sat: {self._saturatew}",
-            "",
-            f"Estimated P_L: {self._ler:.2e}",
-        ])
+        text_lines.extend(
+            [
+                "",
+                "Key Weights:",
+                f"  w_sweet: {self._sweet_spot}",
+                f"  w_sat: {self._saturatew}",
+                "",
+                f"Estimated P_L: {self._ler:.2e}",
+            ]
+        )
         if time_val is not None:
             text_lines.append(f"Time: {time_val:.2f}s")
 
@@ -1118,15 +1186,18 @@ class Scaler:
             fontsize=8,
             va="center",
             ha="left",
-            family='monospace',
+            family="monospace",
             bbox=dict(boxstyle="round", facecolor="white", alpha=0.95),
         )
 
         ax.set_xlabel("Weight $w$", fontsize=12)
         ax.set_ylabel(r"$P_L(w)$", fontsize=12)
-        ax.set_title(f"S-Curve (d={self._circuit_level_code_distance}, p={self._error_rate})", fontsize=14)
+        ax.set_title(
+            f"S-Curve (d={self._circuit_level_code_distance}, p={self._error_rate})",
+            fontsize=14,
+        )
         ax.set_ylim(-0.02, 0.55)
-        ax.legend(fontsize=9, loc='upper left')
+        ax.legend(fontsize=9, loc="upper left")
         ax.grid(True, alpha=0.3)
         fig.tight_layout()
 
@@ -1172,7 +1243,9 @@ class Scaler:
                 return False
         return True
 
-    def _pl_stable(self, pl_new: float, pl_old: Optional[float], rel_tol: float) -> bool:
+    def _pl_stable(
+        self, pl_new: float, pl_old: Optional[float], rel_tol: float
+    ) -> bool:
         """Check if the overall PL estimate is stable in relative error."""
         if pl_old is None:
             return False
@@ -1399,7 +1472,9 @@ class Scaler:
         # Total shots limited by _MAX_BATCH_SIZE
         shots_per_w = self._MAX_BATCH_SIZE // len(wlist_init)
         shots_per_w = max(2000, shots_per_w)
-        print(f"  Shots per weight: {shots_per_w} (total: {shots_per_w * len(wlist_init)})")
+        print(
+            f"  Shots per weight: {shots_per_w} (total: {shots_per_w * len(wlist_init)})"
+        )
         slist_init = [shots_per_w] * len(wlist_init)
 
         elapsed = self._sampling_step(wlist_init, slist_init)
@@ -1419,25 +1494,27 @@ class Scaler:
         print(f"  Initial LER = {self._ler:.3e}")
 
         # Log Phase 1
-        self._iteration_log.append({
-            'iteration': 0,
-            'phase': 'phase1_initial',
-            'weights_sampled': wlist_init,
-            'shots_per_weight': shots_per_w,
-            'total_shots': shots_per_w * len(wlist_init),
-            'sweet_spot_after': self._sweet_spot,
-            'r_squared': self._R_square_score,
-            'ler': self._ler,
-            'elapsed_time': elapsed,
-            'weight_status_after': {
-                w: {
-                    'samples': self._subspace_sample_used.get(w, 0),
-                    'le_count': self._subspace_LE_count.get(w, 0),
-                    'p_w': self._estimated_subspaceLER.get(w, 0),
-                }
-                for w in wlist_init
-            },
-        })
+        self._iteration_log.append(
+            {
+                "iteration": 0,
+                "phase": "phase1_initial",
+                "weights_sampled": wlist_init,
+                "shots_per_weight": shots_per_w,
+                "total_shots": shots_per_w * len(wlist_init),
+                "sweet_spot_after": self._sweet_spot,
+                "r_squared": self._R_square_score,
+                "ler": self._ler,
+                "elapsed_time": elapsed,
+                "weight_status_after": {
+                    w: {
+                        "samples": self._subspace_sample_used.get(w, 0),
+                        "le_count": self._subspace_LE_count.get(w, 0),
+                        "p_w": self._estimated_subspaceLER.get(w, 0),
+                    }
+                    for w in wlist_init
+                },
+            }
+        )
 
         # ============================================================
         # PHASE 2: Sample between sweet_spot and w_has_error
@@ -1480,7 +1557,9 @@ class Scaler:
             shots_per_w = self._MAX_BATCH_SIZE // len(wlist_phase2)
             shots_per_w = max(self._SHOTS_PER_SUBSPACE, shots_per_w)
 
-            print(f"  Shots per weight: {shots_per_w} (total: {shots_per_w * len(wlist_phase2)})")
+            print(
+                f"  Shots per weight: {shots_per_w} (total: {shots_per_w * len(wlist_phase2)})"
+            )
 
             slist_phase2 = [shots_per_w] * len(wlist_phase2)
 
@@ -1489,7 +1568,9 @@ class Scaler:
             # Recalculate practical sweet spot after sampling
             elapsed_total = time.perf_counter() - start_time
             self._remaining_time_budget = self._time_budget - elapsed_total
-            practical_sweet = self._get_practical_sweet_spot(self._remaining_time_budget)
+            practical_sweet = self._get_practical_sweet_spot(
+                self._remaining_time_budget
+            )
 
             # Only fit model without saving intermediate plots (only final plot is saved)
             self.fit_log_S_model(
@@ -1505,26 +1586,28 @@ class Scaler:
             print(f"  LER = {self._ler:.3e}")
 
             # Log Phase 2
-            self._iteration_log.append({
-                'iteration': 0,
-                'phase': 'phase2_sweet_spot',
-                'weights_sampled': wlist_phase2,
-                'shots_per_weight': shots_per_w,
-                'total_shots': shots_per_w * len(wlist_phase2),
-                'sweet_spot_after': self._sweet_spot,
-                'practical_sweet_spot': practical_sweet,
-                'r_squared': self._R_square_score,
-                'ler': self._ler,
-                'elapsed_time': elapsed_total,
-                'weight_status_after': {
-                    w: {
-                        'samples': self._subspace_sample_used.get(w, 0),
-                        'le_count': self._subspace_LE_count.get(w, 0),
-                        'p_w': self._estimated_subspaceLER.get(w, 0),
-                    }
-                    for w in wlist_phase2
-                },
-            })
+            self._iteration_log.append(
+                {
+                    "iteration": 0,
+                    "phase": "phase2_sweet_spot",
+                    "weights_sampled": wlist_phase2,
+                    "shots_per_weight": shots_per_w,
+                    "total_shots": shots_per_w * len(wlist_phase2),
+                    "sweet_spot_after": self._sweet_spot,
+                    "practical_sweet_spot": practical_sweet,
+                    "r_squared": self._R_square_score,
+                    "ler": self._ler,
+                    "elapsed_time": elapsed_total,
+                    "weight_status_after": {
+                        w: {
+                            "samples": self._subspace_sample_used.get(w, 0),
+                            "le_count": self._subspace_LE_count.get(w, 0),
+                            "p_w": self._estimated_subspaceLER.get(w, 0),
+                        }
+                        for w in wlist_phase2
+                    },
+                }
+            )
         else:
             print("  No new weights to sample in Phase 2.")
 
@@ -1542,11 +1625,15 @@ class Scaler:
             self._remaining_time_budget = self._time_budget - elapsed_total
 
             if self._remaining_time_budget <= MIN_BUDGET_THRESHOLD:
-                print(f"\n  Time budget exhausted (used {elapsed_total:.1f}s of {self._time_budget}s)")
+                print(
+                    f"\n  Time budget exhausted (used {elapsed_total:.1f}s of {self._time_budget}s)"
+                )
                 break
 
             # Get practical sweet spot based on current remaining budget
-            practical_sweet = self._get_practical_sweet_spot(self._remaining_time_budget)
+            practical_sweet = self._get_practical_sweet_spot(
+                self._remaining_time_budget
+            )
             theoretical_sweet = self._sweet_spot
 
             # Get the current leftmost sampled weight
@@ -1583,29 +1670,33 @@ class Scaler:
                 samples = self._subspace_sample_used.get(w, 0)
                 le_count = self._subspace_LE_count.get(w, 0)
                 pl = self._estimated_subspaceLER.get(w, 0)
-                print(f"    w={w}: {samples:,} samples, {le_count} LE events, P_L={pl:.4e}")
+                print(
+                    f"    w={w}: {samples:,} samples, {le_count} LE events, P_L={pl:.4e}"
+                )
 
             # Allocate shots - total limited by _MAX_BATCH_SIZE, distribute across weights
             shots_per_w = self._MAX_BATCH_SIZE // len(wlist_refine)
             shots_per_w = max(self._SHOTS_PER_SUBSPACE, shots_per_w)
-            print(f"  Shots per weight: {shots_per_w} (total: {shots_per_w * len(wlist_refine)})")
+            print(
+                f"  Shots per weight: {shots_per_w} (total: {shots_per_w * len(wlist_refine)})"
+            )
             slist_refine = [shots_per_w] * len(wlist_refine)
 
             # Log this iteration
             iter_log = {
-                'iteration': iter_idx,
-                'phase': 'refinement',
-                'remaining_budget': self._remaining_time_budget,
-                'theoretical_sweet_spot': theoretical_sweet,
-                'practical_sweet_spot': practical_sweet,
-                'weights_sampled': wlist_refine.copy(),
-                'shots_per_weight': shots_per_w,
-                'total_shots': shots_per_w * len(wlist_refine),
-                'weight_status_before': {
+                "iteration": iter_idx,
+                "phase": "refinement",
+                "remaining_budget": self._remaining_time_budget,
+                "theoretical_sweet_spot": theoretical_sweet,
+                "practical_sweet_spot": practical_sweet,
+                "weights_sampled": wlist_refine.copy(),
+                "shots_per_weight": shots_per_w,
+                "total_shots": shots_per_w * len(wlist_refine),
+                "weight_status_before": {
                     w: {
-                        'samples': self._subspace_sample_used.get(w, 0),
-                        'le_count': self._subspace_LE_count.get(w, 0),
-                        'p_w': self._estimated_subspaceLER.get(w, 0),
+                        "samples": self._subspace_sample_used.get(w, 0),
+                        "le_count": self._subspace_LE_count.get(w, 0),
+                        "p_w": self._estimated_subspaceLER.get(w, 0),
                     }
                     for w in wlist_refine
                 },
@@ -1616,7 +1707,9 @@ class Scaler:
             # Recalculate practical sweet spot after sampling
             elapsed_total = time.perf_counter() - start_time
             self._remaining_time_budget = self._time_budget - elapsed_total
-            practical_sweet = self._get_practical_sweet_spot(self._remaining_time_budget)
+            practical_sweet = self._get_practical_sweet_spot(
+                self._remaining_time_budget
+            )
 
             # Only fit model without saving intermediate plots (only final plot is saved)
             self.fit_log_S_model(
@@ -1628,18 +1721,18 @@ class Scaler:
             self._calc_LER_from_fit()
 
             # Update log with results after this iteration
-            iter_log['weight_status_after'] = {
+            iter_log["weight_status_after"] = {
                 w: {
-                    'samples': self._subspace_sample_used.get(w, 0),
-                    'le_count': self._subspace_LE_count.get(w, 0),
-                    'p_w': self._estimated_subspaceLER.get(w, 0),
+                    "samples": self._subspace_sample_used.get(w, 0),
+                    "le_count": self._subspace_LE_count.get(w, 0),
+                    "p_w": self._estimated_subspaceLER.get(w, 0),
                 }
                 for w in wlist_refine
             }
-            iter_log['sweet_spot_after'] = self._sweet_spot
-            iter_log['r_squared'] = self._R_square_score
-            iter_log['ler'] = self._ler
-            iter_log['elapsed_time'] = elapsed_total
+            iter_log["sweet_spot_after"] = self._sweet_spot
+            iter_log["r_squared"] = self._R_square_score
+            iter_log["ler"] = self._ler
+            iter_log["elapsed_time"] = elapsed_total
             self._iteration_log.append(iter_log)
 
             print(f"  Updated theoretical sweet_spot = {self._sweet_spot}")
@@ -1654,7 +1747,9 @@ class Scaler:
 
         # Get final practical sweet spot for the plot
         final_remaining_budget = self._time_budget - total_time
-        final_practical_sweet = self._get_practical_sweet_spot(max(0, final_remaining_budget))
+        final_practical_sweet = self._get_practical_sweet_spot(
+            max(0, final_remaining_budget)
+        )
 
         self.fit_log_S_model(
             filename=figname + "final.pdf",
@@ -1690,36 +1785,36 @@ class Scaler:
         import json
 
         log_data = {
-            'circuit_info': {
-                'code_distance': self._circuit_level_code_distance,
-                'error_rate': self._error_rate,
-                'num_noise': self._num_noise,
-                'num_detector': self._num_detector,
-                't': self._t,
-                'w_err': self._has_logical_errorw,
-                'w_sat': self._saturatew,
-                'w_min': self._minw,
-                'w_max': self._maxw,
+            "circuit_info": {
+                "code_distance": self._circuit_level_code_distance,
+                "error_rate": self._error_rate,
+                "num_noise": self._num_noise,
+                "num_detector": self._num_detector,
+                "t": self._t,
+                "w_err": self._has_logical_errorw,
+                "w_sat": self._saturatew,
+                "w_min": self._minw,
+                "w_max": self._maxw,
             },
-            'model_info': {
-                'model_type': self._model_type.value,
-                'gamma': self._gamma,
+            "model_info": {
+                "model_type": self._model_type.value,
+                "gamma": self._gamma,
             },
-            'final_results': {
-                'ler': self._ler,
-                'r_squared': self._R_square_score,
-                'sweet_spot': self._sweet_spot,
-                'total_samples': sum(self._subspace_sample_used.values()),
+            "final_results": {
+                "ler": self._ler,
+                "r_squared": self._R_square_score,
+                "sweet_spot": self._sweet_spot,
+                "total_samples": sum(self._subspace_sample_used.values()),
             },
-            'final_weight_distribution': {
+            "final_weight_distribution": {
                 str(w): {
-                    'samples': self._subspace_sample_used.get(w, 0),
-                    'le_count': self._subspace_LE_count.get(w, 0),
-                    'p_w': self._estimated_subspaceLER.get(w, 0),
+                    "samples": self._subspace_sample_used.get(w, 0),
+                    "le_count": self._subspace_LE_count.get(w, 0),
+                    "p_w": self._estimated_subspaceLER.get(w, 0),
                 }
                 for w in sorted(self._subspace_sample_used.keys())
             },
-            'iterations': self._iteration_log,
+            "iterations": self._iteration_log,
         }
 
         # Convert numpy types to Python types for JSON serialization
@@ -1738,7 +1833,7 @@ class Scaler:
 
         log_data = convert_to_serializable(log_data)
 
-        with open(filename, 'w', encoding='utf-8') as f:
+        with open(filename, "w", encoding="utf-8") as f:
             json.dump(log_data, f, indent=2)
 
         print(f"Saved iteration log to: {filename}")

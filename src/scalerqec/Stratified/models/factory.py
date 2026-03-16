@@ -42,7 +42,9 @@ class ModelFactory:
     }
 
     @classmethod
-    def register(cls, model_type: ModelType, model_class: Type[ScurveModelBase]) -> None:
+    def register(
+        cls, model_type: ModelType, model_class: Type[ScurveModelBase]
+    ) -> None:
         """
         Register a new model type.
 

@@ -17,8 +17,7 @@ try:
     from stimbposd import BPOSD
 except ImportError:
     raise ImportError(
-        "stimbposd is required for ScalerLDPC. "
-        "Install it with: pip install stimbposd"
+        "stimbposd is required for ScalerLDPC. Install it with: pip install stimbposd"
     )
 
 
@@ -53,8 +52,8 @@ class ScalerLDPC(Scaler):
         binary_search_shots: int = 100,
         # BPOSD-specific parameters
         max_bp_iters: int = 20,
-        bp_method: str = 'product_sum',
-        osd_method: str = 'osd0',  # Use 'osd0' for order-0 OSD (fast)
+        bp_method: str = "product_sum",
+        osd_method: str = "osd0",  # Use 'osd0' for order-0 OSD (fast)
         osd_order: int = 0,
     ):
         """
@@ -72,7 +71,9 @@ class ScalerLDPC(Scaler):
             osd_method: OSD method ('osd0', 'osd_e', 'osd_cs')
             osd_order: OSD order (only used with osd_e/osd_cs, higher for better accuracy)
         """
-        super().__init__(error_rate, time_budget, model_type, gamma, num_subspaces_phase2)
+        super().__init__(
+            error_rate, time_budget, model_type, gamma, num_subspaces_phase2
+        )
 
         # Binary search configuration
         self._binary_search_shots: int = binary_search_shots
@@ -112,8 +113,10 @@ class ScalerLDPC(Scaler):
 
         # Configure BPOSD decoder using the detector error model
         print("[ScalerLDPC] Building detector error model...")
-        self._detector_error_model = self._cliffordcircuit.stimcircuit.detector_error_model(
-            decompose_errors=False
+        self._detector_error_model = (
+            self._cliffordcircuit.stimcircuit.detector_error_model(
+                decompose_errors=False
+            )
         )
 
         # Initialize BPOSD decoder
@@ -161,7 +164,7 @@ class ScalerLDPC(Scaler):
                 print(f"-> search left [{left}, {mid}]")
                 right = mid
             else:
-                print(f"-> search right [{mid+1}, {right}]")
+                print(f"-> search right [{mid + 1}, {right}]")
                 left = mid + 1
         print(f"  Result: w_sat = {left}")
         return left
@@ -187,7 +190,7 @@ class ScalerLDPC(Scaler):
                 print(f"-> search left [{left}, {mid}]")
                 right = mid
             else:
-                print(f"-> search right [{mid+1}, {right}]")
+                print(f"-> search right [{mid + 1}, {right}]")
                 left = mid + 1
         print(f"  Result: w_has_error = {left}")
         return left
@@ -197,7 +200,9 @@ class ScalerLDPC(Scaler):
         print("\n[ScalerLDPC] Determining lower weight (w_has_error)...")
         if self._num_noise <= 8:
             self._has_logical_errorw = self._t + 1
-            print(f"  Small circuit, using w_has_error = t+1 = {self._has_logical_errorw}")
+            print(
+                f"  Small circuit, using w_has_error = t+1 = {self._has_logical_errorw}"
+            )
         else:
             self._has_logical_errorw = self.binary_search_lower(
                 self._t + 1, self._num_noise
@@ -211,7 +216,9 @@ class ScalerLDPC(Scaler):
             print(f"  Small circuit, using w_sat = num_noise = {self._saturatew}")
         else:
             self._saturatew = self.binary_search_upper(
-                self._has_logical_errorw, self._num_noise, shots=self._binary_search_shots
+                self._has_logical_errorw,
+                self._num_noise,
+                shots=self._binary_search_shots,
             )
             if self._saturatew < self._has_logical_errorw + 8:
                 self._saturatew = min(self._num_noise, self._has_logical_errorw + 8)
@@ -226,8 +233,12 @@ class ScalerLDPC(Scaler):
         Calculate the logical error rate with fixed Pauli weight w.
         Uses BPOSD decoder.
         """
-        assert self._QEPG_graph is not None, "QEPG graph must be initialized before sampling"
-        assert self._decoder is not None, "BPOSD decoder must be initialized before decoding"
+        assert self._QEPG_graph is not None, (
+            "QEPG graph must be initialized before sampling"
+        )
+        assert self._decoder is not None, (
+            "BPOSD decoder must be initialized before decoding"
+        )
 
         result = return_samples_with_fixed_QEPG(self._QEPG_graph, w, shots)
         arr = np.asarray(result)
@@ -251,8 +262,12 @@ class ScalerLDPC(Scaler):
         """
         Measure the sampling rate of the given circuit using BPOSD decoder.
         """
-        assert self._QEPG_graph is not None, "QEPG graph must be initialized before sampling"
-        assert self._decoder is not None, "BPOSD decoder must be initialized before decoding"
+        assert self._QEPG_graph is not None, (
+            "QEPG graph must be initialized before sampling"
+        )
+        assert self._decoder is not None, (
+            "BPOSD decoder must be initialized before decoding"
+        )
 
         wlist = [max(1, self._num_noise // 2)]
         slist = [100]  # Reduced from 1000 for faster BPOSD decoding
@@ -272,7 +287,9 @@ class ScalerLDPC(Scaler):
         self._sampling_rate = 100.0 / elapsed  # Updated to match slist[0]=100
         self._remaining_time_budget -= elapsed
 
-        print("Elapsed time for sampling rate measurement: {:.6f} seconds".format(elapsed))
+        print(
+            "Elapsed time for sampling rate measurement: {:.6f} seconds".format(elapsed)
+        )
         print(f"Measured sampling rate: {self._sampling_rate:.2f} shots/second")
 
     def profile_optimal_batch_size(
@@ -297,7 +314,9 @@ class ScalerLDPC(Scaler):
         print("=" * 70)
         print(f"Profiling batch sizes at weight w={test_weight}")
         print("=" * 70)
-        print(f"{'Batch Size':>12} | {'Sample Time':>11} | {'Decode Time':>11} | {'Total Time':>11} | {'Throughput':>12}")
+        print(
+            f"{'Batch Size':>12} | {'Sample Time':>11} | {'Decode Time':>11} | {'Total Time':>11} | {'Throughput':>12}"
+        )
         print("-" * 70)
 
         results: Dict[int, dict] = {}
@@ -310,8 +329,10 @@ class ScalerLDPC(Scaler):
 
             # Measure sampling time
             sample_start = time.perf_counter()
-            detector_result, obsresult = return_samples_many_weights_separate_obs_with_QEPG(
-                self._QEPG_graph, wlist, slist
+            detector_result, obsresult = (
+                return_samples_many_weights_separate_obs_with_QEPG(
+                    self._QEPG_graph, wlist, slist
+                )
             )
             sample_end = time.perf_counter()
             sample_time = sample_end - sample_start
@@ -326,13 +347,15 @@ class ScalerLDPC(Scaler):
             throughput = batch / total_time if total_time > 0 else 0
 
             results[batch] = {
-                'throughput': throughput,
-                'sample_time': sample_time,
-                'decode_time': decode_time,
-                'total_time': total_time,
+                "throughput": throughput,
+                "sample_time": sample_time,
+                "decode_time": decode_time,
+                "total_time": total_time,
             }
 
-            print(f"{batch:>12,} | {sample_time:>11.4f}s | {decode_time:>11.4f}s | {total_time:>11.4f}s | {throughput:>12,.0f}/s")
+            print(
+                f"{batch:>12,} | {sample_time:>11.4f}s | {decode_time:>11.4f}s | {total_time:>11.4f}s | {throughput:>12,.0f}/s"
+            )
 
             if throughput > best_throughput:
                 best_throughput = throughput
@@ -344,7 +367,9 @@ class ScalerLDPC(Scaler):
                 break
 
         print("=" * 70)
-        print(f"Optimal batch size: {optimal_batch:,} (throughput: {best_throughput:,.0f} shots/s)")
+        print(
+            f"Optimal batch size: {optimal_batch:,} (throughput: {best_throughput:,.0f} shots/s)"
+        )
 
         # Save plot if requested
         if save_plot:
@@ -362,8 +387,12 @@ class ScalerLDPC(Scaler):
         Returns the elapsed time for this step (seconds).
         Uses BPOSD decoder with capped batch size for performance.
         """
-        assert self._QEPG_graph is not None, "QEPG graph must be initialized before sampling"
-        assert self._decoder is not None, "BPOSD decoder must be initialized before decoding"
+        assert self._QEPG_graph is not None, (
+            "QEPG graph must be initialized before sampling"
+        )
+        assert self._decoder is not None, (
+            "BPOSD decoder must be initialized before decoding"
+        )
 
         if not wlist:
             return 0.0
@@ -371,7 +400,10 @@ class ScalerLDPC(Scaler):
         # Cap shots per weight at _MAX_BATCH_SIZE_LDPC for BPOSD performance
         slist_capped = [min(s, self._MAX_BATCH_SIZE_LDPC) for s in slist]
         total_shots = int(sum(slist_capped))
-        print(f"Sampling weights and shots (capped at {self._MAX_BATCH_SIZE_LDPC}):", list(zip(wlist, slist_capped)))
+        print(
+            f"Sampling weights and shots (capped at {self._MAX_BATCH_SIZE_LDPC}):",
+            list(zip(wlist, slist_capped)),
+        )
         print("  Total shots this step:", total_shots)
 
         start_time = time.perf_counter()
@@ -418,7 +450,9 @@ class ScalerLDPC(Scaler):
             else:
                 # Exponential moving average
                 alpha = 0.5
-                self._sampling_rate = alpha * inst_rate + (1.0 - alpha) * self._sampling_rate
+                self._sampling_rate = (
+                    alpha * inst_rate + (1.0 - alpha) * self._sampling_rate
+                )
 
         print(f"  Step elapsed: {elapsed:.6f} s")
         print(f"  Updated sampling rate: {self._sampling_rate:.2f} shots/second")
@@ -431,10 +465,10 @@ class ScalerLDPC(Scaler):
     def get_decoder_params(self) -> Dict:
         """Get the current BPOSD decoder parameters."""
         return {
-            'max_bp_iters': self._max_bp_iters,
-            'bp_method': self._bp_method,
-            'osd_method': self._osd_method,
-            'osd_order': self._osd_order,
+            "max_bp_iters": self._max_bp_iters,
+            "bp_method": self._bp_method,
+            "osd_method": self._osd_method,
+            "osd_order": self._osd_order,
         }
 
     def set_decoder_params(

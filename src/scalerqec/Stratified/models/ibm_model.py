@@ -58,7 +58,9 @@ class IBMScurveModel(ScurveModelBase):
     def param_names(self) -> Tuple[str, ...]:
         return ("f0", "w0", "gamma_ibm")
 
-    def predict(self, w: float | NDArray[np.floating[Any]]) -> float | NDArray[np.floating[Any]]:
+    def predict(
+        self, w: float | NDArray[np.floating[Any]]
+    ) -> float | NDArray[np.floating[Any]]:
         """
         Compute P_L(w) = 0.5 * [1 - exp(-2*f0*(w/w0)^γ)].
 
@@ -90,7 +92,9 @@ class IBMScurveModel(ScurveModelBase):
             return float(result[0])
         return result
 
-    def transform(self, p_w: float | NDArray[np.floating[Any]]) -> float | NDArray[np.floating[Any]]:
+    def transform(
+        self, p_w: float | NDArray[np.floating[Any]]
+    ) -> float | NDArray[np.floating[Any]]:
         """
         Transform P_L to linear space.
 
@@ -109,7 +113,9 @@ class IBMScurveModel(ScurveModelBase):
             return float(result[0])
         return result
 
-    def inverse_transform(self, y: float | NDArray[np.floating[Any]]) -> float | NDArray[np.floating[Any]]:
+    def inverse_transform(
+        self, y: float | NDArray[np.floating[Any]]
+    ) -> float | NDArray[np.floating[Any]]:
         """
         Transform y back to P_L.
         """
@@ -122,7 +128,9 @@ class IBMScurveModel(ScurveModelBase):
             return float(result[0])
         return result
 
-    def linear_prediction(self, w: float | NDArray[np.floating[Any]]) -> float | NDArray[np.floating[Any]]:
+    def linear_prediction(
+        self, w: float | NDArray[np.floating[Any]]
+    ) -> float | NDArray[np.floating[Any]]:
         """
         Compute y(w) in transformed linear space for IBM model.
 
@@ -188,7 +196,9 @@ class IBMScurveModel(ScurveModelBase):
 
         return ibm_linear_function
 
-    def _get_initial_guess(self, x_list: List[float], y_list: List[float]) -> Tuple[float, ...]:
+    def _get_initial_guess(
+        self, x_list: List[float], y_list: List[float]
+    ) -> Tuple[float, ...]:
         """
         Get initial parameter guess for IBM model.
         """
@@ -213,7 +223,9 @@ class IBMScurveModel(ScurveModelBase):
 
         return (f0, w0, gamma_ibm)
 
-    def _get_bounds(self, initial_guess: Tuple[float, ...]) -> Tuple[List[float], List[float]]:
+    def _get_bounds(
+        self, initial_guess: Tuple[float, ...]
+    ) -> Tuple[List[float], List[float]]:
         """
         Get parameter bounds for IBM model fitting.
         """

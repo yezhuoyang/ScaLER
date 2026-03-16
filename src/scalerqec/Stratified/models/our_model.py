@@ -65,7 +65,9 @@ class OurScurveModel(ScurveModelBase):
     def param_names(self) -> Tuple[str, ...]:
         return ("alpha", "mu", "beta")
 
-    def predict(self, w: float | NDArray[np.floating[Any]]) -> float | NDArray[np.floating[Any]]:
+    def predict(
+        self, w: float | NDArray[np.floating[Any]]
+    ) -> float | NDArray[np.floating[Any]]:
         """
         Compute P_L(w) = 0.5 / (1 + exp(-(w-μ)/α + β/√(w-t))).
 
@@ -94,7 +96,9 @@ class OurScurveModel(ScurveModelBase):
             return float(result[0])
         return result
 
-    def transform(self, p_w: float | NDArray[np.floating[Any]]) -> float | NDArray[np.floating[Any]]:
+    def transform(
+        self, p_w: float | NDArray[np.floating[Any]]
+    ) -> float | NDArray[np.floating[Any]]:
         """
         Transform P_L to y(w) = log(0.5/P_w - 1).
         """
@@ -107,7 +111,9 @@ class OurScurveModel(ScurveModelBase):
             return float(result[0])
         return result
 
-    def inverse_transform(self, y: float | NDArray[np.floating[Any]]) -> float | NDArray[np.floating[Any]]:
+    def inverse_transform(
+        self, y: float | NDArray[np.floating[Any]]
+    ) -> float | NDArray[np.floating[Any]]:
         """
         Transform y(w) back to P_L = 0.5 / (1 + exp(y)).
         """
@@ -120,7 +126,9 @@ class OurScurveModel(ScurveModelBase):
             return float(result[0])
         return result
 
-    def linear_prediction(self, w: float | NDArray[np.floating[Any]]) -> float | NDArray[np.floating[Any]]:
+    def linear_prediction(
+        self, w: float | NDArray[np.floating[Any]]
+    ) -> float | NDArray[np.floating[Any]]:
         """
         Compute y(w) = a*w + b + c/√(w-t) in transformed linear space.
         """
@@ -159,7 +167,9 @@ class OurScurveModel(ScurveModelBase):
 
         return modified_linear_function
 
-    def _get_initial_guess(self, x_list: List[float], y_list: List[float]) -> Tuple[float, ...]:
+    def _get_initial_guess(
+        self, x_list: List[float], y_list: List[float]
+    ) -> Tuple[float, ...]:
         """
         Get initial parameter guess from linear regression.
         """
@@ -187,7 +197,9 @@ class OurScurveModel(ScurveModelBase):
 
         return (a, b, c)
 
-    def _get_bounds(self, initial_guess: Tuple[float, ...]) -> Tuple[List[float], List[float]]:
+    def _get_bounds(
+        self, initial_guess: Tuple[float, ...]
+    ) -> Tuple[List[float], List[float]]:
         """
         Get parameter bounds for fitting.
         """

@@ -24,9 +24,8 @@ from numpy.typing import NDArray
 
 
 def scurve_function(x: float, center: float, sigma: float) -> float:
-    return float(0.5/(1+np.exp(-(x - center) / sigma)))
-    #return 0*x
-
+    return float(0.5 / (1 + np.exp(-(x - center) / sigma)))
+    # return 0*x
 
 
 # Define the inverse transform: y → 1/2 * 1 / (1 + e^y)
@@ -34,38 +33,47 @@ def inv_logit_half(y: float) -> float:
     return float(0.5 / (1 + np.exp(y)))
 
 
-def linear_function(x: float | NDArray[np.floating], a: float, b: float) -> float | NDArray[np.floating]:
+def linear_function(
+    x: float | NDArray[np.floating], a: float, b: float
+) -> float | NDArray[np.floating]:
     """
     Linear function for curve fitting.
     """
     return a * x + b  # type: ignore[return-value]
 
 
-def modified_linear_function_with_d(x: float | NDArray[np.floating], a: float, b: float, c: float, d: float) -> float | NDArray[np.floating]:
-    eps   = 1e-12
-    delta = (x - d)**0.5
-    delta = np.where(np.abs(delta) < eps, np.sign(delta)*eps, delta)
+def modified_linear_function_with_d(
+    x: float | NDArray[np.floating], a: float, b: float, c: float, d: float
+) -> float | NDArray[np.floating]:
+    eps = 1e-12
+    delta = (x - d) ** 0.5
+    delta = np.where(np.abs(delta) < eps, np.sign(delta) * eps, delta)
     return a * x + b + c / delta
 
 
-
 # Strategy A: keep the model safe near the pole
-def modified_linear_function(d: float) -> Callable[[float, float, float, float, float], float]:
+def modified_linear_function(
+    d: float,
+) -> Callable[[float, float, float, float, float], float]:
     def tempfunc(x: float, a: float, b: float, c: float, d: float = d) -> float:
         return modified_linear_function_with_d(x, a, b, c, d)
+
     return tempfunc
 
 
-def modified_sigmoid_function(x: float | NDArray[np.floating], a: float, b: float, c: float, d: float) -> float | NDArray[np.floating]:
+def modified_sigmoid_function(
+    x: float | NDArray[np.floating], a: float, b: float, c: float, d: float
+) -> float | NDArray[np.floating]:
     """
     Modified sigmoid function for curve fitting.
     This function is used to fit the S-curve.
     """
-    z = a*x + b + c/((x - d)**0.5)
+    z = a * x + b + c / ((x - d) ** 0.5)
     # ignore overflows in exp → exp(z) becomes np.inf, so 0.5/(1+inf) = 0.0
-    with np.errstate(over='ignore'):
+    with np.errstate(over="ignore"):
         y = 0.5 / (1 + np.exp(z))
     return y
+
 
 def quadratic_function(x: float, a: float, b: float, c: float) -> float:
     """
@@ -81,9 +89,10 @@ def poly_function(x: float, a: float, b: float, c: float, d: float) -> float:
     return a * x**3 + b * x**2 + c * x + d
 
 
-
 # Redefine turning point where the 2nd term is still significant in dy/dw
-def refined_sweet_spot(alpha: float, beta: float, t: float, ratio: float = 0.05) -> float:
+def refined_sweet_spot(
+    alpha: float, beta: float, t: float, ratio: float = 0.05
+) -> float:
     # We define turning point by solving: 1/alpha = ratio * (1/2) * beta / (w - t)^{3/2}
     # => (w - t)^{3/2} = (ratio * beta * alpha) / 2
     # => w = t + [(ratio * beta * alpha / 2)]^{2/3}
@@ -93,15 +102,20 @@ def refined_sweet_spot(alpha: float, beta: float, t: float, ratio: float = 0.05)
 """
 Return the estimated sigma of y(w)
 """
+
+
 def sigma_estimator(N: int, M: int) -> float:
-    return float(np.sqrt(N**2*(N-M)/(M*(N-1)*(N-2*M)**2)))
+    return float(np.sqrt(N**2 * (N - M) / (M * (N - 1) * (N - 2 * M) ** 2)))
 
 
 """
 Return the estimated sigma of Pw
 """
+
+
 def subspace_sigma_estimator(N: int, M: int) -> float:
     return float(np.sqrt(M * (N - M) / (N - 1)) / N)
+
 
 def bias_estimator(N: int, M: int) -> float:
     """
@@ -114,7 +128,8 @@ def bias_estimator(N: int, M: int) -> float:
     # f2 = 4 / (1 - 2 * Pw)**2 + 1 / Pw**2
     # bias = 0.5 * f2 * var_Pw
     # return 0
-    return 1/2*(N/M)*(N-4*M)/(N-2*M)**2*(N-M)/(N-1)
+    return 1 / 2 * (N / M) * (N - 4 * M) / (N - 2 * M) ** 2 * (N - M) / (N - 1)
+
 
 def show_bias_estimator(N: int, M: int) -> float:
     """
@@ -126,18 +141,16 @@ def show_bias_estimator(N: int, M: int) -> float:
     return (1 - Pw) / (2 * Pw * N)
 
 
-
-
 def evenly_spaced_ints(minw: int, maxw: int, N: int) -> list[int]:
     if N == 1:
         return [minw]
     if N > (maxw - minw + 1):
         return list(range(minw, maxw + 1))
-     
+
     # Use high-resolution linspace, round, then deduplicate
     raw = np.linspace(minw, maxw, num=10 * N)
     rounded = sorted(set(map(int, raw)))
-    
+
     # Pick N evenly spaced indices from the unique set
     indices = np.linspace(0, len(rounded) - 1, num=N, dtype=int)
     return [rounded[i] for i in indices]

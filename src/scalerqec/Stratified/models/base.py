@@ -77,7 +77,9 @@ class ScurveModelBase(ABC):
         pass
 
     @abstractmethod
-    def predict(self, w: float | NDArray[np.floating[Any]]) -> float | NDArray[np.floating[Any]]:
+    def predict(
+        self, w: float | NDArray[np.floating[Any]]
+    ) -> float | NDArray[np.floating[Any]]:
         """
         Compute P_L(w) for given weight(s).
 
@@ -90,7 +92,9 @@ class ScurveModelBase(ABC):
         pass
 
     @abstractmethod
-    def transform(self, p_w: float | NDArray[np.floating[Any]]) -> float | NDArray[np.floating[Any]]:
+    def transform(
+        self, p_w: float | NDArray[np.floating[Any]]
+    ) -> float | NDArray[np.floating[Any]]:
         """
         Transform P_L to linearized space y(w).
 
@@ -105,7 +109,9 @@ class ScurveModelBase(ABC):
         pass
 
     @abstractmethod
-    def inverse_transform(self, y: float | NDArray[np.floating[Any]]) -> float | NDArray[np.floating[Any]]:
+    def inverse_transform(
+        self, y: float | NDArray[np.floating[Any]]
+    ) -> float | NDArray[np.floating[Any]]:
         """
         Transform y(w) back to P_L.
 
@@ -118,7 +124,9 @@ class ScurveModelBase(ABC):
         pass
 
     @abstractmethod
-    def linear_prediction(self, w: float | NDArray[np.floating[Any]]) -> float | NDArray[np.floating[Any]]:
+    def linear_prediction(
+        self, w: float | NDArray[np.floating[Any]]
+    ) -> float | NDArray[np.floating[Any]]:
         """
         Compute y(w) in transformed linear space.
 
@@ -141,7 +149,9 @@ class ScurveModelBase(ABC):
         pass
 
     @abstractmethod
-    def _get_initial_guess(self, x_list: List[float], y_list: List[float]) -> Tuple[float, ...]:
+    def _get_initial_guess(
+        self, x_list: List[float], y_list: List[float]
+    ) -> Tuple[float, ...]:
         """
         Get initial parameter guess for fitting.
 
@@ -155,7 +165,9 @@ class ScurveModelBase(ABC):
         pass
 
     @abstractmethod
-    def _get_bounds(self, initial_guess: Tuple[float, ...]) -> Tuple[List[float], List[float]]:
+    def _get_bounds(
+        self, initial_guess: Tuple[float, ...]
+    ) -> Tuple[List[float], List[float]]:
         """
         Get parameter bounds for fitting.
 

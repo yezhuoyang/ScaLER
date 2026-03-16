@@ -29,9 +29,7 @@ class ScalerOptimized(Scaler):
         """Initialize the MSE optimizer once we have circuit information."""
         if self._mse_optimizer is None and self._num_noise > 0:
             self._mse_optimizer = MSEOptimizer(
-                num_noise=self._num_noise,
-                error_rate=self._error_rate,
-                t=self._t
+                num_noise=self._num_noise, error_rate=self._error_rate, t=self._t
             )
 
     def next_step(self) -> Tuple[List[int], List[int]]:
@@ -63,7 +61,9 @@ class ScalerOptimized(Scaler):
             return [], []
 
         # Check if we have enough data to do MSE optimization
-        num_sampled_weights = sum(1 for w in wlist if self._subspace_sample_used.get(w, 0) > 0)
+        num_sampled_weights = sum(
+            1 for w in wlist if self._subspace_sample_used.get(w, 0) > 0
+        )
 
         # First round or not enough data: use base class strategy
         if not self._first_round_complete or num_sampled_weights < 3:
@@ -73,7 +73,9 @@ class ScalerOptimized(Scaler):
         # MSE-based optimization for subsequent rounds
         return self._allocate_shots_mse_optimal(wlist, step_shots)
 
-    def _allocate_shots_uniform(self, wlist: List[int], step_shots: int) -> Tuple[List[int], List[int]]:
+    def _allocate_shots_uniform(
+        self, wlist: List[int], step_shots: int
+    ) -> Tuple[List[int], List[int]]:
         """
         Allocate shots uniformly (used in first round).
         This is the same as the base class strategy.
@@ -126,7 +128,9 @@ class ScalerOptimized(Scaler):
 
         return wlist, slist
 
-    def _allocate_shots_mse_optimal(self, wlist: List[int], step_shots: int) -> Tuple[List[int], List[int]]:
+    def _allocate_shots_mse_optimal(
+        self, wlist: List[int], step_shots: int
+    ) -> Tuple[List[int], List[int]]:
         """
         Allocate shots to minimize expected MSE.
 
@@ -146,7 +150,10 @@ class ScalerOptimized(Scaler):
 
         # Calculate integration range
         import numpy as np
-        sigma = int(np.sqrt(self._error_rate * (1.0 - self._error_rate) * self._num_noise))
+
+        sigma = int(
+            np.sqrt(self._error_rate * (1.0 - self._error_rate) * self._num_noise)
+        )
         if sigma == 0:
             sigma = 1
         ep = int(self._error_rate * self._num_noise)
@@ -154,7 +161,9 @@ class ScalerOptimized(Scaler):
         w_max = min(self._num_noise, ep + 5 * sigma)
 
         # Choose optimal weight using MSE minimization
-        batch_size = min(5000, step_shots // 3)  # Use a reasonable batch size for evaluation
+        batch_size = min(
+            5000, step_shots // 3
+        )  # Use a reasonable batch size for evaluation
 
         try:
             optimal_weight = self._mse_optimizer.choose_next_weight(
@@ -167,10 +176,12 @@ class ScalerOptimized(Scaler):
                 c=self._c,
                 w_min=w_min,
                 w_max=w_max,
-                batch_size=batch_size
+                batch_size=batch_size,
             )
 
-            print(f"  [MSE-optimal] Chose weight {optimal_weight} to minimize expected MSE")
+            print(
+                f"  [MSE-optimal] Chose weight {optimal_weight} to minimize expected MSE"
+            )
 
             # Allocate shots: give more to optimal weight
             slist = []
@@ -183,7 +194,13 @@ class ScalerOptimized(Scaler):
                     s = int(step_shots * 0.15)
                 else:
                     # Distribute rest uniformly
-                    remaining_weights = len([x for x in wlist if x != optimal_weight and abs(x - optimal_weight) > 1])
+                    remaining_weights = len(
+                        [
+                            x
+                            for x in wlist
+                            if x != optimal_weight and abs(x - optimal_weight) > 1
+                        ]
+                    )
                     if remaining_weights > 0:
                         s = max(500, int(step_shots * 0.25 / remaining_weights))
                     else:
@@ -205,7 +222,9 @@ class ScalerOptimized(Scaler):
                     slist[wlist.index(optimal_weight)] -= abs(diff)
 
             print("  [MSE-optimal allocation] weights:", wlist)
-            print("  [MSE-optimal allocation] shots:", slist, " (total =", sum(slist), ")")
+            print(
+                "  [MSE-optimal allocation] shots:", slist, " (total =", sum(slist), ")"
+            )
 
             return wlist, slist
 

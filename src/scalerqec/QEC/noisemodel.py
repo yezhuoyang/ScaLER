@@ -1,7 +1,8 @@
-#A Noise model class, the purpose is to rewrite stim program and Clifford circuit to support noise model
-#Rewrite all stim program/Clifford circuit to support the noise model
+# A Noise model class, the purpose is to rewrite stim program and Clifford circuit to support noise model
+# Rewrite all stim program/Clifford circuit to support the noise model
 from ..Clifford.clifford import *
 from enum import Enum
+
 
 class ErrorType(Enum):
     MEASUREMENT = 0
@@ -15,12 +16,10 @@ class ErrorType(Enum):
     CZ = 8
 
 
-
 class NoiseModel:
     """
     A class representing a noise model for quantum error correction simulations.
     """
-
 
     def __init__(self, error_rate: float) -> None:
         self._error_rate = error_rate
@@ -34,7 +33,6 @@ class NoiseModel:
         self._has_PAULIX_error = True
         self._has_PAULIY_error = True
         self._has_PAULIZ_error = True
-
 
     @property
     def error_rate(self) -> float:
@@ -55,8 +53,6 @@ class NoiseModel:
             value: The new error rate as a float.
         """
         self._error_rate = value
-
-
 
     def disable_error(self, error_type: str) -> None:
         """
@@ -84,8 +80,6 @@ class NoiseModel:
         elif error_type == "Z":
             self._has_PAULIZ_error = False
 
-
-
     def rewrite_stim_program(self, stim_program) -> str:
         """
         Rewrite a given stim program to incorporate the noise model.
@@ -99,9 +93,9 @@ class NoiseModel:
         # Placeholder for actual implementation
         return stim_program
 
-
-
-    def reconstruct_clifford_circuit(self, clifford_circuit: CliffordCircuit) -> CliffordCircuit:
+    def reconstruct_clifford_circuit(
+        self, clifford_circuit: CliffordCircuit
+    ) -> CliffordCircuit:
         """
         Reconstruct a given Clifford circuit to incorporate the noise model.
 
@@ -112,7 +106,7 @@ class NoiseModel:
             A new Clifford circuit with the noise model applied.
         """
         # Placeholder for actual implementation
-        
+
         num_qubits = clifford_circuit.qubitnum
         new_circuit = CliffordCircuit(num_qubits)
 
@@ -120,11 +114,10 @@ class NoiseModel:
         gate_list = clifford_circuit.gatelists
 
         for gate in gate_list:
-
             if isinstance(gate, TwoQGate):
                 # Apply CNOT gate with noise
 
-                match gate.name:                    
+                match gate.name:
                     case "CNOT":
                         if self._has_CNOT_error:
                             new_circuit.add_depolarize(gate.control)
@@ -138,7 +131,7 @@ class NoiseModel:
 
             elif isinstance(gate, SingleQGate):
                 # Apply single-qubit gate with noise
-                match gate.name:                    
+                match gate.name:
                     case "H":
                         if self._has_HADAMARD_error:
                             new_circuit.add_depolarize(gate.qubitindex)
@@ -174,21 +167,18 @@ class NoiseModel:
                 new_circuit.add_reset(gate.qubitindex)
                 # Placeholder for adding noise after reset
 
-
-        new_circuit.parityMatchGroup=clifford_circuit.parityMatchGroup
-        new_circuit.observable=clifford_circuit.observable
+        new_circuit.parityMatchGroup = clifford_circuit.parityMatchGroup
+        new_circuit.observable = clifford_circuit.observable
         new_circuit.compile_detector_and_observable()
 
         return new_circuit
-
-
 
     def uniform_depolarization_single(stim_program: str) -> str:
         """
         Apply uniform depolarization noise to single-qubit operations in the stim program.
 
         Args:
-            stim_program (str): The original stim program. 
+            stim_program (str): The original stim program.
 
         Returns:
             str: The modified stim program with depolarization noise applied.
@@ -196,4 +186,3 @@ class NoiseModel:
         # Placeholder for actual implementation
         """
         return stim_program
-

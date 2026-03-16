@@ -45,9 +45,10 @@ class MSEOptimizer:
             P(w errors occur) = C(n,w) * p^w * (1-p)^(n-w)
         """
         from scipy.special import comb
+
         n = self.num_noise
         p = self.error_rate
-        return comb(n, w, exact=False) * (p ** w) * ((1 - p) ** (n - w))
+        return comb(n, w, exact=False) * (p**w) * ((1 - p) ** (n - w))
 
     def estimate_subspace_variance(self, w: int, P_w: float, N_w: int) -> float:
         """
@@ -65,7 +66,7 @@ class MSEOptimizer:
             Estimated variance
         """
         if N_w == 0:
-            return float('inf')
+            return float("inf")
         return P_w * (1 - P_w) / N_w
 
     def estimate_parameter_covariance(
@@ -75,7 +76,7 @@ class MSEOptimizer:
         N_w_values: List[int],
         a: float,
         b: float,
-        c: float
+        c: float,
     ) -> np.ndarray:
         """
         Estimate the covariance matrix of fitted parameters (α, β, μ).
@@ -117,7 +118,7 @@ class MSEOptimizer:
 
             # Gradients (chain rule applied)
             # ∂P_w/∂a
-            dP_da = 0.5 * exp_val / denominator * (w / (alpha ** 2) - mu / (alpha ** 2))
+            dP_da = 0.5 * exp_val / denominator * (w / (alpha**2) - mu / (alpha**2))
 
             # ∂P_w/∂b
             dP_db = 0.5 * exp_val / denominator * (-1 / alpha)
@@ -150,7 +151,7 @@ class MSEOptimizer:
         b: float,
         c: float,
         w_min: int,
-        w_max: int
+        w_max: int,
     ) -> float:
         """
         Estimate the variance of the logical error rate estimator.
@@ -187,7 +188,7 @@ class MSEOptimizer:
                 continue
 
             # Gradients weighted by binomial probability
-            dP_da = 0.5 * exp_val / denominator * (w / (alpha ** 2) - mu / (alpha ** 2))
+            dP_da = 0.5 * exp_val / denominator * (w / (alpha**2) - mu / (alpha**2))
             dP_db = 0.5 * exp_val / denominator * (-1 / alpha)
             dP_dc = 0.5 * exp_val / denominator * (-1 / sqrt_term)
 
@@ -201,12 +202,7 @@ class MSEOptimizer:
         return max(0, variance)  # Ensure non-negative
 
     def estimate_LER_bias(
-        self,
-        weights: List[int],
-        N_w_values: List[int],
-        a: float,
-        b: float,
-        c: float
+        self, weights: List[int], N_w_values: List[int], a: float, b: float, c: float
     ) -> float:
         """
         Estimate the bias of the logical error rate estimator.
@@ -248,7 +244,7 @@ class MSEOptimizer:
         b: float,
         c: float,
         w_min: int,
-        w_max: int
+        w_max: int,
     ) -> float:
         """
         Estimate the MSE of the logical error rate estimator.
@@ -276,7 +272,7 @@ class MSEOptimizer:
         # Estimate bias
         bias = self.estimate_LER_bias(weights, N_w_values, a, b, c)
 
-        mse = variance + bias ** 2
+        mse = variance + bias**2
 
         return mse
 
@@ -291,7 +287,7 @@ class MSEOptimizer:
         c: float,
         w_min: int,
         w_max: int,
-        batch_size: int = 1000
+        batch_size: int = 1000,
     ) -> int:
         """
         Choose the next weight to sample that minimizes expected MSE.
@@ -312,7 +308,7 @@ class MSEOptimizer:
             The weight that minimizes expected MSE
         """
         best_weight = candidate_weights[0]
-        best_mse = float('inf')
+        best_mse = float("inf")
 
         for w_new in candidate_weights:
             # Create hypothetical sampling scenario

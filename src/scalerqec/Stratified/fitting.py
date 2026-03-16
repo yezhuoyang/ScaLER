@@ -7,8 +7,9 @@ import numpy.typing as npt
 FloatArray = npt.NDArray[np.float64]
 
 
-
-def r_squared(y_true: Sequence[float], y_pred: Sequence[float], clip: bool = False) -> float:
+def r_squared(
+    y_true: Sequence[float], y_pred: Sequence[float], clip: bool = False
+) -> float:
     """
     Compute the coefficient of determination (R²).
 
@@ -32,8 +33,8 @@ def r_squared(y_true: Sequence[float], y_pred: Sequence[float], clip: bool = Fal
     if yt.shape != yp.shape:
         raise ValueError("y_true and y_pred must have the same shape")
 
-    ss_res = np.sum((yt - yp) ** 2)        # residual sum of squares
-    ss_tot = np.sum((yt - yt.mean()) ** 2) # total sum of squares
+    ss_res = np.sum((yt - yp) ** 2)  # residual sum of squares
+    ss_tot = np.sum((yt - yt.mean()) ** 2)  # total sum of squares
 
     # Handle the degenerate case where variance is zero
     if ss_tot == 0.0:
@@ -41,4 +42,3 @@ def r_squared(y_true: Sequence[float], y_pred: Sequence[float], clip: bool = Fal
 
     r2 = 1.0 - ss_res / ss_tot
     return max(0.0, r2) if clip else r2
-

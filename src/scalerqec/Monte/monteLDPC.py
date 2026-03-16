@@ -17,8 +17,7 @@ try:
     from stimbposd import BPOSD
 except ImportError:
     raise ImportError(
-        "stimbposd is required for MonteLDPC. "
-        "Install it with: pip install stimbposd"
+        "stimbposd is required for MonteLDPC. Install it with: pip install stimbposd"
     )
 
 
@@ -52,8 +51,8 @@ class MonteLDPC:
         MIN_NUM_LE_EVENT: int = 100,
         # BPOSD parameters
         max_bp_iters: int = 20,
-        bp_method: str = 'product_sum',
-        osd_method: str = 'osd0',
+        bp_method: str = "product_sum",
+        osd_method: str = "osd0",
         osd_order: int = 0,
     ) -> None:
         """
@@ -86,11 +85,7 @@ class MonteLDPC:
         self._decoder: Optional[BPOSD] = None
 
     def calculate_LER_from_file(
-        self,
-        samplebudget: int,
-        filepath: str,
-        pvalue: float,
-        repeat: int = 1
+        self, samplebudget: int, filepath: str, pvalue: float, repeat: int = 1
     ) -> float:
         """
         Calculate LER from a stim circuit file using BPOSD decoder.
@@ -119,7 +114,9 @@ class MonteLDPC:
 
         # Create sampler and BPOSD decoder
         sampler = new_stim_circuit.compile_detector_sampler()
-        detector_error_model = new_stim_circuit.detector_error_model(decompose_errors=False)
+        detector_error_model = new_stim_circuit.detector_error_model(
+            decompose_errors=False
+        )
 
         self._decoder = BPOSD(
             detector_error_model,
@@ -146,8 +143,9 @@ class MonteLDPC:
                     current_sample_gap = min(current_sample_gap, MAX_SAMPLE_GAP)
                 elif self._num_LER > 0:
                     current_sample_gap = min(
-                        int(self._min_num_ke_event / self._num_LER) * int(self._sample_used),
-                        MAX_SAMPLE_GAP
+                        int(self._min_num_ke_event / self._num_LER)
+                        * int(self._sample_used),
+                        MAX_SAMPLE_GAP,
                     )
 
                 self._sample_used += current_sample_gap
@@ -171,7 +169,9 @@ class MonteLDPC:
 
                 if self._sample_used > self._samplebudget:
                     if self._num_LER > 0:
-                        self._sample_needed = int(self._sample_used * (100 / self._num_LER))
+                        self._sample_needed = int(
+                            self._sample_used * (100 / self._num_LER)
+                        )
                     else:
                         self._sample_needed = -1
                     break
@@ -197,16 +197,15 @@ class MonteLDPC:
 
         print("Time(BPOSD): ", format_with_uncertainty(time_mean, time_std))
         print("PL(BPOSD): ", format_with_uncertainty(self._estimated_LER, std_ler))
-        print("Nerror(BPOSD): ", format_with_uncertainty(ler_count_average, std_ler_count))
+        print(
+            "Nerror(BPOSD): ", format_with_uncertainty(ler_count_average, std_ler_count)
+        )
         print("Sample(BPOSD): ", format_with_uncertainty(self._sample_used, std_sample))
 
         return self._estimated_LER
 
     def calculate_LER_with_time_budget(
-        self,
-        time_budget: float,
-        filepath: str,
-        pvalue: float
+        self, time_budget: float, filepath: str, pvalue: float
     ) -> dict:
         """
         Calculate LER with a strict time budget.
@@ -231,7 +230,9 @@ class MonteLDPC:
         new_stim_circuit = circuit.stimcircuit
 
         sampler = new_stim_circuit.compile_detector_sampler()
-        detector_error_model = new_stim_circuit.detector_error_model(decompose_errors=False)
+        detector_error_model = new_stim_circuit.detector_error_model(
+            decompose_errors=False
+        )
 
         self._decoder = BPOSD(
             detector_error_model,
@@ -265,7 +266,7 @@ class MonteLDPC:
             elif ler_count > 0:
                 current_sample_gap = min(
                     int(self._min_num_ke_event / ler_count) * samples_used,
-                    MAX_SAMPLE_GAP
+                    MAX_SAMPLE_GAP,
                 )
 
             # Sample and decode with BPOSD
@@ -296,11 +297,11 @@ class MonteLDPC:
         self._estimated_LER = estimated_ler
 
         return {
-            'ler': estimated_ler,
-            'le_count': ler_count,
-            'samples_used': samples_used,
-            'time_elapsed': elapsed,
-            'budget_exhausted': budget_exhausted,
+            "ler": estimated_ler,
+            "le_count": ler_count,
+            "samples_used": samples_used,
+            "time_elapsed": elapsed,
+            "budget_exhausted": budget_exhausted,
         }
 
     def get_sample_used(self) -> float:
@@ -319,7 +320,7 @@ if __name__ == "__main__":
     calculator = MonteLDPC(
         MIN_NUM_LE_EVENT=50,
         max_bp_iters=20,
-        osd_method='osd0',
+        osd_method="osd0",
     )
     ler = calculator.calculate_LER_from_file(1000000, filepath, p, repeat=1)
     print(f"Estimated LER: {ler:.6e}")
