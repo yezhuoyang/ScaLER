@@ -22,7 +22,7 @@ class TestScalerBasic:
         assert scaler._time_budget == 30.0
         assert scaler._remaining_time_budget == 30.0
         assert scaler._sampling_rate == 0.0
-        assert scaler._LER == 0.0
+        assert scaler._ler == 0.0
 
     def test_scaler_parse_surface3(self):
         """Test parsing a small surface code circuit."""

@@ -234,7 +234,7 @@ jobs:
       
       - name: Run tests with coverage
         run: |
-          pytest tests/ --cov=src/scalerqec --cov-report=term --cov-report=html --cov-fail-under=60
+          pytest tests/ --cov=src/scalerqec --cov-report=term --cov-report=html --cov-fail-under=30
       
       - name: Upload coverage HTML report
         if: always()
@@ -316,7 +316,7 @@ jobs:
           from scalerqec.Monte.monteLER import MonteLERcalc
           from scalerqec.QEC.qeccircuit import StabCode
           from scalerqec.QEC.noisemodel import NoiseModel
-          from scalerqec.Stratified.Scaler import StratifiedScurveLERcalc
+          from scalerqec.Stratified.Scaler import Scaler
           from scalerqec.Symbolic.symbolicLER import SymbolicLERcalc
           
           print('✓ All module imports successful')

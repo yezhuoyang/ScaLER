@@ -35,45 +35,42 @@ if sys.platform == "win32":
     extra_compile_args = ["/std:c++20", "/EHsc", "/O2", "/openmp:llvm"]
     extra_link_args = ["/DEBUG"]
 
-    win_includes = [
-        r"C:\local\boost_1_87_0",
-        r"C:\vcpkg\installed\x64-windows\include"
-    ]
+    win_includes = [r"C:\local\boost_1_87_0", r"C:\vcpkg\installed\x64-windows\include"]
     for path in win_includes:
         if os.path.isdir(path) and path not in include_dirs:
             include_dirs.append(path)
 
+elif sys.platform == "darwin":
+    # --- macOS flags (Apple Clang does not support -fopenmp directly) ---
+    homebrew_prefix = os.environ.get("HOMEBREW_PREFIX", "/opt/homebrew")
+    omp_inc = os.path.join(homebrew_prefix, "opt", "libomp", "include")
+    omp_lib = os.path.join(homebrew_prefix, "opt", "libomp", "lib")
+    extra_compile_args = ["-std=c++20", "-O3", "-Xpreprocessor", "-fopenmp"]
+    extra_link_args = ["-lomp"]
+    if os.path.isdir(omp_inc):
+        extra_compile_args.append(f"-I{omp_inc}")
+    if os.path.isdir(omp_lib):
+        extra_link_args.append(f"-L{omp_lib}")
+
 else:
-    # --- macOS / Linux flags ---
+    # --- Linux flags ---
     extra_compile_args = ["-std=c++20", "-O3", "-fopenmp"]
     extra_link_args = ["-fopenmp"]
 
-    if sys.platform == "darwin":
-        # Homebrew libomp paths (Apple Clang needs explicit include/lib)
-        homebrew_prefix = os.environ.get("HOMEBREW_PREFIX", "/opt/homebrew")
-        omp_inc = os.path.join(homebrew_prefix, "opt", "libomp", "include")
-        omp_lib = os.path.join(homebrew_prefix, "opt", "libomp", "lib")
-        if os.path.isdir(omp_inc):
-            extra_compile_args.append(f"-I{omp_inc}")
-        if os.path.isdir(omp_lib):
-            extra_link_args.append(f"-L{omp_lib}")
-
+# --- Find Boost and Eigen on macOS / Linux ---
+if sys.platform != "win32":
     # 1) Try to find Boost (for boost/dynamic_bitset.hpp)
     boost_roots = [
         os.environ.get("BOOST_ROOT"),
-        "/opt/homebrew/include",   # Homebrew on Apple Silicon
-        "/usr/local/include",      # common on macOS / local installs
-        "/usr/include",            # common on Linux
+        "/opt/homebrew/include",  # Homebrew on Apple Silicon
+        "/usr/local/include",  # common on macOS / local installs
+        "/usr/include",  # common on Linux
     ]
     for root in boost_roots:
         if _maybe_add_include(root, os.path.join("boost", "dynamic_bitset.hpp")):
             break
 
     # 2) Try to find Eigen
-    #
-    # If your code does:   #include <Eigen/Dense>
-    # then we want include_dirs to contain a directory that has "Eigen/" inside.
-    # On many systems, that's /usr/include/eigen3 or /usr/local/include/eigen3.
     eigen_roots = [
         os.environ.get("EIGEN_ROOT"),
         "/opt/homebrew/include/eigen3",
