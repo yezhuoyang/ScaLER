@@ -1,55 +1,107 @@
+## Binaries & build artifacts
 *.exe
-.vscode/*
+*.pyd
+*.pdb
+*.egg-info/
+build/*
+QEPG/build/*
+LERcalc/build/*
 
-# Python cache - use recursive pattern to catch all __pycache__ dirs
+## Python cache
 __pycache__/
 **/__pycache__/
 *.pyc
 *.pyo
 
-output
-output.txt
-example.cpp
-*.pyd
-build/*
-test.py
-QEPG/__pycache__/*
-QEPG/*.pyd
-test/__pycache__/*
-QEPG/build/*
-LERcalc/build/*
-LERcalc/__pycache__/*
-stimprograms/__pycache__/*
+## IDE & editor
+.vscode/*
+.claude/
+
+## Output files (plots, logs, data)
 *.png
-benchmark/__pycache__/*
-QEPG/vc140.pdb
-benchmark/tmp.py
-output2.txt
-.ipynb_checkpoints/
-*.ipynb
-*.txt
-myresults/*
-myresults2/*
-myresults3/*
-myresultTot/*
-myresultsAll/*
-myresultNew/*
-myresultAll/*
-output2
-Allresults/*
-hexagonresults/*
-squareresults/*
 *.pdf
-ScalER/__pycache__/*
-tmp.py
-*.egg-info/
+*.txt
+*.log
+*.npz
 *.stim
+
+## Exceptions: tracked documentation figures and tutorial
 !Figures/*.pdf
 !Figures/*.png
 !Tutorial.ipynb
 
-# Pytest cache
+## Figures iteration logs (not documentation)
+Figures/*iteration_log.json
+
+## Jupyter notebooks (except Tutorial)
+*.ipynb
+.ipynb_checkpoints/
+
+## Pytest cache
 .pytest_cache/
 
+## Credentials & secrets
+.openai_key
 
-.claude/
+## Experiment results & generated data
+experiment_results/
+experiment_results_*/
+scaler_test_output/
+test_d11_output/
+surface*_noisy*
+myresults*/
+myresultTot/*
+myresultsAll/*
+myresultNew/*
+myresultAll/*
+Allresults/*
+hexagonresults/*
+squareresults/*
+
+## External dependencies (vendored repos)
+Stim/
+
+## Top-level experiment/run scripts (not infrastructure)
+run_*.py
+test_*.py
+!test/__init__.py
+!tests/**
+replot_*.py
+continue_*.py
+redo_*.py
+check_progress.py
+comprehensive_test.py
+inject_noise.py
+generate_*.py
+plot_*.py
+visualize_*.py
+quick_test_single.py
+tmptest.py
+comparison_results_*.log
+
+## Temporary files & ad-hoc outputs
+tmp.py
+nul
+*_iteration_log.json
+output
+output.txt
+output2
+output2.txt
+example.cpp
+test.cpp
+main.cpp
+
+## Dev-only docs (not core project docs)
+MSE_OPTIMIZATION_README.md
+OPTIMIZATION_SUMMARY.md
+TESTING_GUIDE.md
+MYPY_ERRORS_SUMMARY.md
+PLAN_*.md
+
+## Local build scripts
+compileRun.ps1
+compileRunAgress.ps1
+justcompile.ps1
+
+## Untracked stim programs (toric17 is generated)
+stimprograms/toric/toric17

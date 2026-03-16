@@ -62,7 +62,7 @@ class IBMScurveModel(ScurveModelBase):
         """
         Compute P_L(w) = 0.5 * [1 - exp(-2*f0*(w/w0)^γ)].
 
-        For w ≤ 0, returns 0.
+        For w ≤ t, returns 0 (fault-tolerant region).
         """
         w_arr = np.atleast_1d(np.asarray(w, dtype=float))
         result = np.zeros_like(w_arr)
@@ -75,8 +75,8 @@ class IBMScurveModel(ScurveModelBase):
         if w0 <= 0:
             w0 = 1.0
 
-        # Only compute for w > 0
-        valid = w_arr > 0
+        # Only compute for w > t (fault-tolerant threshold)
+        valid = w_arr > self._t
         if np.any(valid):
             w_valid = w_arr[valid]
             ratio = w_valid / w0
@@ -128,6 +128,8 @@ class IBMScurveModel(ScurveModelBase):
 
         y(w) = log(0.5/P(w) - 1) = log((1 + exp(-x))/(1 - exp(-x)))
         where x = 2*f0*(w/w0)^γ
+
+        For w ≤ t, returns inf (fault-tolerant region where P_L = 0).
         """
         w_arr = np.atleast_1d(np.asarray(w, dtype=float))
         result = np.full_like(w_arr, np.inf)
@@ -139,7 +141,8 @@ class IBMScurveModel(ScurveModelBase):
         if w0 <= 0:
             w0 = 1.0
 
-        valid = w_arr > 0
+        # Only compute for w > t (fault-tolerant threshold)
+        valid = w_arr > self._t
         if np.any(valid):
             w_valid = w_arr[valid]
             ratio = w_valid / w0
@@ -253,35 +256,53 @@ class IBMScurveModel(ScurveModelBase):
 
     def calculate_sweet_spot(self) -> int:
         """
-        Calculate the sweet spot for IBM model.
+        Calculate the sweet spot for IBM model using d²y/dw² = γ · |dy/dw|.
 
-        For IBM model: P = 0.5*(1 - exp(-2*f0*(w/w0)^γ))
+        For IBM model: P_L(w) = 0.5 * [1 - exp(-z)] where z = 2μ(w/β)^α
 
-        The sweet spot is where the curvature is maximal.
-        Using d²y/dw² = γ * dy/dw (general definition):
+        In transformed space: y = log(0.5/P_L - 1) = -z - log(1 - e^(-z))
 
-        For this model, we approximate numerically or use a heuristic:
-        The inflection point is approximately at:
-            w ≈ w0 * (log(2) / (2*f0))^(1/γ)
+        For the small-z regime (where P_L is small, which is our regime of interest):
+            y ≈ -z - ln(z)
+            dy/dw ≈ -α/w
+            d²y/dw² ≈ α/w²
+
+        The sweet spot condition d²y/dw² = γ·|dy/dw| gives:
+            α/w² = γ · α/w
+            w_sweet = 1/γ
+
+        This is clamped to [t+1, w0] to stay in the relevant region.
+
+        Parameters:
+            μ (f0): amplitude parameter
+            β (w0): onset weight
+            α (gamma_ibm): power exponent
+            γ (self._gamma): sweet spot tuning parameter
         """
         f0 = self._params.get("f0", 0.5)
         w0 = self._params.get("w0", float(self._t + 1))
-        gamma_ibm = self._params.get("gamma_ibm", 1.0)
+        alpha = self._params.get("gamma_ibm", 1.0)
 
-        if f0 <= 0 or w0 <= 0 or gamma_ibm <= 0:
+        if self._gamma <= 0:
             return max(1, self._t + 1)
 
-        # Heuristic: sweet spot is where x = 2*f0*(w/w0)^γ ≈ 0.5
-        # => (w/w0)^γ = 0.5/(2*f0) = 0.25/f0
-        # => w/w0 = (0.25/f0)^(1/γ)
-        ratio = (0.25 / f0) ** (1 / gamma_ibm)
-        w_sweet = w0 * ratio
+        # In small-z regime: w_sweet = 1/γ
+        w_sweet_base = 1.0 / self._gamma
 
-        # Alternatively, using the gamma tuning parameter:
-        # Find where second derivative condition is satisfied
-        # This is more complex for IBM model, so we use the heuristic above
+        # Adjust based on model parameters for the transition region
+        # When z is moderate, use: w_sweet = w0 * (1/γ / w0)^(1/α) if that's smaller
+        # This accounts for the power-law scaling
+        if alpha > 1 and w0 > 0:
+            # Blend between small-z formula and onset weight
+            # Use the smaller of (1/γ) and w0 as the upper bound
+            w_sweet = min(w_sweet_base, w0 * 0.8)
+        else:
+            w_sweet = w_sweet_base
 
-        return max(1, self._t + 1, int(w_sweet))
+        # Ensure sweet spot is in valid range
+        w_sweet = max(self._t + 1, min(w_sweet, w0))
+
+        return int(w_sweet)
 
     def get_onset_weight(self) -> float:
         """
