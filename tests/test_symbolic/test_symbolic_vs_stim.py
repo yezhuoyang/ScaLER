@@ -226,6 +226,7 @@ class TestSymbolicVsStim:
         error_rates = [0.01, 0.001]
         stim_samples = 10000000  # 10M sample budget
         tolerance = 0.15  # 15% tolerance — symbolic is exact, only STIM has variance
+        min_errors = 500  # Need ~500 errors for ~4.5% statistical error (1/sqrt(500))
 
         print(f"\n{'='*70}")
         print(f"Testing polynomial accuracy for: {circuit_name}")
@@ -254,7 +255,7 @@ class TestSymbolicVsStim:
 
             # Run STIM at this error rate with enough samples for tight statistics
             print(f"  Running STIM with {stim_samples:,} sample budget...")
-            stim_calc = MonteLERcalc(samplebudget=stim_samples, MIN_NUM_LE_EVENT=200)
+            stim_calc = MonteLERcalc(samplebudget=stim_samples, MIN_NUM_LE_EVENT=min_errors)
             stim_ler = stim_calc.calculate_LER_from_file(stim_samples, filepath, error_rate)
             print(f"  STIM LER:     {stim_ler:.6e}")
 
