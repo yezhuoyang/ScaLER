@@ -5,7 +5,7 @@ from ..Clifford.QEPGpython import *
 import pymatching
 from ..QEC.noisemodel import NoiseModel
 from ..QEC.qeccircuit import StabCode
-from tqdm.notebook import tqdm
+from tqdm.auto import tqdm
 
 # ----------------------------------------------------------------------
 # Physical-error model
