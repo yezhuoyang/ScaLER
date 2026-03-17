@@ -301,7 +301,7 @@ jobs:
           qeccirc.construct_circuit()
           
           # Compile to QEPG
-          stim_circuit = qeccirc.to_stim()
+          stim_circuit = qeccirc.stimcirc
           graph = qepg.compile_QEPG(stim_circuit)
           
           print('✓ QEPG compilation successful')
