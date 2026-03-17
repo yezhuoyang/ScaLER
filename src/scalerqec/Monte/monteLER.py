@@ -181,7 +181,6 @@ class MonteLERcalc:
         self._QEPG = compile_QEPG(stim_str)
 
         stim_circuit = rewrite_stim_code(stim_str)
-        circuit.stimcircuit = stim_circuit
         circuit.compile_from_stim_circuit_str(stim_circuit)
         new_stim_circuit = circuit.stimcircuit
 
@@ -275,7 +274,6 @@ class MonteLERcalc:
             stim_str = f.read()
 
         stim_circuit = rewrite_stim_code(stim_str)
-        circuit.stimcircuit = stim_circuit
         circuit.compile_from_stim_circuit_str(stim_circuit)
         new_stim_circuit = circuit.stimcircuit
 
@@ -348,7 +346,6 @@ class MonteLERcalc:
             stim_str = f.read()
 
         stim_circuit = rewrite_stim_code(stim_str)
-        circuit.stimcircuit = stim_circuit
         circuit.compile_from_stim_circuit_str(stim_circuit)
         new_stim_circuit = circuit.stimcircuit
 
@@ -461,7 +458,6 @@ class MonteLERcalc:
             stim_str = f.read()
 
         stim_circuit = rewrite_stim_code(stim_str)
-        circuit.stimcircuit = stim_circuit
         circuit.compile_from_stim_circuit_str(stim_circuit)
         new_stim_circuit = circuit.stimcircuit
 
