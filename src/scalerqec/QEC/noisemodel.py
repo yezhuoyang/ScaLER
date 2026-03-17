@@ -1,7 +1,14 @@
 # A Noise model class, the purpose is to rewrite stim program and Clifford circuit to support noise model
 # Rewrite all stim program/Clifford circuit to support the noise model
-from ..Clifford.clifford import *
 from enum import Enum
+
+from ..Clifford.clifford import (
+    CliffordCircuit,
+    Measurement,
+    Reset,
+    SingleQGate,
+    TwoQGate,
+)
 
 
 class ErrorType(Enum):
@@ -116,7 +123,6 @@ class NoiseModel:
         for gate in gate_list:
             if isinstance(gate, TwoQGate):
                 # Apply CNOT gate with noise
-
                 if gate.name == "CNOT":
                     if self._has_CNOT_error:
                         new_circuit.add_depolarize(gate.control)

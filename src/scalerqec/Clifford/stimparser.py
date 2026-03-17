@@ -1,6 +1,3 @@
-import stim
-
-
 class stimparser:
     def __init__(self):
         pass

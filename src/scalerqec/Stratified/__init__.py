@@ -14,7 +14,7 @@ from .models import (
 )
 
 __all__ = [
-    "stratifiedLER",
+    "StratifiedLERcalc",
     "StratifiedScurveLERcalc",
     "Scaler",
     # Model classes

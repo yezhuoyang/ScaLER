@@ -6,4 +6,11 @@ from .small import fivequbitCode, steaneCode, ShorCode
 from .analyzer import LogicalOperatorAnalyzer
 
 
-__all__ = ["StabCode", "NoiseModel", "fivequbitCode", "steaneCode", "ShorCode"]
+__all__ = [
+    "StabCode",
+    "NoiseModel",
+    "fivequbitCode",
+    "steaneCode",
+    "ShorCode",
+    "LogicalOperatorAnalyzer",
+]

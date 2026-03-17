@@ -17,7 +17,7 @@ from .QEC.qeccircuit import StabCode
 __all__ = [
     "StratifiedLERcalc",
     "StratifiedScurveLERcalc",
-    "symbolicLER",
+    "SymbolicLERcalc",
     "MonteLERcalc",
     "CliffordCircuit",
     "qepg",
