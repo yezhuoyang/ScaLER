@@ -26,7 +26,7 @@ namespace LERcalculator{
 void convert_bitset_row_to_boolean(std::vector<std::vector<bool>>& result,const std::vector<QEPG::Row>& samplecontainer){
         result.reserve(samplecontainer.size()); // Reserve space
 
-        // Convert each boost::dynamic_bitset<> to std::vector<bool>
+        // Convert each DynamicBitset row to std::vector<bool>
         for (const auto& bitset_row : samplecontainer) {
             std::vector<bool> bool_row(bitset_row.size());
             for (size_t i = 0; i < bitset_row.size(); ++i) {
@@ -81,7 +81,7 @@ inline py::array_t<bool> bitset_rows_to_numpy(const std::vector<QEPG::Row>& rows
         /* --- thread-local scratch buffer (namespace scope ==> OK in MSVC) */
         static thread_local std::vector<block_t> tl_buf;
         tl_buf.resize(n_blk);                               // realloc only if needed
-        boost::to_block_range(bits, tl_buf.begin());        // fill the buffer
+        bits.to_block_range(tl_buf.begin());        // fill the buffer
 
         /*  2. Unpack into the Numpy row (64 bits -> 64 bytes)*/
         std::uint8_t* dst=base+r*row_stride;
@@ -118,7 +118,7 @@ inline py::array_t<bool> bitset_rows_to_numpy(const std::vector<QEPG::Row>& rows
 inline void convert_bitset_row_to_boolean_separate_obs(std::vector<std::vector<bool>>& result,std::vector<bool>& obsresult,const std::vector<QEPG::Row>& samplecontainer){
         result.reserve(samplecontainer.size()); // Reserve space
         obsresult.reserve(samplecontainer.size());
-        // Convert each boost::dynamic_bitset<> to std::vector<bool>
+        // Convert each DynamicBitset row to std::vector<bool>
         for (const auto& bitset_row : samplecontainer) {
             std::vector<bool> bool_row(bitset_row.size()-1);
             for (size_t i = 0; i < bitset_row.size()-1; ++i) {
@@ -196,7 +196,7 @@ inline void convert_bitset_row_to_boolean_separate_obs_numpy(
 
             /* -- obtain packed words ---------------------------------- */
             tl_buf.resize(n_blk);
-            boost::to_block_range(bits, tl_buf.begin());
+            bits.to_block_range(tl_buf.begin());
 
             /* -- detector destination row ----------------------------- */
             std::uint8_t* det_dst =

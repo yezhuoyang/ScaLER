@@ -21,7 +21,6 @@
 #include "src/QEPG.hpp"
 #include "src/sampler.hpp"
 #include "src/LERcalculator.hpp"
-#include <boost/dynamic_bitset.hpp>
 
 namespace py = pybind11;
 
@@ -61,32 +60,33 @@ PYBIND11_MODULE(qepg, m) {
         A C++ backend for ScaLERQEC that compiles STIM-style quantum error
         correction circuits, builds backward error propagation graphs over
         GF(2), and generates weighted random Pauli error samples with their
-        detector/observable outcomes. Uses Boost dynamic_bitset for efficient
-        bit-level operations and OpenMP for parallel sampling.
+        detector/observable outcomes. Uses a custom DynamicBitset (uint64_t
+        backed) for efficient bit-level operations and OpenMP for parallel
+        sampling.
     )pbdoc";
 
     /**
-     * @brief Python binding for boost::dynamic_bitset<>.
+     * @brief Python binding for qepg_bits::DynamicBitset.
      *
      * Exposes size(), test(), equality comparison, list conversion,
      * and a truncated string representation for large bitsets.
      */
-    py::class_<boost::dynamic_bitset<>>(m, "DynamicBitset",
-        "A dynamic-length bitset for GF(2) row vectors. Wraps boost::dynamic_bitset.")
+    py::class_<QEPG::Row>(m, "DynamicBitset",
+        "A dynamic-length bitset for GF(2) row vectors.")
 
-        .def("size", &boost::dynamic_bitset<>::size,
+        .def("size", &QEPG::Row::size,
              "Return the number of bits in the bitset.")
-        .def("test", &boost::dynamic_bitset<>::test, py::arg("pos"),
+        .def("test", &QEPG::Row::test, py::arg("pos"),
              "Return True if the bit at the given position is set.")
         .def(py::self == py::self)
 
-        .def("to_list", [](const boost::dynamic_bitset<>& self) {
+        .def("to_list", [](const QEPG::Row& self) {
              std::vector<bool> list(self.size());
              for(size_t i=0; i<self.size(); ++i) list[i] = self[i];
              return list;
          }, "Convert the bitset to a Python list of booleans.")
 
-        .def("__repr__", [](const boost::dynamic_bitset<>& self) {
+        .def("__repr__", [](const QEPG::Row& self) {
             std::string s = "<DynamicBitset ";
             if (self.size() > 40) { // Truncate long outputs
                  for(size_t i=0; i<20; ++i) s += (i < self.size() ? (self[i] ? '1' : '0') : '-');

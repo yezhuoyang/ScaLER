@@ -7,6 +7,9 @@
  * affect detector and observable outcomes. The result is a binary matrix
  * (the parity propagation matrix) stored using Boost dynamic_bitset for
  * efficient GF(2) arithmetic.
+ *
+ * Uses a custom DynamicBitset class (backed by uint64_t words) instead of
+ * Boost, eliminating all non-standard C++ dependencies.
  */
 
 #ifndef QEPG_HPP
@@ -16,7 +19,7 @@
 #include <ostream>
 #include <string>
 #include <bitset>
-#include <boost/dynamic_bitset.hpp>
+#include "dynamic_bitset.hpp"
 #include "clifford.hpp"
 #include <iostream>
 
@@ -24,7 +27,7 @@
 namespace QEPG{
 
 /// @brief A single row in a GF(2) matrix, represented as a dynamic bitset.
-using Row=boost::dynamic_bitset<>;
+using Row=qepg_bits::DynamicBitset;
 
 /**
  * @brief Multiply two GF(2) matrices represented as vectors of Row bitsets.
