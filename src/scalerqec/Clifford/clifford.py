@@ -1,3 +1,21 @@
+"""Clifford circuit representation with gates, noise, measurements, and resets.
+
+This module defines the data structures for representing a Clifford quantum
+circuit and provides methods for constructing circuits either programmatically
+or by parsing STIM-format circuit strings. Each circuit tracks its gate list,
+noise sources, measurements, detector parity groups, and an observable, and
+maintains a parallel ``stim.Circuit`` object for simulation.
+
+Module-level constants:
+
+- ``oneQGate_`` / ``oneQGateindices``: names and index mapping for single-qubit
+  Clifford gates (H, P, X, Y, Z).
+- ``twoQGate_`` / ``twoQGateindices``: names and index mapping for two-qubit
+  gates (CNOT, CZ).
+- ``pauliNoise_`` / ``pauliNoiseindices``: names and index mapping for the
+  Pauli noise channel outcomes (I, X, Y, Z).
+"""
+
 from __future__ import annotations
 
 import stim
@@ -15,6 +33,20 @@ pauliNoiseindices = {"I": 0, "X": 1, "Y": 2, "Z": 3}
 
 
 class SingleQGate:
+    """A single-qubit Clifford gate operation.
+
+    Represents one of {H, P, X, Y, Z} applied to a specific qubit.
+
+    Args:
+        gateindex: Index into ``oneQGate_`` identifying the gate type
+            (0=H, 1=P, 2=X, 3=Y, 4=Z).
+        qubitindex: The qubit this gate acts on.
+
+    Attributes:
+        name (str): Human-readable gate name (e.g. ``"H"``).
+        qubitindex (int): Target qubit index.
+    """
+
     def __init__(self, gateindex: int, qubitindex: int):
         self._name = oneQGate_[gateindex]
         self._qubitindex = qubitindex
@@ -32,6 +64,20 @@ class SingleQGate:
 
 
 class TwoQGate:
+    """A two-qubit gate operation (CNOT or CZ).
+
+    Args:
+        gateindex: Index into ``twoQGate_`` identifying the gate type
+            (0=CNOT, 1=CZ).
+        control: The control qubit index.
+        target: The target qubit index.
+
+    Attributes:
+        name (str): Gate name (``"CNOT"`` or ``"CZ"``).
+        control (int): Control qubit index.
+        target (int): Target qubit index.
+    """
+
     def __init__(self, gateindex: int, control: int, target: int):
         self._name = twoQGate_[gateindex]
         self._control = control
@@ -54,6 +100,22 @@ class TwoQGate:
 
 
 class pauliNoise:
+    """A Pauli noise channel acting on a single qubit.
+
+    Each noise instance represents a potential error location in the circuit.
+    The actual error type (I, X, Y, or Z) is controlled by :attr:`noisetype`
+    and can be set after construction.
+
+    Args:
+        noiseindex: A unique integer identifier for this noise source, used
+            to index into the error propagation matrix.
+        qubitindex: The qubit this noise channel acts on.
+
+    Attributes:
+        noisetype (int): The Pauli error type applied at this location.
+            0=I (no error), 1=X, 2=Y, 3=Z. Defaults to 0.
+    """
+
     def __init__(self, noiseindex: int, qubitindex: int):
         self._name = "n" + str(noiseindex)
         self._noiseindex: int = noiseindex
@@ -81,6 +143,17 @@ class pauliNoise:
 
 
 class Measurement:
+    """A Z-basis measurement operation on a single qubit.
+
+    Args:
+        measureindex: A sequential integer identifier for this measurement,
+            used to reference it in detector parity groups and the observable.
+        qubitindex: The qubit being measured.
+
+    Attributes:
+        qubitindex (int): The measured qubit index.
+    """
+
     def __init__(self, measureindex: int, qubitindex: int):
         self._name = "M" + str(measureindex)
         self._qubitindex = qubitindex
@@ -95,6 +168,18 @@ class Measurement:
 
 
 class Reset:
+    """A qubit reset operation that projects the qubit to the |0> state.
+
+    A reset clears any accumulated error propagation on the qubit, since
+    the qubit state is discarded and re-initialized.
+
+    Args:
+        qubitindex: The qubit being reset.
+
+    Attributes:
+        qubitindex (int): The reset qubit index.
+    """
+
     def __init__(self, qubitindex: int):
         self._name = "R"
         self._qubitindex = qubitindex
@@ -107,8 +192,40 @@ class Reset:
         return self._name + "[" + str(self._qubitindex) + "]"
 
 
-# Class: CliffordCircuit
 class CliffordCircuit:
+    """A Clifford quantum circuit with noise, measurements, and syndrome extraction.
+
+    This is the central circuit representation used throughout ScaLERQEC. It
+    maintains an ordered list of gate operations (including noise channels) and
+    tracks detector parity groups and observables needed for error analysis.
+
+    A parallel ``stim.Circuit`` is built incrementally as gates are added, so
+    the circuit can also be used directly with the STIM simulator.
+
+    Args:
+        qubit_num: The number of qubits in the circuit. This may be updated
+            automatically when compiling from a STIM string.
+
+    Attributes:
+        gatelists (list): Ordered list of circuit operations
+            (:class:`SingleQGate`, :class:`TwoQGate`, :class:`pauliNoise`,
+            :class:`Measurement`, or :class:`Reset`).
+        qubitnum (int): Number of qubits.
+        totalnoise (int): Total number of noise sources inserted.
+        totalMeas (int): Total number of measurements.
+        error_rate (float): Physical error rate used for depolarizing noise
+            channels injected by :meth:`add_depolarize`.
+        parityMatchGroup (list[list[int]]): Detector definitions. Each inner
+            list contains measurement indices whose parity should be constant
+            in the absence of errors.
+        observable (list[int]): Measurement indices whose parity defines the
+            logical observable.
+        stimcircuit (stim.Circuit): The equivalent STIM circuit, built in
+            parallel as gates are added.
+        stim_str (str | None): The raw STIM string if the circuit was compiled
+            from one, otherwise ``None``.
+    """
+
     def __init__(self, qubit_num: int):
         self._qubit_num: int = qubit_num
         self._totalnoise: int = 0
@@ -150,6 +267,15 @@ class CliffordCircuit:
         self._qubit_num = qubit_num
 
     def get_measIdx_to_parityIdx(self, measIdx: int) -> list[int]:
+        """Return the detector indices that include a given measurement.
+
+        Args:
+            measIdx: The measurement index to look up.
+
+        Returns:
+            A list of detector (parity group) indices that reference this
+            measurement.
+        """
         return self._measIdx_to_parityIdx[measIdx]
 
     @property
@@ -209,33 +335,29 @@ class CliffordCircuit:
     def totalMeas(self):
         return self._totalMeas
 
-    """
-    Read the circuit from a file
-    Example of the file:
+    def read_circuit_from_file(self, filename: str) -> None:
+        """Read a circuit from a plain-text gate file.
 
-    NumberOfQubit 6
-    cnot 1 2
-    cnot 1 3
-    cnot 1 0
-    M 0
-    cnot 1 4
-    cnot 2 4
-    M 4
-    cnot 2 5
-    cnot 3 5
-    M 5
-    R 4
-    R 5
-    cnot 1 4
-    cnot 2 4
-    M 4
-    cnot 2 5
-    cnot 3 5
-    M 5
+        The file format uses one operation per line. The first line must
+        declare the qubit count with ``NumberOfQubit <n>``. Subsequent
+        lines specify gates: ``cnot``, ``CZ``, ``H``, ``P``, ``X``,
+        ``Y``, ``Z``, ``M`` (measurement), or ``R`` (reset), each
+        followed by qubit indices.
 
-    """
+        Example file::
 
-    def read_circuit_from_file(self, filename):
+            NumberOfQubit 6
+            cnot 1 2
+            H 0
+            M 0
+            R 0
+
+        Args:
+            filename: Path to the circuit description file.
+
+        Raises:
+            ValueError: If an unrecognized gate type is encountered.
+        """
         with open(filename, "r") as file:
             for line in file:
                 line = line.strip()
@@ -272,11 +394,35 @@ class CliffordCircuit:
                     else:
                         raise ValueError(f"Unknown gate type: {gate_type}")
 
-    """
-    Compile from a stim circuit string.
-    """
+    def compile_from_stim_circuit_str(self, stim_str: str) -> None:
+        """Parse a normalized STIM circuit string and build the internal circuit.
 
-    def compile_from_stim_circuit_str(self, stim_str: str):
+        This method expects a STIM string that has already been preprocessed by
+        :func:`~scalerqec.Clifford.stimparser.rewrite_stim_code` so that each
+        line contains exactly one gate operation. It performs three passes:
+
+        1. **Index measurements** -- assigns sequential measurement indices and
+           records which line each measurement appears on.
+        2. **Extract detectors and observable** -- resolves ``DETECTOR`` and
+           ``OBSERVABLE_INCLUDE`` record references into measurement indices,
+           building :attr:`parityMatchGroup` and :attr:`observable`.
+        3. **Insert gates** -- adds each gate to the internal gate list,
+           injecting a single-qubit depolarizing noise channel before every
+           gate and measurement (except resets, where pre-reset noise is
+           irrelevant).
+
+        After all gates are inserted, :meth:`compile_detector_and_observable`
+        is called to append detector and observable instructions to the
+        internal ``stim.Circuit``.
+
+        Args:
+            stim_str: A normalized STIM circuit string (one gate per line).
+
+        Side Effects:
+            Resets and repopulates ``_gatelists``, ``_totalnoise``,
+            ``_totalMeas``, ``_parityMatchGroup``, ``_observable``,
+            ``_qubit_num``, and the internal ``stim.Circuit``.
+        """
         # self._totalnoise=0
         self._totalnoise = 0
         self._totalMeas = 0
@@ -429,68 +575,147 @@ class CliffordCircuit:
     def save_circuit_to_file(self, filename):
         pass
 
-    def set_noise_type(self, noiseindex: int, noisetype: int):
+    def set_noise_type(self, noiseindex: int, noisetype: int) -> None:
+        """Set the Pauli error type for a specific noise source.
+
+        Args:
+            noiseindex: The noise source index to modify.
+            noisetype: The Pauli type to assign (0=I, 1=X, 2=Y, 3=Z).
+        """
         self._index_to_noise[noiseindex].noisetype = noisetype
 
-    def reset_noise_type(self):
+    def reset_noise_type(self) -> None:
+        """Reset all noise sources to identity (no error)."""
         for i in range(self._totalnoise):
             self._index_to_noise[i].noisetype = 0
 
-    def show_all_noise(self):
+    def show_all_noise(self) -> None:
+        """Print all noise sources and their current error types to stdout."""
         for i in range(self._totalnoise):
             print(self._index_to_noise[i])
 
-    def add_xflip_noise(self, qubit: int):
+    def add_xflip_noise(self, qubit: int) -> None:
+        """Add an X-flip noise channel on a qubit.
+
+        Appends an ``X_ERROR`` instruction to the STIM circuit and a
+        :class:`pauliNoise` entry to the gate list.
+
+        Args:
+            qubit: The qubit to apply the noise channel to.
+        """
         self._stimcircuit.append("X_ERROR", [qubit], self._error_rate)
         noise = pauliNoise(self._totalnoise, qubit)
         self._gatelists.append(noise)
         self._index_to_noise[self._totalnoise] = noise
         self._totalnoise += 1
 
-    def add_depolarize(self, qubit: int):
+    def add_depolarize(self, qubit: int) -> None:
+        """Add a single-qubit depolarizing noise channel.
+
+        Appends a ``DEPOLARIZE1`` instruction to the STIM circuit and a
+        :class:`pauliNoise` entry to the gate list. The depolarizing
+        probability is taken from :attr:`error_rate`.
+
+        Args:
+            qubit: The qubit to apply the depolarizing channel to.
+        """
         self._stimcircuit.append("DEPOLARIZE1", [qubit], self._error_rate)
         noise = pauliNoise(self._totalnoise, qubit)
         self._gatelists.append(noise)
         self._index_to_noise[self._totalnoise] = noise
         self._totalnoise += 1
 
-    def add_cnot(self, control: int, target: int):
+    def add_cnot(self, control: int, target: int) -> None:
+        """Add a CNOT (controlled-X) gate.
+
+        Args:
+            control: The control qubit index.
+            target: The target qubit index.
+        """
         self._gatelists.append(TwoQGate(twoQGateindices["CNOT"], control, target))
         self._stimcircuit.append("CNOT", [control, target])
 
-    def add_hadamard(self, qubit: int):
+    def add_hadamard(self, qubit: int) -> None:
+        """Add a Hadamard gate.
+
+        Args:
+            qubit: The qubit to apply H to.
+        """
         self._gatelists.append(SingleQGate(oneQGateindices["H"], qubit))
         self._stimcircuit.append("H", [qubit])
 
-    def add_phase(self, qubit: int):
+    def add_phase(self, qubit: int) -> None:
+        """Add a phase (S) gate.
+
+        Args:
+            qubit: The qubit to apply S to.
+        """
         self._gatelists.append(SingleQGate(oneQGateindices["P"], qubit))
         self._stimcircuit.append("S", [qubit])
 
-    def add_cz(self, qubit1: int, qubit2: int):
+    def add_cz(self, qubit1: int, qubit2: int) -> None:
+        """Add a controlled-Z gate.
+
+        Args:
+            qubit1: The first qubit (control).
+            qubit2: The second qubit (target).
+        """
         self._gatelists.append(TwoQGate(twoQGateindices["CZ"], qubit1, qubit2))
 
-    def add_paulix(self, qubit: int):
+    def add_paulix(self, qubit: int) -> None:
+        """Add a Pauli X gate.
+
+        Args:
+            qubit: The qubit to apply X to.
+        """
         self._gatelists.append(SingleQGate(oneQGateindices["X"], qubit))
         self._stimcircuit.append("X", [qubit])
 
-    def add_pauliy(self, qubit: int):
+    def add_pauliy(self, qubit: int) -> None:
+        """Add a Pauli Y gate.
+
+        Args:
+            qubit: The qubit to apply Y to.
+        """
         self._gatelists.append(SingleQGate(oneQGateindices["Y"], qubit))
         self._stimcircuit.append("Y", [qubit])
 
-    def add_pauliz(self, qubit: int):
+    def add_pauliz(self, qubit: int) -> None:
+        """Add a Pauli Z gate.
+
+        Args:
+            qubit: The qubit to apply Z to.
+        """
         self._gatelists.append(SingleQGate(oneQGateindices["Z"], qubit))
         self._stimcircuit.append("Z", [qubit])
 
-    def add_measurement(self, qubit: int):
+    def add_measurement(self, qubit: int) -> None:
+        """Add a Z-basis measurement on a qubit.
+
+        Assigns a sequential measurement index and registers the measurement
+        in the internal lookup tables.
+
+        Args:
+            qubit: The qubit to measure.
+        """
         meas = Measurement(self._totalMeas, qubit)
         self._gatelists.append(meas)
         self._stimcircuit.append("M", [qubit])
-        # self._stimcircuit.append("DETECTOR", [stim.target_rec(-1)])
         self._index_to_measurement[self._totalMeas] = meas
         self._measIdx_to_parityIdx[self._totalMeas] = []
         self._totalMeas += 1
 
-    def compile_detector_and_observable(self):
+    def compile_detector_and_observable(self) -> None:
+        """Append DETECTOR and OBSERVABLE_INCLUDE instructions to the STIM circuit.
+
+        Uses :attr:`parityMatchGroup` and :attr:`observable` to emit the
+        corresponding STIM instructions with relative measurement record
+        references. Also populates the ``_measIdx_to_parityIdx`` reverse
+        mapping so each measurement knows which detectors it belongs to.
+
+        This method is called automatically at the end of
+        :meth:`compile_from_stim_circuit_str`.
+        """
         totalMeas = self._totalMeas
         # print(totalMeas)
         detectorIdx = 0
@@ -509,11 +734,22 @@ class CliffordCircuit:
             0,
         )
 
-    def add_reset(self, qubit: int):
+    def add_reset(self, qubit: int) -> None:
+        """Add a qubit reset (project to |0>).
+
+        Args:
+            qubit: The qubit to reset.
+        """
         self._gatelists.append(Reset(qubit))
         self._stimcircuit.append("R", [qubit])
 
-    def setShowNoise(self, show: bool):
+    def setShowNoise(self, show: bool) -> None:
+        """Control whether noise channels are included in string output.
+
+        Args:
+            show: If ``True``, noise channels appear in :meth:`__str__`
+                and LaTeX output.
+        """
         self._shownoise = show
 
     def __str__(self):

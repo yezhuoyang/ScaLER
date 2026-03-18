@@ -1,9 +1,15 @@
 from __future__ import annotations
 
-"""
-Abstract base class for S-curve models.
+"""Abstract base class for S-curve models used in ScaLER.
 
-This module defines the interface that all S-curve models must implement.
+Every S-curve model must subclass :class:`ScurveModelBase` and implement
+methods for predicting P_L(w), transforming between probability and
+linearised (log-logit) space, fitting parameters to measured data, and
+computing the optimal sampling weight (sweet spot).
+
+The base class provides a concrete :meth:`fit` method that performs
+weighted nonlinear least squares in the transformed ``y(w)`` space with
+bias correction.
 """
 
 from abc import ABC, abstractmethod
@@ -14,27 +20,41 @@ from scipy.optimize import curve_fit
 
 
 class ScurveModelBase(ABC):
-    """
-    Abstract base class for S-curve models used in ScaLER.
+    """Abstract base class for S-curve models used in ScaLER.
 
-    All S-curve models must implement methods for:
-    - Predicting P_L(w) for given weight(s)
-    - Transforming between P_L and linear space y(w)
-    - Fitting model parameters to data
-    - Calculating the sweet spot weight
+    Subclasses must implement methods for:
+
+    * **Prediction**: :meth:`predict` -- compute P_L(w).
+    * **Transform / inverse**: :meth:`transform`, :meth:`inverse_transform`
+      -- convert between probability and log-logit space.
+    * **Linear prediction**: :meth:`linear_prediction` -- compute y(w) in
+      transformed space.
+    * **Fitting helpers**: :meth:`_get_fit_function`,
+      :meth:`_get_initial_guess`, :meth:`_get_bounds`,
+      :meth:`_set_params_from_fit`.
+    * **Sweet-spot calculation**: :meth:`calculate_sweet_spot`.
+
+    The concrete :meth:`fit` method (provided here) performs weighted
+    nonlinear least squares via ``scipy.optimize.curve_fit`` in
+    log-logit space, applying bias correction to the observed data.
 
     Attributes:
-        t: Fault-tolerant threshold ((d-1)/2 where d is code distance)
-        gamma: Sweet spot tuning parameter for d²y/dw² = γ * dy/dw
+        _t (int): Fault-tolerant threshold, ``(d - 1) / 2`` where *d*
+            is the code distance.
+        _gamma (float): Sweet-spot tuning parameter for the condition
+            ``d^2 y / dw^2 = gamma * |dy/dw|``.
+        _params (Dict[str, float]): Fitted model parameters.
+        _r_squared (float): R^2 goodness-of-fit from the last call to
+            :meth:`fit`.
     """
 
     def __init__(self, t: int = 0, gamma: float = 0.05):
-        """
-        Initialize the S-curve model.
+        """Initialize the S-curve model.
 
         Args:
-            t: Fault-tolerant threshold ((d-1)/2)
-            gamma: Sweet spot tuning parameter
+            t: Fault-tolerant threshold ``(d - 1) / 2``.
+            gamma: Sweet-spot tuning parameter controlling where the
+                S-curve transitions from curved to linear.
         """
         self._t = t
         self._gamma = gamma

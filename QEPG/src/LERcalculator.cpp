@@ -1,3 +1,13 @@
+/**
+ * @file LERcalculator.cpp
+ * @brief Implementation of the high-level sampling API for Python interop.
+ *
+ * Contains internal conversion utilities (bitset-to-boolean, bitset-to-NumPy)
+ * and the implementations of all LERcalculator namespace functions declared
+ * in LERcalculator.hpp. Conversion functions use OpenMP for parallel unpacking
+ * of bitset rows into contiguous NumPy arrays.
+ */
+
 #include "LERcalculator.hpp"
 
 
@@ -7,7 +17,12 @@ namespace LERcalculator{
 
 
 
-
+/**
+ * @brief Convert a vector of GF(2) bitset rows to a 2D boolean vector.
+ *
+ * @param[out] result          Output vector, populated with one vector<bool> per bitset row.
+ * @param[in]  samplecontainer Input bitset rows to convert.
+ */
 void convert_bitset_row_to_boolean(std::vector<std::vector<bool>>& result,const std::vector<QEPG::Row>& samplecontainer){
         result.reserve(samplecontainer.size()); // Reserve space
 
@@ -23,7 +38,16 @@ void convert_bitset_row_to_boolean(std::vector<std::vector<bool>>& result,const 
 
 
 
-
+/**
+ * @brief Convert bitset rows to a 2D NumPy bool array using parallel block unpacking.
+ *
+ * Releases the Python GIL during conversion. Each row of the bitset is unpacked
+ * word-by-word (64 bits at a time) into the flat NumPy buffer. Uses OpenMP
+ * to parallelize across rows.
+ *
+ * @param rows The bitset rows to convert.
+ * @return A NumPy bool array of shape (n_rows, n_cols).
+ */
 inline py::array_t<bool> bitset_rows_to_numpy(const std::vector<QEPG::Row>& rows)
 {
     using bitset_t  = QEPG::Row;
@@ -81,7 +105,16 @@ inline py::array_t<bool> bitset_rows_to_numpy(const std::vector<QEPG::Row>& rows
 
 
 
-
+/**
+ * @brief Convert bitset rows to separate detector and observable boolean vectors.
+ *
+ * Splits each bitset row: all bits except the last go into the detector result,
+ * and the last bit goes into the observable result.
+ *
+ * @param[out] result          Detector outcomes (each row has size n_cols - 1).
+ * @param[out] obsresult       Observable outcomes (one bool per sample).
+ * @param[in]  samplecontainer Input bitset rows.
+ */
 inline void convert_bitset_row_to_boolean_separate_obs(std::vector<std::vector<bool>>& result,std::vector<bool>& obsresult,const std::vector<QEPG::Row>& samplecontainer){
         result.reserve(samplecontainer.size()); // Reserve space
         obsresult.reserve(samplecontainer.size());
@@ -97,7 +130,20 @@ inline void convert_bitset_row_to_boolean_separate_obs(std::vector<std::vector<b
 }
 
 
-
+/**
+ * @brief Convert bitset rows into pre-allocated NumPy arrays with separate detector and observable outputs.
+ *
+ * Unpacks bitset rows directly into contiguous NumPy memory with OpenMP parallelism.
+ * Writes into the arrays starting at begin_index, allowing multiple weight batches
+ * to be concatenated into the same output arrays.
+ *
+ * @param[in,out] detectionresult Pre-allocated NumPy array of shape (N, num_detectors).
+ * @param[in,out] obsresult       Pre-allocated NumPy array of shape (N,).
+ * @param[in]     begin_index     Row offset at which to start writing in the output arrays.
+ * @param[in]     samplecontainer Input bitset rows to unpack.
+ *
+ * @throws std::runtime_error If the output arrays have wrong shape or are too small.
+ */
 inline void convert_bitset_row_to_boolean_separate_obs_numpy(
         pybind11::array_t<bool>&        detectionresult,   // shape (N, k)
         pybind11::array_t<bool>&        obsresult,         // shape (N,)
@@ -183,6 +229,7 @@ inline void convert_bitset_row_to_boolean_separate_obs_numpy(
 
 
 
+/// @copydoc LERcalculator::return_samples_with_fixed_QEPG
 std::vector<std::vector<bool>> return_samples_with_fixed_QEPG(const QEPG::QEPG& graph,size_t weight, size_t shots){
     SAMPLE::sampler sampler(graph.get_total_noise());
     std::vector<QEPG::Row> samplecontainer;
@@ -196,7 +243,7 @@ std::vector<std::vector<bool>> return_samples_with_fixed_QEPG(const QEPG::QEPG& 
 
 
 
-
+/// @copydoc LERcalculator::return_samples
  std::vector<std::vector<bool>> return_samples(const std::string& prog_str,size_t weight, size_t shots){
     clifford::cliffordcircuit c;
     c.compile_from_rewrited_stim_string(prog_str);
@@ -212,7 +259,7 @@ std::vector<std::vector<bool>> return_samples_with_fixed_QEPG(const QEPG::QEPG& 
 
 
 
-
+/// @copydoc LERcalculator::return_samples_numpy
 py::array_t<bool> return_samples_numpy(const std::string& prog_str,size_t weight, size_t shots){
     clifford::cliffordcircuit c;
     c.compile_from_rewrited_stim_string(prog_str);
@@ -229,14 +276,14 @@ py::array_t<bool> return_samples_numpy(const std::string& prog_str,size_t weight
 
     py::array_t<bool>  result;
     result=bitset_rows_to_numpy(samplecontainer);
-    return std::move(result);    
+    return std::move(result);
 }
 
 
 
 
 
-
+/// @copydoc LERcalculator::return_all_samples_with_fixed_weights
  std::vector<std::vector<bool>> return_all_samples_with_fixed_weights(const std::string& prog_str,const size_t& weight){
     clifford::cliffordcircuit c;
     c.compile_from_rewrited_stim_string(prog_str);
@@ -259,7 +306,8 @@ py::array_t<bool> return_samples_numpy(const std::string& prog_str,size_t weight
 }
 
 
-std::pair<std::vector<std::vector<std::pair<int,int>>> ,std::vector<std::vector<bool>>> 
+/// @copydoc LERcalculator::return_samples_with_noise_vector
+std::pair<std::vector<std::vector<std::pair<int,int>>> ,std::vector<std::vector<bool>>>
 return_samples_with_noise_vector(const std::string & prog_str,size_t weight, size_t shots){
     clifford::cliffordcircuit c;
     c.compile_from_rewrited_stim_string(prog_str);
@@ -294,6 +342,7 @@ return_samples_with_noise_vector(const std::string & prog_str,size_t weight, siz
 
 
 
+/// @copydoc LERcalculator::return_samples_many_weights
 std::vector<std::vector<std::vector<bool>>> return_samples_many_weights(const std::string& prog_str,const std::vector<size_t>& weight, const std::vector<size_t>& shots){
     clifford::cliffordcircuit c;
     c.compile_from_rewrited_stim_string(prog_str);
@@ -320,6 +369,7 @@ std::vector<std::vector<std::vector<bool>>> return_samples_many_weights(const st
 }
 
 
+/// @copydoc LERcalculator::compile_QEPG
 QEPG::QEPG compile_QEPG(const std::string& prog_str){
     clifford::cliffordcircuit c;
     c.compile_from_rewrited_stim_string(prog_str);
@@ -329,6 +379,7 @@ QEPG::QEPG compile_QEPG(const std::string& prog_str){
 }
 
 
+/// @copydoc LERcalculator::return_samples_many_weights_numpy
 std::vector<py::array_t<bool>> return_samples_many_weights_numpy(const std::string& prog_str,const std::vector<size_t>& weight, const std::vector<size_t>& shots){
     clifford::cliffordcircuit c;
     c.compile_from_rewrited_stim_string(prog_str);
@@ -353,6 +404,7 @@ std::vector<py::array_t<bool>> return_samples_many_weights_numpy(const std::stri
 }
 
 
+/// @copydoc LERcalculator::return_samples_Monte_separate_obs_with_QEPG
 std::pair<py::array_t<bool>,py::array_t<bool>> return_samples_Monte_separate_obs_with_QEPG(const QEPG::QEPG& graph,const double& error_rate, const size_t& shot){
     SAMPLE::sampler sampler(graph.get_total_noise());
     std::vector<QEPG::Row> samplecontainer;
@@ -366,6 +418,7 @@ std::pair<py::array_t<bool>,py::array_t<bool>> return_samples_Monte_separate_obs
 
 
 
+/// @copydoc LERcalculator::return_samples_many_weights_separate_obs_with_QEPG
 std::pair<py::array_t<bool>,py::array_t<bool>> return_samples_many_weights_separate_obs_with_QEPG(const QEPG::QEPG& graph,const std::vector<size_t>& weight, const std::vector<size_t>& shots){
     SAMPLE::sampler sampler(graph.get_total_noise());
     std::vector<QEPG::Row> samplecontainer;
@@ -387,6 +440,7 @@ std::pair<py::array_t<bool>,py::array_t<bool>> return_samples_many_weights_separ
 
 
 
+/// @copydoc LERcalculator::return_samples_many_weights_separate_obs
  std::pair<py::array_t<bool>,py::array_t<bool>> return_samples_many_weights_separate_obs(const std::string& prog_str,const std::vector<size_t>& weight, const std::vector<size_t>& shots){
     clifford::cliffordcircuit c;
     c.compile_from_rewrited_stim_string(prog_str);
@@ -420,6 +474,7 @@ std::pair<py::array_t<bool>,py::array_t<bool>> return_samples_many_weights_separ
 
 
 
+/// @copydoc LERcalculator::return_detector_matrix
 std::vector<std::vector<bool>> return_detector_matrix(const std::string& prog_str){
     clifford::cliffordcircuit c;
     c.compile_from_rewrited_stim_string(prog_str);
@@ -443,7 +498,6 @@ std::vector<std::vector<bool>> return_detector_matrix(const std::string& prog_st
     }
     return result;
 }
-
 
 
 

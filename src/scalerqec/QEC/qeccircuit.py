@@ -1,8 +1,19 @@
-"""
-Quantum Error Correction Circuit Module.
+"""Quantum error correction circuit construction and compilation.
 
-This module provides the core StabCode class for representing and compiling
-stabilizer-based quantum error correction codes.
+This module provides the core :class:`StabCode` class for representing
+stabilizer-based quantum error-correcting codes and compiling them into
+STIM circuits via a two-stage pipeline:
+
+1. **IR construction** -- stabilizer generators and logical operators are
+   translated into an intermediate representation (IR) consisting of
+   :class:`StabPropInstruction`, :class:`DetectorInstruction`, and
+   :class:`ObservableInstruction` objects.
+2. **Circuit compilation** -- the IR is lowered into a
+   :class:`~scalerqec.Clifford.clifford.CliffordCircuit` and then into a
+   ``stim.Circuit``.
+
+The module also defines the :class:`SCHEME` and :class:`IRType` enumerations
+and the full IR instruction hierarchy used internally by the compiler.
 """
 
 from __future__ import annotations
@@ -20,20 +31,43 @@ from scalerqec.util import commute
 
 
 class SCHEME(Enum):
+    """Syndrome-extraction schemes for stabilizer codes.
+
+    Each member selects a different strategy for measuring stabilizer
+    generators and propagating parity information.
+
+    Attributes:
+        STANDARD: Bare ancilla syndrome extraction (one ancilla per
+            stabilizer generator, no verification).
+        SHOR: Shor-style fault-tolerant extraction using cat states.
+        KNILL: Knill-style extraction via teleportation.
+        FLAG: Flag-based fault-tolerant extraction with flag qubits.
+    """
+
     STANDARD = 0
     SHOR = 1
     KNILL = 2
     FLAG = 3
 
 
-"""
-Current types of IR instructions.
-
-TODO: Support repeat, conditional operations, etc. The IR should be stored as a tree structure.
-"""
-
-
 class IRType(Enum):
+    """Types of intermediate-representation (IR) instructions.
+
+    The IR captures the logical structure of a syndrome-extraction circuit
+    before it is lowered to physical gates.
+
+    Attributes:
+        PROP: Stabilizer propagation (ancilla preparation, entanglement,
+            and measurement).
+        DETECTOR: Detector declaration comparing measurement outcomes
+            across rounds.
+        OBSERVABLE: Logical observable declaration.
+        IF_THEN: Conditional branch (not yet implemented).
+        WHILE: While-loop control flow (not yet implemented).
+        REPEAT_UNTIL: Repeat-until control flow (not yet implemented).
+        REPEAT: Fixed-count repetition (not yet implemented).
+    """
+
     PROP = 0
     DETECTOR = 1
     OBSERVABLE = 2
@@ -44,8 +78,14 @@ class IRType(Enum):
 
 
 class IRInstruction:
-    """
-    A class representing an intermediate representation (IR) instruction for quantum circuits.
+    """Base class for all intermediate-representation (IR) instructions.
+
+    Every IR instruction carries a type tag (:class:`IRType`) that
+    identifies the kind of operation it represents.  Concrete subclasses
+    add the operand-specific fields.
+
+    Args:
+        instr_type: The IR instruction type tag.
     """
 
     def __init__(self, instr_type: IRType) -> None:
@@ -53,8 +93,23 @@ class IRInstruction:
 
 
 class StabPropInstruction(IRInstruction):
-    """
-    A class representing an intermediate representation (IR) instruction for quantum circuits.
+    """IR instruction for stabilizer propagation (syndrome measurement).
+
+    Represents the preparation of an ancilla qubit, entanglement with data
+    qubits according to a Pauli stabilizer string, and subsequent
+    measurement.  The result is stored in a symbolic destination register.
+
+    Args:
+        round: The syndrome-extraction round index (0-based).
+        stabindex: Index of the stabilizer generator within the code's
+            stabilizer list.
+        dest: Symbolic name for the measurement result (e.g., ``"c0"``).
+        stab: Pauli string describing the stabilizer generator, composed
+            of characters ``I``, ``X``, ``Y``, ``Z``.
+        is_observable: If ``True``, this instruction propagates a logical
+            observable rather than a stabilizer generator.
+        observable_index: Index of the logical observable when
+            *is_observable* is ``True``; ``-1`` otherwise.
     """
 
     def __init__(
@@ -139,8 +194,19 @@ class StabPropInstruction(IRInstruction):
 
 
 class ParityInstruction(IRInstruction):
-    """
-    Base class for parity-based IR instructions (detectors, observables).
+    """Base class for parity-check IR instructions.
+
+    A parity instruction computes the XOR (parity) of a set of
+    measurement results identified by their symbolic names.  It is the
+    common base for :class:`DetectorInstruction` and
+    :class:`ObservableInstruction`.
+
+    Args:
+        ir_type: The IR instruction type (``DETECTOR`` or ``OBSERVABLE``).
+        dest: Symbolic name for the parity result (e.g., ``"d0"`` or
+            ``"o0"``).
+        args: List of symbolic measurement-result names whose parity is
+            computed.
     """
 
     def __init__(self, ir_type: IRType, dest: str, args: list[str]) -> None:
@@ -161,8 +227,16 @@ class ParityInstruction(IRInstruction):
 
 
 class DetectorInstruction(ParityInstruction):
-    """
-    A class representing a detector instruction in the intermediate representation (IR) of a quantum circuit.
+    """IR instruction declaring a detector.
+
+    A detector compares stabilizer measurement results across consecutive
+    syndrome-extraction rounds.  In the absence of errors the parity of
+    the referenced measurements is deterministic (always 0).
+
+    Args:
+        dest: Symbolic detector name (e.g., ``"d0"``).
+        args: Symbolic names of the measurement results whose parity
+            defines this detector.
     """
 
     def __init__(self, dest: str, args: list[str]) -> None:
@@ -170,8 +244,16 @@ class DetectorInstruction(ParityInstruction):
 
 
 class ObservableInstruction(ParityInstruction):
-    """
-    A class representing an observable instruction in the intermediate representation (IR) of a quantum circuit.
+    """IR instruction declaring a logical observable.
+
+    A logical observable ties measurement results to the logical-level
+    outcome that the decoder must predict.  Typically it references the
+    measurement of a logical Z (or X) operator.
+
+    Args:
+        dest: Symbolic observable name (e.g., ``"o0"``).
+        args: Symbolic names of the measurement results whose parity
+            defines this observable.
     """
 
     def __init__(self, dest: str, args: list[str]) -> None:
@@ -179,8 +261,14 @@ class ObservableInstruction(ParityInstruction):
 
 
 class IF_THENInstruction(IRInstruction):
-    """
-    A class representing an IF-THEN instruction in the intermediate representation (IR) of a quantum circuit.
+    """IR instruction for conditional (if-then) control flow.
+
+    .. note:: Not yet implemented; reserved for future use.
+
+    Args:
+        condition: Boolean expression string evaluated at runtime.
+        then_branch: List of IR instructions to execute when
+            *condition* is true.
     """
 
     def __init__(self, condition: str, then_branch: list[IRInstruction]) -> None:
@@ -190,8 +278,13 @@ class IF_THENInstruction(IRInstruction):
 
 
 class WHILEInstruction(IRInstruction):
-    """
-    A class representing a WHILE instruction in the intermediate representation (IR) of a quantum circuit.
+    """IR instruction for while-loop control flow.
+
+    .. note:: Not yet implemented; reserved for future use.
+
+    Args:
+        condition: Boolean expression string re-evaluated each iteration.
+        body: List of IR instructions forming the loop body.
     """
 
     def __init__(self, condition: str, body: list[IRInstruction]) -> None:
@@ -201,8 +294,15 @@ class WHILEInstruction(IRInstruction):
 
 
 class REPEAT_UNTILInstruction(IRInstruction):
-    """
-    A class representing a REPEAT-UNTIL instruction in the intermediate representation (IR) of a quantum circuit.
+    """IR instruction for repeat-until control flow.
+
+    .. note:: Not yet implemented; reserved for future use.
+
+    Args:
+        body: List of IR instructions executed at least once per
+            iteration.
+        until_condition: Boolean expression string; the loop exits when
+            this evaluates to true.
     """
 
     def __init__(self, body: list[IRInstruction], until_condition: str) -> None:
@@ -212,8 +312,13 @@ class REPEAT_UNTILInstruction(IRInstruction):
 
 
 class REPEATInstruction(IRInstruction):
-    """
-    A class representing a REPEAT instruction in the intermediate representation (IR) of a quantum circuit.
+    """IR instruction for fixed-count repetition.
+
+    .. note:: Not yet implemented; reserved for future use.
+
+    Args:
+        body: List of IR instructions forming the loop body.
+        times: Number of times the body is repeated.
     """
 
     def __init__(self, body: list[IRInstruction], times: int) -> None:
@@ -223,8 +328,43 @@ class REPEATInstruction(IRInstruction):
 
 
 class StabCode:
-    """
-    A class representing a quantum error-correcting code (QECC) using the stabilizer formalism.
+    """Stabilizer quantum error-correcting code.
+
+    ``StabCode`` is the primary entry point for defining a stabilizer code,
+    attaching a noise model, and compiling the resulting syndrome-extraction
+    circuit into a ``stim.Circuit``.
+
+    The compilation is a two-stage pipeline:
+
+    1. **IR construction** -- call :meth:`construct_IR_standard_scheme` (or
+       the scheme-specific variant) to build an intermediate representation
+       from the stabilizer generators and logical operators.
+    2. **Circuit compilation** -- call
+       :meth:`compile_stim_circuit_from_IR_standard` to lower the IR into a
+       :class:`~scalerqec.Clifford.clifford.CliffordCircuit` and a
+       ``stim.Circuit``.
+
+    Both stages are executed automatically by :meth:`construct_circuit`.
+
+    Example::
+
+        code = StabCode(n=5, k=1, d=3)
+        code.add_stab("XZZXI")
+        code.add_stab("IXZZX")
+        code.add_stab("XIXZZ")
+        code.add_stab("ZXIXZ")
+        code.set_logical_Z(0, "ZZZZZ")
+        code.noisemodel = NoiseModel(error_rate=0.001)
+        code.scheme = "Standard"
+        code.rounds = 3
+        code.construct_circuit()
+        print(code.stimcirc)
+
+    Args:
+        n: Number of physical (data) qubits.
+        k: Number of logical qubits encoded by the code.
+        d: Code distance (minimum weight of a non-trivial logical
+            operator).
     """
 
     def __init__(self, n: int, k: int, d: int) -> None:
@@ -313,11 +453,17 @@ class StabCode:
         self._noisemodel = noisemodel
 
     def init_by_parity_check_matrix(self, paritymatrix: NDArray[np.int_]) -> None:
-        """
-        Initialize the QECC stabilizer structures using a given parity check matrix.
+        """Initialize the code from a binary parity-check matrix.
+
+        Sets the number of physical qubits ``n`` and logical qubits ``k``
+        from the matrix dimensions and replaces the current stabilizer
+        list.  The stabilizer generators themselves are not yet extracted
+        from the matrix (to be implemented).
 
         Args:
-            paritymatrix (np.ndarray): The parity check matrix.
+            paritymatrix: Binary parity-check matrix of shape
+                ``(n - k, n)`` where rows correspond to stabilizer
+                generators and columns to physical qubits.
         """
         self._paritymatrix = paritymatrix
         self._n = paritymatrix.shape[1]
@@ -326,20 +472,23 @@ class StabCode:
         pass
 
     def construct_parity_check_matrix(self) -> None:
-        """
-        Construct the standard XZ parity check matrix for the quantum error-correcting code.
+        """Construct the binary symplectic parity-check matrix from stabilizers.
 
-        Returns:
-            The parity check matrix.
+        Converts the stored Pauli-string stabilizer generators into a
+        binary matrix in the standard ``[X | Z]`` symplectic format and
+        stores it internally.
+
+        .. note:: Not yet implemented.
         """
         pass
 
     def get_parity_check_matrix(self) -> Optional[NDArray[np.int_]]:
-        """
-        Get the standard XZ parity check matrix for the quantum error-correcting code.
+        """Return the binary symplectic parity-check matrix, if available.
 
         Returns:
-            The parity check matrix.
+            The parity-check matrix as a NumPy integer array of shape
+            ``(n - k, n)``, or ``None`` if it has not been set or
+            constructed.
         """
         return self._paritymatrix
 
@@ -364,12 +513,21 @@ class StabCode:
         return self._stimcirc
 
     def set_logical_Z(self, index: int, logicalZ: str) -> None:
-        """
-        Set the logical Z operator for a given logical qubit.
+        """Set the logical Z operator for a logical qubit.
+
+        The logical Z operator must be specified for every logical qubit
+        (indices ``0`` through ``k - 1``) before calling
+        :meth:`construct_circuit`.
 
         Args:
-            index (int): The index of the logical qubit.
-            logicalZ (str): A string representation of the logical Z operator.
+            index: Zero-based index of the logical qubit.
+            logicalZ: Pauli string of length ``n`` (characters from
+                ``I``, ``X``, ``Y``, ``Z``) representing the logical Z
+                operator.
+
+        Raises:
+            AssertionError: If *logicalZ* has incorrect length or contains
+                invalid characters.
         """
         assert len(logicalZ) == self._n, "Logical Z length must match number of qubits."
         assert all(c in "IXYZ" for c in logicalZ), (
@@ -399,11 +557,16 @@ class StabCode:
         self._rounds = rounds
 
     def add_stab(self, stab: str) -> None:
-        """
-        Add a stabilizer generator to the code.
+        """Add a stabilizer generator to the code.
 
         Args:
-            stab (str): A string representation of the stabilizer generator.
+            stab: Pauli string of length ``n`` (characters from ``I``,
+                ``X``, ``Y``, ``Z``) representing the stabilizer
+                generator.
+
+        Raises:
+            AssertionError: If *stab* has incorrect length or contains
+                invalid characters.
         """
         assert len(stab) == self._n, "Stabilizer length must match number of qubits."
         assert all(c in "IXYZ" for c in stab), (
@@ -451,21 +614,32 @@ class StabCode:
         else:
             raise ValueError(f"Unknown scheme: {scheme}")
 
-    def construct_circuit(self):
-        """
-        Construct the quantum error-correcting circuit based on the stabilizers and scheme.
+    def construct_circuit(self) -> None:
+        """Run the full compilation pipeline for the selected scheme.
 
-        There is a two step compilation:
-             First, compile the stabilizers into an intermediate representation (IR) of the circuit.
-             Second, translate the IR into a Clifford circuit.
-             In IR, there is no concept of qubits, only Pauli operators, detectors, observables, and their relationships.
-        The IR has the form:
+        Performs two stages:
 
+        1. **IR construction** -- translates stabilizer generators and
+           logical operators into an intermediate representation.
+        2. **Circuit compilation** -- lowers the IR into a
+           :class:`~scalerqec.Clifford.clifford.CliffordCircuit` and a
+           ``stim.Circuit``.
 
-        c0 = Prop XYZIX
-        c1 = Prop IXYZI
-        d0 = Parity c0 c1
-        o0 = Parity c0
+        If a :attr:`noisemodel` has been attached, depolarizing noise is
+        injected into the compiled circuit after stage 2.
+
+        The IR uses a simple text-like notation internally::
+
+            c0 = Prop XYZIX
+            c1 = Prop IXYZI
+            d0 = Parity c0 c1
+            o0 = Parity c0
+
+        Raises:
+            NotImplementedError: If a scheme other than ``STANDARD`` is
+                selected.
+            ValueError: If any logical Z operator required by the code
+                has not been set.
         """
         if self._scheme == SCHEME.STANDARD:
             self.construct_IR_standard_scheme()
@@ -478,42 +652,57 @@ class StabCode:
         else:
             raise NotImplementedError(f"Scheme {self._scheme} not implemented yet.")
 
-    def construct_IR_shor_scheme(self):
-        """
-        Construct the quantum error-correcting circuit using the Shor scheme.
-        Now, we will create the intermediate representation (IR) for the circuit.
+    def construct_IR_shor_scheme(self) -> None:
+        """Build the IR for Shor-style fault-tolerant syndrome extraction.
+
+        .. note:: Not yet implemented.
         """
         pass
 
-    def compile_stim_circuit_from_shor_standard(self):
-        """
-        Compile the stim circuit from the intermediate representation (IR) using the Shor scheme.
+    def compile_stim_circuit_from_shor_standard(self) -> Optional[str]:
+        """Compile a STIM circuit from the Shor-scheme IR.
 
         Returns:
-            str: The compiled stim circuit as a string.
+            The compiled STIM circuit as a string, or ``None``.
+
+        .. note:: Not yet implemented.
         """
         pass
 
-    def construct_IR_knill_scheme(self):
-        """
-        Construct the quantum error-correcting circuit using the Knill scheme.
-        Now, we will create the intermediate representation (IR) for the circuit.
+    def construct_IR_knill_scheme(self) -> None:
+        """Build the IR for Knill-style fault-tolerant syndrome extraction.
+
+        .. note:: Not yet implemented.
         """
         pass
 
-    def compile_stim_circuit_from_knill(self):
-        """
-        Compile the stim circuit from the intermediate representation (IR) using the Knill scheme.
+    def compile_stim_circuit_from_knill(self) -> Optional[str]:
+        """Compile a STIM circuit from the Knill-scheme IR.
 
         Returns:
-            str: The compiled stim circuit as a string.
+            The compiled STIM circuit as a string, or ``None``.
+
+        .. note:: Not yet implemented.
         """
         pass
 
-    def construct_IR_standard_scheme(self):
-        """
-        Construct the quantum error-correcting circuit using the standard scheme.
-        Now, we will create the intermediate representation (IR) for the circuit.
+    def construct_IR_standard_scheme(self) -> None:
+        """Build the IR for standard (bare-ancilla) syndrome extraction.
+
+        For each of :attr:`rounds` syndrome-extraction rounds, a
+        :class:`StabPropInstruction` is emitted for every stabilizer
+        generator.  Starting from the second round, a
+        :class:`DetectorInstruction` is added comparing the current
+        round's measurement to the previous round's measurement for the
+        same stabilizer.  Finally, :class:`ObservableInstruction` entries
+        are emitted for each logical Z operator.
+
+        This method is idempotent: calling it more than once has no
+        effect.
+
+        Raises:
+            ValueError: If a logical Z operator has not been set for
+                every logical qubit index ``0 .. k-1``.
         """
         if self._IR_compiled:
             return
@@ -561,21 +750,44 @@ class StabCode:
             self._IRList.append(observable_instr)
         self._IR_compiled = True
 
-    def show_IR(self):
-        """
-        Display the intermediate representation of the quantum error-correcting circuit.
+    def show_IR(self) -> None:
+        """Print the intermediate representation to stdout.
 
-        The IR has the form:
+        Each IR instruction is printed on its own line using its
+        ``__str__`` representation.  Useful for debugging the compilation
+        pipeline.
         """
         for irinst in self._IRList:
             print(irinst)
 
     def compile_stim_circuit_from_IR_standard(self) -> str | None:
-        """
-        Compile the stim circuit from the intermediate representation (IR).
+        """Lower the standard-scheme IR into a STIM circuit.
+
+        Iterates over the IR instruction list and emits physical-level
+        gates into a
+        :class:`~scalerqec.Clifford.clifford.CliffordCircuit`:
+
+        * **StabPropInstruction** -- resets the ancilla, applies
+          controlled-Pauli entangling gates for each non-identity Pauli
+          in the stabilizer, and measures the ancilla.
+        * **DetectorInstruction** -- records a parity check across
+          measurement results.
+        * **ObservableInstruction** -- records a logical observable.
+
+        Qubit layout convention:
+
+        * Data qubits: indices ``0 .. n-1``.
+        * Syndrome ancillas: indices ``n .. n + num_stabilizers - 1``.
+        * Observable ancillas: indices
+          ``n + num_stabilizers .. n + num_stabilizers + k - 1``.
 
         Returns:
-            str | None: The compiled stim circuit as a string, or None.
+            The compiled STIM circuit as a string if the circuit was
+            already compiled, or ``None`` on first compilation (the
+            result is stored in :attr:`stimcirc`).
+
+        Raises:
+            RuntimeError: If the IR has not been compiled yet.
         """
         # Convension: Stabilizer k stored in qubit n+k-1
         # Observable k stored in qubit n+num_syndromes+k-1

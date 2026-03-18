@@ -1,5 +1,11 @@
-# A Noise model class, the purpose is to rewrite stim program and Clifford circuit to support noise model
-# Rewrite all stim program/Clifford circuit to support the noise model
+"""Depolarizing noise model for quantum error correction circuits.
+
+This module provides :class:`NoiseModel`, which injects single-qubit
+depolarizing noise before each enabled gate type in a
+:class:`~scalerqec.Clifford.clifford.CliffordCircuit`.  Individual error
+channels can be selectively disabled via :meth:`NoiseModel.disable_error`.
+"""
+
 from enum import Enum
 
 from ..Clifford.clifford import (
@@ -12,6 +18,24 @@ from ..Clifford.clifford import (
 
 
 class ErrorType(Enum):
+    """Enumeration of gate/operation types that can carry noise.
+
+    Each member corresponds to a physical operation in the circuit.
+    Used with :meth:`NoiseModel.disable_error` to selectively silence
+    individual noise channels.
+
+    Attributes:
+        MEASUREMENT: Measurement operation.
+        RESET: Qubit reset operation.
+        CNOT: Two-qubit CNOT gate.
+        HADAMARD: Hadamard gate.
+        PHASE: Phase (S) gate.
+        PAULIX: Pauli-X gate.
+        PAULIY: Pauli-Y gate.
+        PAULIZ: Pauli-Z gate.
+        CZ: Two-qubit controlled-Z gate.
+    """
+
     MEASUREMENT = 0
     RESET = 1
     CNOT = 2
@@ -24,8 +48,20 @@ class ErrorType(Enum):
 
 
 class NoiseModel:
-    """
-    A class representing a noise model for quantum error correction simulations.
+    """Configurable depolarizing noise model.
+
+    Wraps a single depolarizing error rate and a set of per-gate-type
+    enable flags.  When applied to a
+    :class:`~scalerqec.Clifford.clifford.CliffordCircuit` via
+    :meth:`reconstruct_clifford_circuit`, a single-qubit depolarizing
+    channel is inserted immediately before every enabled gate.
+
+    By default all gate types are enabled.  Call
+    :meth:`disable_error` to turn off noise for specific operations.
+
+    Args:
+        error_rate: Probability of depolarizing error per gate, applied
+            uniformly to all enabled gate types.
     """
 
     def __init__(self, error_rate: float) -> None:
@@ -62,11 +98,17 @@ class NoiseModel:
         self._error_rate = value
 
     def disable_error(self, error_type: str) -> None:
-        """
-        Disable a specific type of error in the noise model.
+        """Disable noise injection for a specific gate type.
+
+        After calling this method, the corresponding gate will no longer
+        have a depolarizing channel inserted before it during circuit
+        reconstruction.
 
         Args:
-            error_type: The type of error to disable.
+            error_type: String identifier of the gate type to silence.
+                Accepted values: ``"MEASUREMENT"``, ``"RESET"``,
+                ``"CNOT"``, ``"CZ"``, ``"H"``, ``"P"``, ``"X"``,
+                ``"Y"``, ``"Z"``.
         """
         if error_type == "MEASUREMENT":
             self._has_MEASUREMENT_error = False
@@ -87,15 +129,17 @@ class NoiseModel:
         elif error_type == "Z":
             self._has_PAULIZ_error = False
 
-    def rewrite_stim_program(self, stim_program) -> str:
-        """
-        Rewrite a given stim program to incorporate the noise model.
+    def rewrite_stim_program(self, stim_program: str) -> str:
+        """Rewrite a STIM program string to incorporate depolarizing noise.
+
+        .. note:: Not yet implemented; returns the input unchanged.
 
         Args:
-            stim_program: The original stim program to be modified.
+            stim_program: The original STIM program as a string.
 
         Returns:
-            A new stim program with the noise model applied.
+            A new STIM program string with depolarizing noise inserted
+            before each enabled gate type.
         """
         # Placeholder for actual implementation
         return stim_program
@@ -103,14 +147,27 @@ class NoiseModel:
     def reconstruct_clifford_circuit(
         self, clifford_circuit: CliffordCircuit
     ) -> CliffordCircuit:
-        """
-        Reconstruct a given Clifford circuit to incorporate the noise model.
+        """Rebuild a Clifford circuit with depolarizing noise injected.
+
+        Creates a new :class:`~scalerqec.Clifford.clifford.CliffordCircuit`
+        by iterating over every gate in *clifford_circuit*.  For each
+        gate whose type is enabled, a single-qubit depolarizing channel
+        (at the stored :attr:`error_rate`) is inserted on the relevant
+        qubit(s) immediately before the gate.  For two-qubit gates
+        (CNOT, CZ), depolarizing noise is applied independently to both
+        the control and target qubits.
+
+        Detector and observable metadata are copied from the original
+        circuit and recompiled on the new circuit.
 
         Args:
-            clifford_circuit: The original Clifford circuit to be modified.
+            clifford_circuit: The noise-free Clifford circuit to
+                augment.
 
         Returns:
-            A new Clifford circuit with the noise model applied.
+            A new :class:`~scalerqec.Clifford.clifford.CliffordCircuit`
+            instance containing the same logical operations with
+            depolarizing noise inserted.
         """
         # Placeholder for actual implementation
 
@@ -178,15 +235,15 @@ class NoiseModel:
         return new_circuit
 
     def uniform_depolarization_single(stim_program: str) -> str:
-        """
-        Apply uniform depolarization noise to single-qubit operations in the stim program.
+        """Apply uniform depolarization to single-qubit gates in a STIM program.
+
+        .. note:: Not yet implemented; returns the input unchanged.
 
         Args:
-            stim_program (str): The original stim program.
+            stim_program: The original STIM program as a string.
 
         Returns:
-            str: The modified stim program with depolarization noise applied.
-
-        # Placeholder for actual implementation
+            The modified STIM program with single-qubit depolarization
+            noise applied.
         """
         return stim_program

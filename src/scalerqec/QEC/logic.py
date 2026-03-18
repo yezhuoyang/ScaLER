@@ -1,7 +1,26 @@
+"""Logical-level circuit abstraction and parser.
+
+This module provides a high-level representation of logical quantum
+circuits operating on QEC code blocks.  It is designed for expressing
+protocols such as magic state distillation that are naturally described
+at the logical level rather than the physical level.
+
+Key components:
+
+* :class:`CodeBlock` -- a named QEC code block parameterized by
+  ``(n, k, d)`` that holds logical qubits.
+* Logical gate classes (:class:`LogicalH`, :class:`LogicalCNOT`,
+  :class:`LogicalT`, :class:`InjectT`, :class:`LogicalMeasure`,
+  :class:`LogicalReset`) -- operations on logical qubits within code
+  blocks.
+* :class:`LogicalCircuit` -- ordered container of code blocks and
+  logical gates.
+* :class:`LogicalParser` -- text parser that converts a human-readable
+  circuit description string into a :class:`LogicalCircuit`.
+"""
+
 from __future__ import annotations
 
-# This is the file define the semantic of logical circuits
-# This is useful for Magic state distillation which works on logical level
 import re
 from .qeccircuit import StabCode
 
@@ -105,9 +124,20 @@ Postcondition:
 
 
 class CodeBlock:
-    """
-    The QEC code block to hold logical qubits
-    TODO: The type should be StabCode
+    """A named QEC code block that holds logical qubits.
+
+    Represents a single instance of a quantum error-correcting code
+    (e.g., a surface code patch) identified by a user-chosen name and
+    parameterized by ``(n, k, d)``.
+
+    Args:
+        type: Code family name (e.g., ``"surface"``, ``"color"``,
+            ``"LDPC"``).
+        name: Unique identifier for this block within a
+            :class:`LogicalCircuit`.
+        n: Number of physical qubits.
+        k: Number of logical qubits encoded in this block.
+        d: Code distance.
     """
 
     def __init__(self, type: str, name: str, n: int, k: int, d: int):
@@ -122,11 +152,21 @@ class CodeBlock:
 
 
 class LogicalGate:
+    """Abstract base class for logical-level gate operations.
+
+    Subclasses must implement :meth:`__repr__` to provide a human-readable
+    representation of the gate.
+
+    Args:
+        type: Gate type identifier (e.g., ``"H"``, ``"CNOT"``, ``"T"``).
+    """
+
     def __init__(self, type: str):
         self._type = type  # Type of the logical gate, e.g., 'CNOT', 'H', 'T'
 
     @property
-    def type(self):
+    def type(self) -> str:
+        """str: The gate type identifier."""
         return self._type
 
     def __repr__(self):
@@ -134,6 +174,13 @@ class LogicalGate:
 
 
 class LogicalH(LogicalGate):
+    """Logical Hadamard gate applied to a single logical qubit.
+
+    Args:
+        block: The code block containing the target logical qubit.
+        index: Zero-based index of the logical qubit within *block*.
+    """
+
     def __init__(self, block: CodeBlock, index: int):
         super().__init__("H")
         self._block = block
@@ -144,6 +191,17 @@ class LogicalH(LogicalGate):
 
 
 class LogicalCNOT(LogicalGate):
+    """Logical CNOT gate between two logical qubits.
+
+    The control and target qubits may reside in different code blocks.
+
+    Args:
+        control_block: Code block containing the control logical qubit.
+        control_index: Zero-based index of the control logical qubit.
+        target_block: Code block containing the target logical qubit.
+        target_index: Zero-based index of the target logical qubit.
+    """
+
     def __init__(
         self,
         control_block: CodeBlock,
@@ -162,6 +220,16 @@ class LogicalCNOT(LogicalGate):
 
 
 class LogicalT(LogicalGate):
+    """Logical T gate applied to a single logical qubit.
+
+    The T gate is a non-Clifford gate typically realized via magic state
+    injection at the logical level.
+
+    Args:
+        block: The code block containing the target logical qubit.
+        index: Zero-based index of the logical qubit within *block*.
+    """
+
     def __init__(self, block: CodeBlock, index: int):
         super().__init__("T")
         self._block = block
@@ -172,6 +240,18 @@ class LogicalT(LogicalGate):
 
 
 class InjectT(LogicalGate):
+    """Inject a distilled magic T state into a logical qubit.
+
+    Consumes a previously prepared magic-T handle and teleports the
+    encoded T state into the destination logical qubit.
+
+    Args:
+        dest_block: Code block containing the destination logical qubit.
+        dest_index: Zero-based index of the destination logical qubit.
+        magic_T_handle: Identifier of the magic-T resource produced by
+            a distillation protocol.
+    """
+
     def __init__(self, dest_block: CodeBlock, dest_index: int, magic_T_handle: str):
         super().__init__("InjectT")
         self._dest_block = dest_block
@@ -183,9 +263,19 @@ class InjectT(LogicalGate):
 
 
 class LogicalMeasure(LogicalGate):
-    """
-    Measure Logical Z
-    TODO: Support more general logical measurement, such as MXX, MZX, etc.
+    """Destructive measurement of a logical qubit in the Z basis.
+
+    The measurement outcome is stored in a classical register addressed
+    by *cindex*.
+
+    .. note::
+        Currently only logical-Z measurement is supported.  More general
+        logical measurements (e.g., MXX, MZX) are planned.
+
+    Args:
+        block: Code block containing the logical qubit to measure.
+        cindex: Index of the classical bit that receives the outcome.
+        index: Zero-based index of the logical qubit within *block*.
     """
 
     def __init__(self, block: CodeBlock, cindex: int, index: int):
@@ -195,15 +285,18 @@ class LogicalMeasure(LogicalGate):
         self._index = index
 
     @property
-    def index(self):
+    def index(self) -> int:
+        """int: Zero-based logical qubit index within the code block."""
         return self._index
 
     @property
-    def block(self):
+    def block(self) -> CodeBlock:
+        """CodeBlock: The code block containing the measured qubit."""
         return self._block
 
     @property
-    def cindex(self):
+    def cindex(self) -> int:
+        """int: Classical register index for the measurement outcome."""
         return self._cindex
 
     def __repr__(self):
@@ -211,17 +304,26 @@ class LogicalMeasure(LogicalGate):
 
 
 class LogicalReset(LogicalGate):
+    """Reset a logical qubit to the logical |0> state.
+
+    Args:
+        block: Code block containing the logical qubit to reset.
+        index: Zero-based index of the logical qubit within *block*.
+    """
+
     def __init__(self, block: CodeBlock, index: int):
         super().__init__("Reset")
         self._block = block
         self._index = index
 
     @property
-    def index(self):
+    def index(self) -> int:
+        """int: Zero-based logical qubit index within the code block."""
         return self._index
 
     @property
-    def block(self):
+    def block(self) -> CodeBlock:
+        """CodeBlock: The code block containing the qubit to reset."""
         return self._block
 
     def __repr__(self):
@@ -229,31 +331,60 @@ class LogicalReset(LogicalGate):
 
 
 class LogicalCircuit:
-    """
-    Class of Logical circuit
-    User
+    """Ordered container of code blocks and logical gates.
+
+    A ``LogicalCircuit`` collects :class:`CodeBlock` declarations and
+    a sequence of :class:`LogicalGate` operations that act on logical
+    qubits within those blocks.  Gate compatibility (qubit index within
+    range) is validated on insertion.
     """
 
     def __init__(self):
-        self.gates = []  # List to hold logical gates in the circuit
-        self._blocks = []  # List to hold code blocks in the circuit
-        self._qec_types = []
-        self._qec_type_names = []
-        self._MGT_handles = []
+        self.gates: list[LogicalGate] = []
+        self._blocks: list[CodeBlock] = []
+        self._qec_types: list[str] = []
+        self._qec_type_names: list[str] = []
+        self._MGT_handles: list[str] = []
 
     def add_qec_type(self, qec_type: str) -> None:
+        """Register a QEC code family name (e.g., ``"surface"``).
+
+        Args:
+            qec_type: Code family identifier used during parsing.
+        """
         self._qec_types.append(qec_type)
         self._qec_type_names.append(qec_type)
 
     def add_MGT_handle(self, handle: str) -> None:
+        """Register a magic-T state handle for use with :class:`InjectT`.
+
+        Args:
+            handle: Unique identifier for the magic-T resource.
+        """
         self._MGT_handles.append(handle)
 
     def add_block(self, block: CodeBlock) -> None:
+        """Add a code block to the circuit.
+
+        Args:
+            block: The :class:`CodeBlock` instance to register.
+        """
         self._blocks.append(block)
 
     def add_gate(self, gate: LogicalGate) -> None:
-        """
-        Check if the gate is compatible with the code blocks
+        """Validate and append a logical gate to the circuit.
+
+        Checks that all qubit indices referenced by *gate* are within the
+        valid range of their respective code blocks before appending.
+
+        Args:
+            gate: The :class:`LogicalGate` to add.
+
+        Raises:
+            ValueError: If a qubit index exceeds the number of logical
+                qubits in its code block, or if the gate type is
+                unsupported, or if an ``InjectT`` references an
+                unregistered magic-T handle.
         """
         if gate.type in ("H", "T", "Measure", "Reset"):
             # Single-qubit gates
@@ -292,24 +423,27 @@ class LogicalCircuit:
 
 
 class LogicalParser:
-    """
-    Parser for logical circuits
-    Parse input string into LogicalCircuit object and vice versa
-    Example:
+    """Parser that converts a text description into a :class:`LogicalCircuit`.
 
+    The input language supports three kinds of statements:
 
-    Type surface
+    * **Type declarations** -- ``Type surface``
+    * **Block definitions** -- ``surface q1 [13,1,3]``
+    * **Gate instructions** -- ``LogicalH q1[0]``,
+      ``LogicalCNOT q1[0], q2[0]``, ``InjectT q1[0], t0``,
+      ``c[0] = LogicalMeasure q1[0]``
 
-    surface q1 [n1,k1,d1]
-    surface q2 [n2,k2,d2]
-    surface t0 [n3,k3,d3]   # magic T state block
+    Lines may contain ``#``-style comments.  Blank lines are ignored.
 
-    q1[0] = LogicalH q1[0]
-    t0 = Distill15to1_T[d=25]     # returns a magic_T handle
-    InjectT q1[0], t0
-    q2[1] = LogicalCNOT q1[0], q2[1]
-    c[0] = LogicalMeasure q1[0]
-    c[1] = LogicalMeasure q2[1]
+    Example::
+
+        Type surface
+        surface q1 [13,1,3]
+        surface q2 [13,1,3]
+        LogicalH q1[0]
+        LogicalCNOT q1[0], q2[0]
+        c[1] = LogicalMeasure q1[0]
+        c[2] = LogicalMeasure q2[0]
     """
 
     # Patterns defined at class level to avoid AttributeError
@@ -318,18 +452,47 @@ class LogicalParser:
     _param_re = re.compile(r"\[(\w+)\s*=\s*(\d+)\]")  # For [d=25]
 
     def __init__(self):
-        self._qec_types = []
-        self._qec_type_names = []
-        self._blocksmap = {}
+        self._qec_types: list[str] = []
+        self._qec_type_names: list[str] = []
+        self._blocksmap: dict[str, CodeBlock] = {}
 
     def _parse_indexed(self, text: str) -> tuple[str, int]:
-        """Helper to extract name and index from string like 'q1[0]'"""
+        """Extract a name and integer index from an indexed reference.
+
+        Args:
+            text: String of the form ``"name[index]"`` (e.g., ``"q1[0]"``).
+
+        Returns:
+            A ``(name, index)`` tuple.
+
+        Raises:
+            ValueError: If *text* does not match the expected pattern.
+        """
         match = self._index_re.search(text)
         if not match:
             raise ValueError(f"Could not parse indexed reference: {text}")
         return match.group(1), int(match.group(2))
 
     def parse(self, logical_circ_string: str) -> LogicalCircuit:
+        """Parse a circuit description string into a :class:`LogicalCircuit`.
+
+        Performs three sequential passes over the input:
+
+        1. **Type declarations** -- registers QEC code family names.
+        2. **Block definitions** -- creates :class:`CodeBlock` instances.
+        3. **Gate instructions** -- creates and validates logical gates.
+
+        Args:
+            logical_circ_string: Multi-line circuit description in the
+                logical circuit language.
+
+        Returns:
+            A fully populated :class:`LogicalCircuit` instance.
+
+        Raises:
+            ValueError: If an indexed reference cannot be parsed, or if
+                an unsupported gate operation is encountered.
+        """
         circuit = LogicalCircuit()
         # Remove comments and empty lines
         lines = []
