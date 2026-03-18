@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-"""
-Factory for creating S-curve model instances.
+"""Factory pattern for S-curve model instantiation.
 
 This module provides:
-- ModelType enum for identifying different model types
-- ModelFactory class for creating model instances
+
+- :class:`ModelType` -- an enum identifying the available model types.
+- :class:`ModelFactory` -- a class-based factory for creating
+  :class:`~scalerqec.Stratified.models.base.ScurveModelBase` instances
+  by type.  Custom models can be registered at runtime via
+  :meth:`ModelFactory.register`.
 """
 
 from enum import Enum
@@ -17,24 +20,30 @@ from scalerqec.Stratified.models.ibm_model import IBMScurveModel
 
 
 class ModelType(Enum):
-    """Enum for S-curve model types."""
+    """Enumeration of available S-curve model types.
+
+    Attributes:
+        OUR_MODEL: Definition 1 model with pole term
+            (:class:`~scalerqec.Stratified.models.our_model.OurScurveModel`).
+        IBM_MODEL: Definition 2 IBM min-fail enclosure model
+            (:class:`~scalerqec.Stratified.models.ibm_model.IBMScurveModel`).
+    """
 
     OUR_MODEL = "our_model"
     IBM_MODEL = "ibm_model"
 
 
 class ModelFactory:
-    """
-    Factory for creating S-curve model instances.
+    """Factory for creating :class:`ScurveModelBase` instances by type.
 
-    Usage:
-        # Create a specific model
+    The factory maintains an internal registry mapping
+    :class:`ModelType` values to concrete model classes.  New model
+    types can be added at runtime with :meth:`register`.
+
+    Example::
+
         model = ModelFactory.create(ModelType.OUR_MODEL, t=3, gamma=0.05)
-
-        # Create all models for comparison
-        models = ModelFactory.create_all(t=3, gamma=0.05)
-
-        # Get list of available models
+        all_models = ModelFactory.create_all(t=3, gamma=0.05)
         available = ModelFactory.available_models()
     """
 

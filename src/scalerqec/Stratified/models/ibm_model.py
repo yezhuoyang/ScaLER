@@ -1,21 +1,23 @@
 from __future__ import annotations
 
-"""
-IBM's S-curve model implementation (Definition 2 from the paper).
+"""Definition 2 (IBM) S-curve model implementation.
 
-Model:
-    f[f0, w0, γ](w) = 0.5 * [1 - exp(-2*f0*(w/w0)^γ)]
+This module implements the "min-fail enclosure" model proposed by IBM
+for approximating the logical error rate spectrum::
 
-This is the "min-fail enclosure" model proposed by IBM for approximating
-the logical error rate spectrum in quantum error correction.
+    P_L(w) = 0.5 * [1 - exp(-2 * f0 * (w / w0) ^ gamma_ibm)]
+
+The model is characterised by a power-law onset at the onset weight
+*w0* (typically ``t + 1``), and saturates toward 0.5 for large *w*.
 
 Parameters:
-    f0: Failure probability at the onset weight (controls amplitude)
-    w0: Onset weight (minimum weight with logical errors, typically t+1)
-    gamma_ibm: Power exponent (controls the shape of the curve)
+    f0: Failure probability at the onset weight (controls amplitude).
+    w0: Onset weight (first weight with non-zero logical errors).
+    gamma_ibm: Power exponent controlling the steepness of the curve.
 
-Note: gamma_ibm is the model parameter, distinct from the sweet spot
-tuning parameter gamma in the base class.
+.. note::
+    ``gamma_ibm`` is a *model* parameter distinct from the sweet-spot
+    tuning parameter ``gamma`` inherited from :class:`ScurveModelBase`.
 """
 
 from typing import Any, Callable, Dict, List, Tuple
@@ -26,21 +28,30 @@ from scalerqec.Stratified.models.base import ScurveModelBase
 
 
 class IBMScurveModel(ScurveModelBase):
-    """
-    IBM's min-fail enclosure S-curve model from Definition 2 in the paper.
+    """IBM "min-fail enclosure" S-curve model (Definition 2).
 
-    This model uses the formula:
-        P_L(w) = 0.5 * [1 - exp(-2*f0*(w/w0)^γ)]
+    Uses the formula::
 
-    Key differences from OurModel:
-    - Uses exponential decay instead of logistic
-    - Characterized by onset weight w0 rather than pole at t
-    - Different asymptotic behavior near saturation
+        P_L(w) = 0.5 * [1 - exp(-2 * f0 * (w / w0) ^ gamma_ibm)]
 
-    Parameters:
-        f0: Failure probability at onset (controls how fast saturation occurs)
-        w0: Onset weight (typically t+1, the first weight with errors)
-        gamma_ibm: Power exponent (controls curve steepness)
+    Key differences from :class:`OurScurveModel`:
+
+    * Exponential saturation rather than logistic.
+    * Characterised by an onset weight *w0* instead of a pole at *t*.
+    * Different asymptotic behaviour near saturation -- approaches 0.5
+      as ``1 - exp(-z)`` rather than ``1 / (1 + exp(-z))``.
+
+    Fitted parameters:
+        f0 (float): Failure probability at the onset weight, controlling
+            how quickly saturation is reached.
+        w0 (float): Onset weight (typically ``t + 1``), the first weight
+            at which logical errors appear.
+        gamma_ibm (float): Power exponent controlling curve steepness.
+
+    Args:
+        t: Fault-tolerant threshold ``(d - 1) / 2``.
+        gamma: Sweet-spot tuning parameter (base-class parameter, not
+            the IBM model exponent).
     """
 
     def __init__(self, t: int = 0, gamma: float = 0.05):
@@ -319,7 +330,10 @@ class IBMScurveModel(ScurveModelBase):
         return int(w_sweet)
 
     def get_onset_weight(self) -> float:
-        """
-        Get the onset weight w0.
+        """Return the fitted onset weight *w0*.
+
+        Returns:
+            The onset weight, or ``t + 1`` if the model has not been
+            fitted yet.
         """
         return self._params.get("w0", float(self._t + 1))

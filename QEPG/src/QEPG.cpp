@@ -1,3 +1,13 @@
+/**
+ * @file QEPG.cpp
+ * @brief Implementation of the QEPG backward error propagation graph construction.
+ *
+ * Contains the core backward_graph_construction() algorithm that traverses
+ * the Clifford circuit in reverse to build the parity propagation matrix,
+ * as well as matrix utility functions (transpose, multiplication over GF(2))
+ * and the older compute_parityPropMatrix() path.
+ */
+
 #include "QEPG.hpp"
 #include <iostream>
 #include <chrono>
@@ -15,9 +25,9 @@ QEPG::QEPG(clifford::cliffordcircuit othercircuit, size_t total_detectors, size_
                     circuit_(othercircuit),
                     total_detectors_(total_detectors),
                     total_noise_(total_noise),
-                    parityPropMatrixTranspose_(3* total_noise_,Row(total_detectors+1))             
+                    parityPropMatrixTranspose_(3* total_noise_,Row(total_detectors+1))
                     {
-                        
+
 }
 
 
@@ -41,7 +51,7 @@ const size_t& QEPG::get_total_detector() const noexcept{
 
 
 
-
+/// @brief Print detector matrix, its transpose, and parity propagation matrix transpose to stdout.
 void QEPG::print_detectorMatrix(char zero, char one) const{
 
     std::cout<<"-----------detectorMatrix:----------------------\n";
@@ -58,14 +68,14 @@ void QEPG::print_detectorMatrix(char zero, char one) const{
         }
         std::cout<<"\n";
     }
-    
+
     std::cout<<"-----------ParitygroupMatrixTranspose:----------------------\n";
     for(const auto& row:parityPropMatrixTranspose_){
         for(std::size_t c=0;c<row.size();++c){
             std::cout<<(row.test(c)? one:zero);
         }
         std::cout<<"\n";
-    }        
+    }
 }
 
 
@@ -76,24 +86,53 @@ void QEPG::print_detectorMatrix(char zero, char one) const{
 
 
 
-
+/**
+ * @brief Transpose a GF(2) bit matrix in place.
+ *
+ * Given a matrix with n_rows rows of width n_cols, produces a transposed
+ * matrix with n_cols rows of width n_rows. Uses find_first/find_next
+ * iteration for sparse-friendly traversal.
+ *
+ * @param[in]  mat      Input matrix (n_rows x n_cols).
+ * @param[out] matTrans Output transposed matrix (n_cols x n_rows).
+ */
 inline void transpose_matrix(const std::vector<Row>& mat,std::vector<Row>& matTrans){
     const std::size_t n_rows=mat.size();
     const std::size_t n_cols=n_rows ? mat[0].size():0;
-    matTrans.assign(n_cols, Row(n_rows));  
+    matTrans.assign(n_cols, Row(n_rows));
     for(std::size_t r=0; r<n_rows; ++r){
         const Row& src= mat[r];
         for(std::size_t c=src.find_first();c!=Row::npos; c=src.find_next(c)){
             matTrans[c].set(r);
         }
-    }    
+    }
 }
 
+/**
+ * @brief Build the parity propagation matrix by backward traversal of the circuit.
+ *
+ * Algorithm overview:
+ * 1. Allocate per-qubit X, Y, Z propagation vectors (each a GF(2) row of
+ *    length num_detectors + 1).
+ * 2. Walk the gate list from last to first. For each gate:
+ *    - DEPOLARIZE1: snapshot the current X/Y/Z propagation of that qubit
+ *      into the corresponding rows of parityPropMatrixTranspose_.
+ *    - M (measurement): look up which detectors/observable reference this
+ *      measurement and set the corresponding bits in the X and Y propagation
+ *      vectors for the measured qubit (Z-basis measurement detects X and Y errors).
+ *    - R (reset): clear all propagation vectors for the reset qubit (errors
+ *      before a reset cannot propagate past it).
+ *    - cnot: apply the symplectic CNOT update rules:
+ *        X_control ^= X_target  (X propagates forward on control)
+ *        Z_target  ^= Z_control (Z propagates backward on target)
+ *        Y_control ^= X_target  (Y = iXZ, so X part propagates)
+ *        Y_target  ^= Z_control (Y = iXZ, so Z part propagates)
+ *    - h (Hadamard): swap X and Z propagation vectors for that qubit.
+ *
+ * After completion, parityPropMatrixTranspose_ has 3*N rows (X block [0,N),
+ * Y block [N,2N), Z block [2N,3N)) and (num_detectors+1) columns.
+ */
 void QEPG::backward_graph_construction(){
-
-    // using clock     = std::chrono::steady_clock;          // monotonic, good for benchmarking
-    // using microsec  = std::chrono::microseconds;
-    // auto t0 = clock::now();                               // start timer
 
     size_t gate_size=circuit_.get_gate_num();
 
@@ -107,7 +146,7 @@ void QEPG::backward_graph_construction(){
     Directly store the propagation from pauli noise to qubits
     */
     const size_t num_detectors=circuit_.get_detector_parity_group().size();
-    
+
     std::vector<Row> current_x_parity_prop(circuit_.get_num_qubit(),Row(num_detectors+1));
     std::vector<Row> current_y_parity_prop(circuit_.get_num_qubit(),Row(num_detectors+1));
     std::vector<Row> current_z_parity_prop(circuit_.get_num_qubit(),Row(num_detectors+1));
@@ -127,15 +166,15 @@ void QEPG::backward_graph_construction(){
         *   First case, when the gate is a depolarization noise
         */
         if(name=="DEPOLARIZE1"){
-                size_t qindex=gate.qubits[0];                
+                size_t qindex=gate.qubits[0];
                 /*
                 Uptill now, the fate of this noise is determined
                 So in priciple, we can update the parity propagation
                 */
                 parityPropMatrixTranspose_[current_noise_index]=current_x_parity_prop[qindex];   //current_x_prop(circuit_.get_num_qubit(),Row(3* total_noise_))
                 parityPropMatrixTranspose_[total_noise_+current_noise_index]=current_y_parity_prop[qindex];
-                parityPropMatrixTranspose_[total_noise_*2+current_noise_index]=current_z_parity_prop[qindex];      
-                
+                parityPropMatrixTranspose_[total_noise_*2+current_noise_index]=current_z_parity_prop[qindex];
+
                 current_noise_index--;
                 continue;
         }
@@ -169,20 +208,20 @@ void QEPG::backward_graph_construction(){
             size_t qindex=gate.qubits[0];
 
             current_x_parity_prop[qindex].reset();
-            current_y_parity_prop[qindex].reset();  
-            current_z_parity_prop[qindex].reset();                      
+            current_y_parity_prop[qindex].reset();
+            current_z_parity_prop[qindex].reset();
 
         }
         /*
         *   When the gate is a CNOT
         */
         if(name=="cnot"){
-            size_t qcontrol=gate.qubits[0];           
-            size_t qtarget=gate.qubits[1];   
+            size_t qcontrol=gate.qubits[0];
+            size_t qtarget=gate.qubits[1];
             current_x_parity_prop[qcontrol]^=current_x_parity_prop[qtarget];
             current_z_parity_prop[qtarget]^=current_z_parity_prop[qcontrol];
             current_y_parity_prop[qcontrol]^=current_x_parity_prop[qtarget];
-            current_y_parity_prop[qtarget]^=current_z_parity_prop[qcontrol];            
+            current_y_parity_prop[qtarget]^=current_z_parity_prop[qcontrol];
             continue;
         }
 
@@ -191,12 +230,12 @@ void QEPG::backward_graph_construction(){
             current_x_parity_prop[qindex].swap(current_z_parity_prop[qindex]);
         }
     }
-} 
+}
 
 
 const std::vector<Row>& QEPG::get_detectorMatrix() const noexcept{
     return detectorMatrix_;
-} 
+}
 
 
 const std::vector<Row>& QEPG::get_dectorMatrixTrans() const noexcept{
@@ -213,14 +252,21 @@ const std::vector<Row>& QEPG::get_parityPropMatrixTrans() const noexcept{
     return parityPropMatrixTranspose_;
 }
 
-/*
-Return the matrix multiplication result of two bitset matrix on Field F2
-*/
+/**
+ * @brief Multiply two GF(2) matrices using transpose-and-AND-popcount.
+ *
+ * Computes result[i][j] = popcount(mat1[i] AND mat2^T[j]) mod 2.
+ * Transposes mat2 first, then performs the row-by-row inner products.
+ *
+ * @param mat1 Left matrix (R1 x C).
+ * @param mat2 Right matrix (C x C2).
+ * @return Result matrix (R1 x C2) over GF(2).
+ */
 std::vector<Row> bitset_matrix_multiplication(const std::vector<Row>& mat1,const std::vector<Row>& mat2){
     const size_t row1=mat1.size();
     const size_t col1=row1? mat1[0].size():0;
     const size_t row2=mat2.size();
-    const size_t col2=row1? mat2[0].size():0;    
+    const size_t col2=row1? mat2[0].size():0;
     std::vector<Row> result(row1,Row(col2));
     std::vector<Row> mat2transpose;
     transpose_matrix(mat2,mat2transpose);
@@ -233,10 +279,18 @@ std::vector<Row> bitset_matrix_multiplication(const std::vector<Row>& mat1,const
 }
 
 
-/*
-Now we know the propagation of Pauli error to all measurements, we still need to calculate the 
-propagation of all pauli error to all detector measurement result
-*/
+/**
+ * @brief Compute parity propagation matrix via explicit matrix multiplication (legacy path).
+ *
+ * Builds the parity group matrix from detector and observable definitions
+ * (a binary matrix mapping detectors to measurements), then multiplies it
+ * by the detector matrix (mapping noise locations to measurements) to get
+ * the parity propagation matrix (mapping noise locations to detectors).
+ * Finally transposes the result.
+ *
+ * @note This path is superseded by backward_graph_construction() which
+ *       achieves the same result without the intermediate detector matrix.
+ */
 void QEPG::compute_parityPropMatrix(){
 
     using clock     = std::chrono::steady_clock;          // monotonic, good for benchmarking
@@ -250,7 +304,7 @@ void QEPG::compute_parityPropMatrix(){
 
     std::vector<Row> paritygroupMatrix(row_size,Row(col_size));
 
-    
+
     for(size_t i=0; i<detector_parity_group.size();i++){
         for(size_t index: detector_parity_group[i].indexlist){
             paritygroupMatrix[i][index]=true;
@@ -259,25 +313,10 @@ void QEPG::compute_parityPropMatrix(){
     for(size_t index: observable_group.indexlist){
         paritygroupMatrix[detector_parity_group.size()][index]=true;
     }
-    // auto t1 = clock::now();                               // stop section‑1
-    // auto compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
-    // std::cout << "[Set up parity group:] " << compile_us / 1'000.0 << "ms\n";
 
-
-
-    // std::cout << "[dectector matrix size:] " << detectorMatrix_.size()<<","<<detectorMatrix_[0].size()<< "\n";
-    // std::cout << "[dectector matrix transpose size:] " <<detectorMatrixTranspose_.size()<<","<<detectorMatrixTranspose_[0].size()<< "\n";
-    // t0 = clock::now();                               // start timer
     parityPropMatrix_=bitset_matrix_multiplication(paritygroupMatrix,detectorMatrix_);
-    // t1 = clock::now();                               // stop section‑1
-    // compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
-    // std::cout << "[bitset_matrix_multiplication(paritygroupMatrix,detectorMatrix_):] " << compile_us / 1'000.0 << "ms\n";
-    // t0 = clock::now();                               // start timer
     transpose_matrix(parityPropMatrix_,parityPropMatrixTranspose_);
-    // t1 = clock::now();                               // stop section‑1
-    // compile_us = std::chrono::duration_cast<microsec>(t1 - t0).count();
-    // std::cout << "[transpose_matrix(parityPropMatrix_,parityPropMatrixTranspose_):] " << compile_us / 1'000.0 << "ms\n";
-    
+
 }
 
 

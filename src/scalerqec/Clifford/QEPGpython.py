@@ -1,15 +1,41 @@
+"""Quantum Error Propagation Graph (QEPG) construction in pure Python.
+
+This module implements backward propagation of Pauli errors through a
+Clifford circuit to determine how each single-qubit error at every noise
+source affects the circuit's detectors and logical observable. The result
+is an error propagation matrix that maps noise configurations to
+detector/observable outcome vectors.
+"""
+
 import numpy as np
 
 from .clifford import CliffordCircuit, Measurement, Reset, pauliNoise
 
 
-"""
-Class of quantum error propagation graph
-TODO: Optimize the algorithm to construct the QEPG
-"""
-
-
 class QEPGpython:
+    """Quantum Error Propagation Graph built via backward Pauli propagation.
+
+    Given a :class:`CliffordCircuit`, this class constructs a binary
+    propagation matrix that encodes, for every noise source and every Pauli
+    error type (X, Y, Z), which detectors and/or the logical observable are
+    flipped.
+
+    The propagation matrix ``_propMatrix`` has shape
+    ``(3 * num_noise, num_detectors + 1)`` and is organized in three
+    row blocks:
+
+    - Rows ``[0, num_noise)``: X-error propagation for each noise source.
+    - Rows ``[num_noise, 2*num_noise)``: Y-error propagation.
+    - Rows ``[2*num_noise, 3*num_noise)``: Z-error propagation.
+
+    The last column of each row indicates whether the corresponding error
+    flips the logical observable.
+
+    Args:
+        circuit: A fully constructed :class:`CliffordCircuit` with gates,
+            noise sources, measurements, detectors, and observable defined.
+    """
+
     def __init__(self, circuit: CliffordCircuit):
         self._circuit = circuit
         self._total_meas = self._circuit._totalMeas
@@ -19,9 +45,35 @@ class QEPGpython:
             dtype="uint8",
         )
 
-    def backword_graph_construction(self):
+    def backword_graph_construction(self) -> None:
+        """Build the error propagation matrix by reverse-traversing the circuit.
+
+        Processes the gate list from last to first. Three per-qubit tracking
+        arrays (``current_x_prop``, ``current_y_prop``, ``current_z_prop``)
+        record how a Pauli X, Y, or Z error on each qubit would propagate
+        to detectors and the observable at the current point in the reverse
+        traversal.
+
+        Gate-type rules applied during backward propagation:
+
+        - **Measurement**: An X or Y error on the measured qubit flips the
+          detectors that include this measurement (and the observable if
+          applicable). Z errors commute with Z-basis measurement and have
+          no effect.
+        - **Reset**: Clears all propagation on the reset qubit, since the
+          qubit state is discarded.
+        - **CNOT**: X propagates forward from control to target; Z propagates
+          backward from target to control. Y propagation combines both
+          effects.
+        - **Hadamard**: Swaps X and Z propagation on the gate's qubit.
+        - **Noise source**: Snapshots the current propagation state for this
+          qubit into the corresponding rows of ``_propMatrix``.
+
+        After this method completes, ``_propMatrix`` is fully populated and
+        ready for querying via :meth:`sample_x_error`, :meth:`sample_y_error`,
+        :meth:`sample_z_error`, or :meth:`sample_noise_vector`.
+        """
         nqubit = self._circuit._qubit_num
-        # Keep track of the effect of X,Y,Z back propagation
 
         column_size = len(self._circuit.parityMatchGroup) + 1
         current_x_prop = np.zeros((nqubit, column_size), dtype="uint8")
@@ -111,21 +163,62 @@ class QEPGpython:
                 current_z_prop[qubitindex, :] = tmp_row
                 continue
 
-    """
-    Sample error and compute the detector value(Parity)
-    Return a result of the detected value
-    """
+    def sample_x_error(self, noise_index: int) -> list[int]:
+        """Get the detector/observable flip vector for an X error at a noise source.
 
-    def sample_x_error(self, noise_index):
+        Args:
+            noise_index: The noise source index (0-based).
+
+        Returns:
+            A list of length ``num_detectors + 1`` with binary entries.
+            A ``1`` at position *i* means detector *i* is flipped; a ``1``
+            in the last position means the observable is flipped.
+        """
         return list(self._propMatrix[noise_index, :])
 
-    def sample_y_error(self, noise_index):
+    def sample_y_error(self, noise_index: int) -> list[int]:
+        """Get the detector/observable flip vector for a Y error at a noise source.
+
+        Args:
+            noise_index: The noise source index (0-based).
+
+        Returns:
+            A list of length ``num_detectors + 1`` with binary entries.
+        """
         return list(self._propMatrix[self._total_noise + noise_index, :])
 
-    def sample_z_error(self, noise_index):
+    def sample_z_error(self, noise_index: int) -> list[int]:
+        """Get the detector/observable flip vector for a Z error at a noise source.
+
+        Args:
+            noise_index: The noise source index (0-based).
+
+        Returns:
+            A list of length ``num_detectors + 1`` with binary entries.
+        """
         return list(self._propMatrix[2 * self._total_noise + noise_index, :])
 
-    def sample_noise_vector(self, noise_vector):
+    def sample_noise_vector(self, noise_vector: np.ndarray) -> np.ndarray:
+        """Compute the detector/observable outcome for an arbitrary error pattern.
+
+        Multiplies a binary noise vector (indicating which X/Y/Z errors are
+        active at which noise sources) by the propagation matrix to obtain
+        the combined detector and observable flip pattern.
+
+        Args:
+            noise_vector: A binary array of length ``3 * num_noise``. The
+                first ``num_noise`` entries correspond to X errors, the next
+                to Y errors, and the last to Z errors, matching the row
+                layout of ``_propMatrix``.
+
+        Returns:
+            An array of length ``num_detectors + 1`` giving the XOR-combined
+            detector flips and observable flip.
+
+        Raises:
+            AssertionError: If ``noise_vector`` length does not equal
+                ``3 * num_noise``.
+        """
         assert len(noise_vector) == 3 * self._total_noise
         return noise_vector @ self._propMatrix
 

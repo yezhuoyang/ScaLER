@@ -1,5 +1,11 @@
-"""
-Utility functions for Pauli operator manipulation.
+"""Utility functions for Pauli operator manipulation.
+
+Provides commutation checks and string-level multiplication for
+multi-qubit Pauli operators represented as strings of ``I``, ``X``,
+``Y``, ``Z`` characters (one per qubit).
+
+Global phases are ignored in all operations since they do not affect
+measurement outcomes or error correction.
 """
 
 
@@ -71,6 +77,18 @@ def multiply_pauli_strings(p: str, q: str) -> str:
     assert len(p) == len(q), "Pauli strings must have same length."
 
     def mul_single(a: str, b: str) -> str:
+        """Multiply two single-qubit Pauli operators, ignoring phase.
+
+        Args:
+            a (str): First Pauli operator (``I``, ``X``, ``Y``, or ``Z``).
+            b (str): Second Pauli operator.
+
+        Returns:
+            str: Product Pauli operator (phase ignored).
+
+        Raises:
+            ValueError: If an unexpected Pauli pair is encountered.
+        """
         a = a.upper()
         b = b.upper()
         if a == "I":

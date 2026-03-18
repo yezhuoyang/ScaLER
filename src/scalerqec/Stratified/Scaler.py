@@ -1,7 +1,22 @@
 from __future__ import annotations
 
-# ScaLER: Scalable Logical Error Rate estimation
-# Refactored to support multiple S-curve models
+"""Primary ScaLER algorithm for time-budgeted logical error rate estimation.
+
+This module implements the :class:`Scaler` class, which is the main
+entry point for the ScaLER (Scalable Logical Error Rate) algorithm.
+It uses a three-phase, time-budgeted approach:
+
+1. **Phase 1 (Initialisation):** Binary-search to bracket the S-curve
+   (``w_err``, ``w_sat``), then sample 5 uniformly-spaced weights.
+2. **Phase 2 (Sweet-spot exploration):** Fit an S-curve model, compute
+   the sweet spot, and sample between the sweet spot and ``w_err``.
+3. **Phase 3 (Adaptive refinement):** Iteratively add samples at
+   weights with insufficient logical error events until the time budget
+   is exhausted or all weights are converged.
+
+Multiple S-curve model backends are supported via the
+:mod:`~scalerqec.Stratified.models` abstraction layer.
+"""
 
 import numpy as np
 import time
@@ -28,19 +43,40 @@ import matplotlib.pyplot as plt
 
 
 class Scaler:
-    """
-    Use stratified sampling to estimate the logical error rate of a quantum error
-    correction code using the ScaLER algorithm.
+    """Time-budgeted stratified LER estimator (the primary ScaLER algorithm).
 
-    This class supports multiple S-curve models for fitting:
-    - OurModel (default): The model from Definition 1 in the paper
-    - IBMModel: IBM's min-fail enclosure model from Definition 2
+    Estimates the logical error rate of a quantum error correction code
+    by stratifying over fault weight *w*, fitting an S-curve model to
+    P_L(w), and integrating against the binomial weight distribution::
 
-    User-facing hyperparameters:
-      - error_rate: Physical error rate
-      - time_budget: Time budget in seconds
-      - model_type: Which S-curve model to use (default: OUR_MODEL)
-      - gamma: Sweet spot tuning parameter (default: 0.05)
+        LER = sum_w  P_L(w) * Binom(N, w) * p^w * (1-p)^(N-w)
+
+    The algorithm proceeds in three phases:
+
+    1. **Phase 1 -- Initialisation:** Binary-search for the onset
+       weight ``w_err`` and saturation weight ``w_sat``, then sample 5
+       uniformly-spaced weights between them.
+    2. **Phase 2 -- Sweet-spot exploration:** Fit the S-curve model,
+       compute the sweet spot, and sample between the sweet spot and
+       ``w_err``.
+    3. **Phase 3 -- Adaptive refinement:** Iteratively add samples at
+       weights that have not yet accumulated enough logical error events,
+       until the wall-clock time budget is exhausted.
+
+    Multiple S-curve model backends are supported via the
+    :mod:`~scalerqec.Stratified.models` abstraction layer:
+
+    * ``OUR_MODEL`` (default): Definition 1 logistic model with pole term.
+    * ``IBM_MODEL``: Definition 2 min-fail enclosure model.
+
+    Args:
+        error_rate: Physical error rate per noise location.
+        time_budget: Wall-clock time budget in seconds.
+        model_type: Which S-curve model to use.
+        gamma: Sweet-spot tuning parameter for the condition
+            ``d^2 y / dw^2 = gamma * |dy/dw|``.
+        num_subspaces_phase2: Number of uniformly-spaced subspaces to
+            sample between ``w_sweet`` and ``w_err`` in Phase 2.
     """
 
     def __init__(
@@ -141,17 +177,17 @@ class Scaler:
     # ------------------------------------------------------------------
 
     def _initialize_model(self) -> None:
-        """Initialize the S-curve model after circuit parsing."""
+        """Create the S-curve model instance based on ``_model_type``."""
         self._model = ModelFactory.create(
             self._model_type, t=self._t, gamma=self._gamma
         )
 
     def _initialize_all_models(self) -> None:
-        """Initialize all models for comparison."""
+        """Create one instance of every registered model type for comparison."""
         self._models = ModelFactory.create_all(t=self._t, gamma=self._gamma)
 
     def get_model(self) -> Optional[ScurveModelBase]:
-        """Get the current S-curve model."""
+        """Return the currently active S-curve model, or ``None``."""
         return self._model
 
     def set_model_type(self, model_type: ModelType) -> None:
@@ -226,8 +262,14 @@ class Scaler:
     # ------------------------------------------------------------------
 
     def parse_from_file(self, filepath: str) -> None:
-        """
-        Read the circuit, parse from the file, compile stim circuit and QEPG graph.
+        """Load a STIM circuit from *filepath* and prepare for sampling.
+
+        Compiles the circuit into a Clifford representation, builds a
+        QEPG graph for efficient weight-stratified sampling, and
+        initialises a PyMatching decoder from the detector error model.
+
+        Args:
+            filepath: Path to a STIM circuit file.
         """
         with open(filepath, "r", encoding="utf-8") as f:
             stim_str = f.read()
@@ -252,8 +294,18 @@ class Scaler:
         self._QEPG_graph = compile_QEPG(stim_str)
 
     def calc_logical_error_rate_with_fixed_w(self, shots: int, w: int) -> float:
-        """
-        Calculate the logical error rate with fixed Pauli weight w.
+        """Estimate P_L(w) by sampling *shots* fault patterns of weight *w*.
+
+        Generates random fault configurations with exactly *w* faults,
+        decodes each one via PyMatching, and returns the fraction that
+        produce a logical error.
+
+        Args:
+            shots: Number of samples to draw.
+            w: Exact Pauli fault weight.
+
+        Returns:
+            Estimated conditional logical error probability P_L(w).
         """
         assert self._QEPG_graph is not None, (
             "QEPG graph must be initialized before sampling"
@@ -272,7 +324,16 @@ class Scaler:
     # ------------------------------------------------------------------
 
     def binary_search_upper(self, low: int, high: int, shots: int) -> int:
-        """Find the smallest w in [low, high] such that PL(w) > _max_PL."""
+        """Find the smallest weight in [low, high] where P_L exceeds ``_max_PL``.
+
+        Args:
+            low: Lower bound of the search range (inclusive).
+            high: Upper bound of the search range (inclusive).
+            shots: Number of samples per probe.
+
+        Returns:
+            The smallest weight at which P_L > ``_max_PL``.
+        """
         left = low
         right = high
         epsilon = self._max_PL
@@ -288,7 +349,17 @@ class Scaler:
     def binary_search_lower(
         self, low: int, high: int, shots: int = 2000, epsilon: float = 0.002
     ) -> int:
-        """Find the smallest w in [low, high] such that PL(w) > epsilon."""
+        """Find the smallest weight in [low, high] where P_L > *epsilon*.
+
+        Args:
+            low: Lower bound of the search range (inclusive).
+            high: Upper bound of the search range (inclusive).
+            shots: Number of samples per probe.
+            epsilon: Detection threshold for P_L.
+
+        Returns:
+            The smallest weight at which P_L is detectable.
+        """
         left = low
         right = high
         while left < right:
@@ -301,7 +372,11 @@ class Scaler:
         return left
 
     def determine_lower_w(self) -> None:
-        """Determine the first weight where PL is noticeably non-zero."""
+        """Determine the first weight with detectable logical errors.
+
+        Sets ``_has_logical_errorw`` via binary search.  For very small
+        circuits (N <= 8), defaults to ``t + 1``.
+        """
         if self._num_noise <= 8:
             self._has_logical_errorw = self._t + 1
         else:
@@ -310,7 +385,11 @@ class Scaler:
             )
 
     def determine_saturated_w(self) -> None:
-        """Determine the weight where PL is essentially saturated (near plateau)."""
+        """Determine the weight at which P_L reaches its plateau.
+
+        Sets ``_saturatew`` via binary search.  Ensures a minimum span
+        of 8 weights between ``w_err`` and ``w_sat``.
+        """
         if self._num_noise <= 8:
             self._saturatew = self._num_noise
         else:
@@ -325,8 +404,12 @@ class Scaler:
     # ------------------------------------------------------------------
 
     def measure_sample_rates(self) -> None:
-        """
-        Measure the sampling rate of the given circuit.
+        """Calibrate the sampling throughput (shots/second).
+
+        Runs a small 1000-shot benchmark at a representative weight
+        and stores the result in ``_sampling_rate`` for subsequent
+        time-budget calculations.  Also deducts the calibration time
+        from ``_remaining_time_budget``.
         """
         assert self._QEPG_graph is not None, (
             "QEPG graph must be initialized before sampling"
@@ -460,7 +543,17 @@ class Scaler:
         optimal_batch: int,
         filename: str,
     ) -> None:
-        """Plot batch size profiling results."""
+        """Generate a three-panel plot of batch-size profiling results.
+
+        Panels show throughput vs. batch size, time breakdown
+        (sampling vs. decoding), and per-shot efficiency.
+
+        Args:
+            results: Dict mapping batch size to timing metrics (from
+                :meth:`profile_optimal_batch_size`).
+            optimal_batch: The batch size with peak throughput.
+            filename: Output path for the PNG/PDF plot.
+        """
         batch_sizes = sorted(results.keys())
         throughputs = [results[b]["throughput"] for b in batch_sizes]
         sample_times = [results[b]["sample_time"] for b in batch_sizes]
@@ -524,9 +617,21 @@ class Scaler:
     # ------------------------------------------------------------------
 
     def _sampling_step(self, wlist: List[int], slist: List[int]) -> float:
-        """
-        Perform one multi-weight sampling call and update subspace statistics.
-        Returns the elapsed time for this step (seconds).
+        """Perform one multi-weight sampling call and update subspace statistics.
+
+        Samples each weight in *wlist* with the corresponding number
+        of shots from *slist*, decodes the results, and updates the
+        internal ``_subspace_LE_count``, ``_subspace_sample_used``,
+        and ``_estimated_subspaceLER`` dictionaries.  Also updates
+        ``_sampling_rate`` via an exponential moving average.
+
+        Args:
+            wlist: List of fault weights to sample.
+            slist: Number of shots for each weight (same length as
+                *wlist*).
+
+        Returns:
+            Wall-clock time (seconds) consumed by this step.
         """
         assert self._QEPG_graph is not None, (
             "QEPG graph must be initialized before sampling"
@@ -590,10 +695,17 @@ class Scaler:
     # ------------------------------------------------------------------
 
     def _estimate_sampling_cost(self, w: int, target_le_events: int = 30) -> float:
-        """
-        Estimate time needed to collect target_le_events at weight w.
+        """Estimate the time (seconds) to collect *target_le_events* at weight *w*.
 
-        Returns estimated seconds needed.
+        Uses the measured or model-predicted P_L(w) and the calibrated
+        ``_sampling_rate`` to estimate the required wall-clock time.
+
+        Args:
+            w: Fault weight.
+            target_le_events: Number of logical error events to target.
+
+        Returns:
+            Estimated seconds, or ``inf`` if estimation is impossible.
         """
         # Get P_L(w) from measured data if available, otherwise from model
         if w in self._estimated_subspaceLER and self._estimated_subspaceLER[w] > 0:
@@ -616,14 +728,19 @@ class Scaler:
         return samples_needed / self._sampling_rate
 
     def _get_practical_sweet_spot(self, remaining_budget: float) -> int:
-        """
-        Get practical sweet spot that fits within remaining time budget.
+        """Determine a budget-feasible sweet-spot weight.
 
-        The theoretical sweet spot (from calculate_sweet_spot) is optimal,
-        but if we can't afford to sample there, we must use a higher weight
-        where P_L is larger and sampling is cheaper.
+        If sampling at the theoretical sweet spot (computed by the
+        model's :meth:`calculate_sweet_spot`) would exceed
+        *remaining_budget*, this method shifts to a higher weight
+        where P_L is larger and therefore fewer samples are needed.
 
-        Only adjusts if estimated cost exceeds remaining budget.
+        Args:
+            remaining_budget: Remaining wall-clock time in seconds.
+
+        Returns:
+            A weight >= theoretical sweet spot that can be sampled
+            within the given budget.
         """
         if self._sweet_spot is None:
             return self._t + 1
@@ -654,7 +771,14 @@ class Scaler:
         return max_w
 
     def _get_weights_around(self, center_w: int) -> List[int]:
-        """Get weights to sample around a given center weight."""
+        """Return weights within ``BAND_HALF_WIDTH`` of *center_w*.
+
+        Args:
+            center_w: Centre weight of the band.
+
+        Returns:
+            Sorted list of valid weights in ``(t, w_sat]`` near *center_w*.
+        """
         band = self._BAND_HALF_WIDTH  # 4 by default
         weights = []
 
@@ -666,7 +790,15 @@ class Scaler:
         return sorted(weights)
 
     def _get_additional_sweet_spot_weights(self) -> List[int]:
-        """Get additional weights when refinement is complete but budget remains."""
+        """Select extra weights to sample when the budget has not been exhausted.
+
+        Prioritises un-sampled weights in a wide band around the sweet
+        spot, then falls back to adding more samples to the closest
+        already-sampled weights.
+
+        Returns:
+            Up to 5 weights to sample next.
+        """
         if self._sweet_spot is None:
             return []
 
@@ -704,10 +836,19 @@ class Scaler:
         time_val: float | None = None,
         practical_sweet_spot: int | None = None,
     ) -> None:
-        """
-        Fit the S-curve model to the collected data.
+        """Fit the S-curve model to the currently collected data.
 
-        Uses the model abstraction layer to support multiple model types.
+        Delegates to the active model's :meth:`fit` method in log-logit
+        space, updates the R^2 score and sweet-spot estimate, and
+        optionally generates diagnostic plots.
+
+        Args:
+            filename: Output path for the diagnostic PDF plot.
+            savefigure: If ``True``, save the diagnostic plot.
+            time_val: Elapsed wall-clock time (seconds) to annotate on
+                the plot.
+            practical_sweet_spot: If provided, annotate this weight on
+                the plot as the budget-adjusted sweet spot.
         """
         # Initialize model if not done yet
         if self._model is None:
@@ -760,7 +901,20 @@ class Scaler:
         time_val: float | None,
         practical_sweet_spot: int | None = None,
     ) -> None:
-        """Generate debug plot for the fitted S-curve with error bars."""
+        """Generate a diagnostic plot of the fitted S-curve in log-logit space.
+
+        Plots measured data points as bars with error bars, the fitted
+        curve, annotated key weights (``w_err``, ``w_sat``,
+        ``w_sweet``), the fault-tolerant region, and the critical
+        region ``[w_min, w_max]``.  Also produces a companion S-curve
+        plot in probability space via :meth:`_plot_scurve`.
+
+        Args:
+            filename: Output path for the PDF. If ``None``, a default
+                name is generated.
+            time_val: Elapsed time (seconds) to annotate.
+            practical_sweet_spot: Budget-adjusted sweet spot to annotate.
+        """
         assert self._model is not None
 
         # Build data lists
@@ -1013,7 +1167,16 @@ class Scaler:
         time_val: float | None,
         practical_sweet_spot: int | None = None,
     ) -> None:
-        """Generate the S-curve plot in original probability space (Y-curve)."""
+        """Generate the S-curve plot in original probability space.
+
+        Similar to :meth:`_plot_fit` but shows P_L(w) directly rather
+        than the log-logit transform, with a saturation line at 0.5.
+
+        Args:
+            filename: Output path for the PDF.
+            time_val: Elapsed time (seconds) to annotate.
+            practical_sweet_spot: Budget-adjusted sweet spot to annotate.
+        """
         assert self._model is not None
 
         # Build data lists
@@ -1219,7 +1382,23 @@ class Scaler:
         r2: float,
         r2_target: float,
     ) -> bool:
-        """Decide if the parameters are stable enough throughout iterations."""
+        """Check whether fitted parameters have converged.
+
+        Returns ``True`` when the relative change between *theta_new*
+        and *theta_old* is below *tol* **and** the R^2 score meets
+        *r2_target*.
+
+        Args:
+            theta_new: Current fitted parameter vector.
+            theta_old: Previous fitted parameter vector, or ``None``
+                on the first iteration.
+            tol: Maximum allowed relative L2 change.
+            r2: Current R^2 score.
+            r2_target: Minimum acceptable R^2.
+
+        Returns:
+            ``True`` if parameters are stable and fit quality is sufficient.
+        """
         if theta_old is None:
             return False
         num = sum((x - y) ** 2 for x, y in zip(theta_new, theta_old)) ** 0.5
@@ -1228,7 +1407,12 @@ class Scaler:
         return (rel < tol) and (r2 >= r2_target)
 
     def _band_weights(self) -> List[int]:
-        """Return weights in the refinement band around sweet_spot."""
+        """Return the list of weights in the refinement band around the sweet spot.
+
+        Returns:
+            Sorted list of weights within ``BAND_HALF_WIDTH`` of
+            ``_sweet_spot``, clamped to ``[w_err, w_sat]``.
+        """
         if self._sweet_spot is None:
             return []
         left = max(self._has_logical_errorw, self._sweet_spot - self._BAND_HALF_WIDTH)
@@ -1236,7 +1420,12 @@ class Scaler:
         return list(range(left, right + 1))
 
     def _band_well_sampled(self) -> bool:
-        """Check if all band weights have enough logical error events."""
+        """Check if all weights in the refinement band are sufficiently sampled.
+
+        Returns:
+            ``True`` if every band weight has at least
+            ``_TARGET_EVENTS_BAND`` logical error events.
+        """
         band = self._band_weights()
         if not band:
             return False
@@ -1248,7 +1437,16 @@ class Scaler:
     def _pl_stable(
         self, pl_new: float, pl_old: Optional[float], rel_tol: float
     ) -> bool:
-        """Check if the overall PL estimate is stable in relative error."""
+        """Check if the overall LER estimate has converged.
+
+        Args:
+            pl_new: Current LER estimate.
+            pl_old: Previous LER estimate, or ``None`` on the first call.
+            rel_tol: Maximum allowed relative change.
+
+        Returns:
+            ``True`` if the relative change is below *rel_tol*.
+        """
         if pl_old is None:
             return False
         if pl_old == 0.0:
@@ -1261,7 +1459,15 @@ class Scaler:
     # ------------------------------------------------------------------
 
     def _choose_candidate_weights(self) -> List[int]:
-        """Choose a small set of candidate weights to sample next."""
+        """Select candidate weights for the next sampling step.
+
+        Combines weights near the sweet spot (+-2) with a 5-point
+        evenly-spaced grid spanning ``[w_min, w_max]``, and always
+        includes the boundary weights.
+
+        Returns:
+            Sorted list of candidate weights.
+        """
         if self._sweet_spot is None:
             ep = int(self._error_rate * self._num_noise)
             center = max(self._t + 1, ep)
@@ -1306,7 +1512,16 @@ class Scaler:
         return wlist
 
     def next_step(self) -> Tuple[List[int], List[int]]:
-        """Decide the next step of the stratified sampling process."""
+        """Plan the next sampling step within the time budget.
+
+        Determines which weights to sample and how many shots to
+        allocate to each, biasing towards the sweet spot and
+        un-sampled weights.
+
+        Returns:
+            Tuple ``(wlist, slist)`` of weights and corresponding
+            shot counts.  Both lists are empty if no budget remains.
+        """
         if self._sampling_rate <= 0.0 or self._remaining_time_budget <= 0.0:
             return [], []
 
@@ -1366,7 +1581,14 @@ class Scaler:
     # ------------------------------------------------------------------
 
     def _calc_LER_from_fit(self) -> float:
-        """Integrate the fitted S-curve against the binomial distribution."""
+        """Compute the total LER by integrating the fitted S-curve.
+
+        Uses measured P_L(w) where available and the model's
+        prediction for un-sampled weights in the critical region.
+
+        Returns:
+            The estimated total logical error rate.
+        """
         if self._model is None:
             self._initialize_model()
 
@@ -1374,7 +1596,18 @@ class Scaler:
         return self._calc_LER_with_model(self._model)
 
     def _calc_LER_with_model(self, model: ScurveModelBase) -> float:
-        """Calculate LER using a specific model."""
+        """Compute the total LER using a specific S-curve model.
+
+        For each weight in the critical region, uses the measured
+        P_L(w) if available, otherwise the model's prediction, and
+        multiplies by the binomial weight.
+
+        Args:
+            model: The S-curve model to use for un-sampled weights.
+
+        Returns:
+            The estimated total logical error rate.
+        """
         LER = 0.0
         N = self._num_noise
         p = self._error_rate
@@ -1783,7 +2016,15 @@ class Scaler:
         return ler_est
 
     def _save_iteration_log(self, filename: str) -> None:
-        """Save the iteration log to a JSON file."""
+        """Serialise the iteration log to a JSON file for analysis.
+
+        The log includes circuit metadata, model configuration, final
+        results, per-weight statistics, and detailed per-iteration
+        records of sampling decisions and outcomes.
+
+        Args:
+            filename: Output path for the JSON file.
+        """
         import json
 
         log_data = {

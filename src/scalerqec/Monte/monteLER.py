@@ -1,3 +1,22 @@
+"""Monte Carlo logical error rate estimation using stim circuits.
+
+This module implements adaptive Monte Carlo sampling strategies for
+estimating the logical error rate (LER) of quantum error-correcting codes
+described as stim circuits. It supports three sampling backends:
+
+* **Stim detector sampling** with pymatching decoding (default).
+* **QEPG-accelerated sampling** via a compiled C++ graph that injects
+  errors and produces detector/observable outcomes without re-parsing
+  the circuit each time.
+* **Sinter distributed sampling** that fans out across CPU cores.
+
+Adaptive batching is used throughout: the batch size starts at
+:data:`SAMPLE_GAP_INITIAL` and is scaled up when few logical errors have
+been observed, capped at :data:`MAX_SAMPLE_GAP`. Sampling terminates once
+a configurable minimum number of logical error events is reached or the
+sample/time budget is exhausted.
+"""
+
 from __future__ import annotations
 from typing import Optional
 from ..Clifford.clifford import *
@@ -16,6 +35,22 @@ import sinter
 
 
 def count_logical_errors(circuit: stim.Circuit, num_shots: int) -> int:
+    """Sample a stim circuit and count logical errors using pymatching.
+
+    The function compiles a detector sampler from the circuit, draws
+    ``num_shots`` samples, builds a pymatching decoder from the detector
+    error model, and counts shots where the decoded observable outcome
+    differs from the actual observable flip.
+
+    Args:
+        circuit: A stim circuit that includes noise operations and
+            observable/detector annotations.
+        num_shots: Number of Monte Carlo shots to sample.
+
+    Returns:
+        The number of shots in which at least one observable was
+        incorrectly decoded (i.e., logical error count).
+    """
     # Sample the circuit.
     sampler = circuit.compile_detector_sampler()
     detection_events, observable_flips = sampler.sample(
@@ -40,9 +75,20 @@ def count_logical_errors(circuit: stim.Circuit, num_shots: int) -> int:
 
 
 def format_with_uncertainty(value: float, std: float) -> str:
-    """
-    Format a value and its standard deviation in the form:
-    1.23(±0.45)×10^k
+    """Format a value with its uncertainty in scientific notation.
+
+    Produces a human-readable string of the form
+    ``1.23(+0.45)*10^k`` where *k* is chosen so that the coefficient
+    is in [1, 10). When ``value`` is zero the output is ``0(+<std>)``.
+
+    Args:
+        value: The central value to format.
+        std: The standard deviation (uncertainty) associated with
+            ``value``.
+
+    Returns:
+        A string encoding both the value and its uncertainty in
+        scientific notation, e.g. ``"1.23(+0.45)*10^-3"``.
     """
     if value == 0:
         return f"0(+{std:.2e})"
@@ -52,25 +98,63 @@ def format_with_uncertainty(value: float, std: float) -> str:
     return f"{coeff:.2f}(+{std_coeff:.2f})*10^{exponent}"
 
 
-SAMPLE_GAP_INITIAL = 100
-MAX_SAMPLE_GAP = 500000
+SAMPLE_GAP_INITIAL: int = 100
+"""Initial batch size (number of shots) for the first sampling round."""
 
-
-"""
-Use stim and Monte Calo sampling method to estimate the logical error rate
-The sampler will finally decide how many samples to used.
-Shot is the initial guess of how many samples to used.
-We also need to estimate the uncertainty of the LER.
-"""
+MAX_SAMPLE_GAP: int = 500000
+"""Maximum batch size that adaptive batching is allowed to grow to."""
 
 
 class MonteLERcalc:
+    """Adaptive Monte Carlo estimator for logical error rates.
+
+    This class wraps multiple sampling strategies (stim detector sampling,
+    QEPG-accelerated sampling, and sinter distributed sampling) behind a
+    common adaptive-batching loop. The loop starts with a small batch
+    (:data:`SAMPLE_GAP_INITIAL`), decodes each batch with pymatching, and
+    increases the batch size when few logical errors have been observed.
+    Sampling stops when:
+
+    * At least ``MIN_NUM_LE_EVENT`` logical errors have been recorded, **or**
+    * The cumulative number of shots exceeds ``samplebudget``, **or**
+    * (for time-budgeted runs) the wall-clock time exceeds ``time_budget``.
+
+    When multiple averaging runs are requested via the ``repeat`` parameter,
+    the final LER and sample count are averaged across runs.
+
+    Attributes:
+        _num_LER: Running count of logical errors in the current run.
+        _sample_used: Total number of shots consumed (averaged across
+            repeats after completion).
+        _sample_needed: Estimated total samples needed to reach
+            ``MIN_NUM_LE_EVENT`` errors, or -1 if no errors were seen.
+        _uncertainty: Standard error of the LER estimate (set by
+            :meth:`calculate_standard_error`).
+        _estimated_LER: Current point estimate of the logical error rate.
+        _samplebudget: Maximum number of shots per run.
+        _min_num_ke_event: Minimum number of logical error events required
+            before stopping.
+        _QEPG: Compiled QEPG graph for accelerated sampling, or ``None``.
+        _time_budget: Time budget in seconds for time-limited runs.
+    """
+
     def __init__(
         self,
         time_budget: int = 10,
         samplebudget: int = 100000,
         MIN_NUM_LE_EVENT: int = 20,
     ) -> None:
+        """Initialise the Monte Carlo LER calculator.
+
+        Args:
+            time_budget: Wall-clock time budget in seconds for
+                time-limited sampling via
+                :meth:`calculate_LER_with_time_budget`.
+            samplebudget: Maximum number of Monte Carlo shots per
+                averaging run before sampling is terminated.
+            MIN_NUM_LE_EVENT: Minimum number of logical error events to
+                collect before declaring convergence and stopping.
+        """
         self._num_LER: int = 0
         self._sample_used: float = 0.0
         self._sample_needed: int = 0
@@ -84,8 +168,32 @@ class MonteLERcalc:
     def calculate_LER_from_StabCode(
         self, qeccirc: StabCode, noise_model: NoiseModel, repeat: int = 1
     ) -> None:
-        """
-        Calculate the logical error rate from a StabCode object using Monte Carlo sampling.
+        """Estimate the LER from a StabCode object using QEPG acceleration.
+
+        Constructs an intermediate representation (IR) from the stabiliser
+        code, compiles it to a stim circuit, injects noise according to
+        ``noise_model``, and then compiles a QEPG graph for fast Monte
+        Carlo sampling. The QEPG backend is compiled once and reused
+        across all shots and repeats, avoiding repeated circuit parsing.
+
+        Results (mean and standard deviation of LER, error count, sample
+        count, and elapsed time) are printed to stdout.
+
+        Args:
+            qeccirc: A stabiliser code object. Its
+                ``construct_IR_standard_scheme`` and
+                ``compile_stim_circuit_from_IR_standard`` methods are
+                called to produce the stim circuit.
+            noise_model: Noise model whose ``error_rate`` is used for
+                QEPG sampling and whose
+                ``reconstruct_clifford_circuit`` method injects noise
+                into the circuit.
+            repeat: Number of independent averaging runs. The reported
+                LER is the mean across all runs.
+
+        Side Effects:
+            Updates ``_estimated_LER``, ``_sample_used``, and ``_QEPG``
+            on the instance. Prints timing and LER statistics to stdout.
         """
         qeccirc.construct_IR_standard_scheme()
         qeccirc.compile_stim_circuit_from_IR_standard()
@@ -171,6 +279,34 @@ class MonteLERcalc:
     def calculate_LER_from_my_random_sampler(
         self, samplebudget: int, filepath: str, pvalue: float, repeat: int = 1
     ) -> float:
+        """Estimate the LER using the custom QEPG-based error injector.
+
+        Reads a stim circuit from ``filepath``, compiles a QEPG graph for
+        fast C++-backed error injection, and runs adaptive Monte Carlo
+        sampling with pymatching decoding. The QEPG graph is compiled
+        once and reused for all shots, providing significant speedup over
+        repeated stim sampling.
+
+        Results (mean and standard deviation of LER, error count, sample
+        count, and elapsed time) are printed to stdout.
+
+        Args:
+            samplebudget: Maximum number of Monte Carlo shots per
+                averaging run.
+            filepath: Path to a stim circuit file (text format).
+            pvalue: Physical error rate (depolarising probability)
+                injected into every noise location.
+            repeat: Number of independent averaging runs. The reported
+                LER is the mean across all runs.
+
+        Returns:
+            The estimated logical error rate (averaged over ``repeat``
+            runs).
+
+        Side Effects:
+            Updates ``_estimated_LER``, ``_sample_used``, ``_samplebudget``,
+            and ``_QEPG`` on the instance. Prints statistics to stdout.
+        """
         circuit = CliffordCircuit(2)
         circuit.error_rate = pvalue
         self._samplebudget = samplebudget
@@ -265,6 +401,35 @@ class MonteLERcalc:
     def calculate_LER_from_file_sinter(
         self, samplebudget: int, filepath: str, pvalue: float, repeat: int = 1
     ) -> float:
+        """Estimate the LER using sinter for distributed sampling.
+
+        Reads a stim circuit from ``filepath``, injects depolarising
+        noise at rate ``pvalue``, and delegates sampling and decoding to
+        ``sinter.collect`` which fans work across all available CPU
+        cores. Sinter handles its own adaptive stopping (via
+        ``max_errors``).
+
+        Results (mean and standard deviation of LER, error count, sample
+        count, and elapsed time) are printed to stdout.
+
+        Args:
+            samplebudget: Maximum number of Monte Carlo shots passed to
+                sinter as ``max_shots``.
+            filepath: Path to a stim circuit file (text format).
+            pvalue: Physical error rate (depolarising probability)
+                injected into every noise location.
+            repeat: Number of independent averaging runs. The reported
+                LER is the mean across all runs.
+
+        Returns:
+            The estimated logical error rate (averaged over ``repeat``
+            runs).
+
+        Side Effects:
+            Updates ``_estimated_LER``, ``_sample_used``, ``_num_LER``,
+            and ``_samplebudget`` on the instance. Prints statistics to
+            stdout.
+        """
         circuit = CliffordCircuit(2)
         circuit.error_rate = pvalue
         self._samplebudget = samplebudget
@@ -337,6 +502,45 @@ class MonteLERcalc:
     def calculate_LER_from_file(
         self, samplebudget: int, filepath: str, pvalue: float, repeat: int = 1
     ) -> float:
+        """Estimate the LER by sampling a stim circuit from a file.
+
+        This is the main entry point for standard stim-based Monte Carlo
+        estimation. The method reads a stim circuit from ``filepath``,
+        injects depolarising noise at rate ``pvalue``, compiles a
+        detector sampler, and runs adaptive batching with pymatching
+        decoding until the minimum number of logical error events is
+        reached or the sample budget is exhausted.
+
+        Adaptive batching behaviour:
+
+        * Starts with :data:`SAMPLE_GAP_INITIAL` shots.
+        * If no errors have been seen, doubles the batch size each
+          iteration (capped at :data:`MAX_SAMPLE_GAP`).
+        * If some errors have been seen, estimates the remaining
+          samples needed and uses that as the next batch size (capped
+          at :data:`MAX_SAMPLE_GAP`).
+
+        Results (mean and standard deviation of LER, error count, sample
+        count, and elapsed time) are printed to stdout.
+
+        Args:
+            samplebudget: Maximum number of Monte Carlo shots per
+                averaging run.
+            filepath: Path to a stim circuit file (text format).
+            pvalue: Physical error rate (depolarising probability)
+                injected into every noise location.
+            repeat: Number of independent averaging runs. The reported
+                LER is the mean across all runs.
+
+        Returns:
+            The estimated logical error rate (averaged over ``repeat``
+            runs).
+
+        Side Effects:
+            Updates ``_estimated_LER``, ``_sample_used``,
+            ``_sample_needed``, ``_num_LER``, and ``_samplebudget`` on
+            the instance. Prints statistics to stdout.
+        """
         circuit = CliffordCircuit(2)
         circuit.error_rate = pvalue
         self._samplebudget = samplebudget
@@ -528,8 +732,21 @@ class MonteLERcalc:
         }
 
     def calculate_standard_error(self) -> float:
-        """
-        Calculate the standard error of the LER.
+        """Compute the standard error of the current LER estimate.
+
+        Uses the binomial standard-error formula:
+
+            SE = sqrt(p * (1 - p)) / N
+
+        where *p* is the estimated LER and *N* is the total number of
+        shots consumed. The result is stored in ``_uncertainty``.
+
+        Returns:
+            The standard error of the LER estimate.
+
+        Side Effects:
+            Updates ``_estimated_LER`` (recomputed from ``_num_LER``
+            and ``_sample_used``) and ``_uncertainty`` on the instance.
         """
         self._estimated_LER = self._num_LER / self._sample_used
         self._uncertainty = float(
@@ -538,6 +755,12 @@ class MonteLERcalc:
         return self._uncertainty
 
     def get_sample_used(self) -> float:
+        """Return the total number of Monte Carlo shots consumed.
+
+        Returns:
+            The cumulative sample count (averaged across repeats if
+            multiple runs were performed).
+        """
         return self._sample_used
 
 

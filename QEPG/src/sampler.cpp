@@ -1,3 +1,12 @@
+/**
+ * @file sampler.cpp
+ * @brief Implementation of random Pauli error sampling methods.
+ *
+ * Contains the sampling algorithms (Floyd, removal, Monte Carlo) for
+ * generating random error configurations, and the batch methods that
+ * use OpenMP to parallelize sample generation across threads.
+ */
+
 #include "sampler.hpp"
 #include "chrono"
 #include <thread>
@@ -12,9 +21,19 @@ sampler::sampler(size_t num_total_paulierror):num_total_pauliError_(num_total_pa
 
 sampler::~sampler()=default;
 
-/*---------------------------------------Sample one vector with fixed weight----------*/        
+/*---------------------------------------Sample one vector with fixed weight----------*/
 
 
+/**
+ * @brief Generate a single error sample using removal-based sampling.
+ *
+ * Creates a set of all noise location indices, then randomly removes
+ * positions until exactly `weight` remain. Each remaining position
+ * receives a uniformly random Pauli type (X, Y, or Z).
+ *
+ * @note More efficient than Floyd's insertion method when weight is
+ *       close to num_total_pauliError_ (avoids collision overhead).
+ */
 inline std::vector<singlePauli> sampler::generate_sample_removal(size_t weight, std::mt19937& gen){
     // Create set of all positions
     std::unordered_set<size_t> remaining_positions;
@@ -44,6 +63,16 @@ inline std::vector<singlePauli> sampler::generate_sample_removal(size_t weight, 
     return result;
 }
 
+/**
+ * @brief Generate a single error sample using Floyd's insertion algorithm.
+ *
+ * Selects `weight` distinct noise locations uniformly at random. Uses
+ * a hash set to reject collisions. Automatically delegates to
+ * generate_sample_removal() when weight > num_total_pauliError_ / 2
+ * to avoid excessive collisions.
+ *
+ * Each selected position receives a uniformly random Pauli type (1=X, 2=Y, 3=Z).
+ */
 inline std::vector<singlePauli> sampler::generate_sample_Floyd(size_t weight, std::mt19937& gen){
     // Hybrid strategy: use removal when weight > half of total
     // This avoids collision inefficiency for high weights
@@ -71,6 +100,13 @@ inline std::vector<singlePauli> sampler::generate_sample_Floyd(size_t weight, st
 }
 
 
+/**
+ * @brief Generate a single error sample using Bernoulli (Monte Carlo) sampling.
+ *
+ * Iterates over the first ErrorSize noise locations. Each location independently
+ * has an error with probability error_prob. Activated locations receive a
+ * uniformly random Pauli type.
+ */
 inline std::vector<singlePauli> sampler::generate_sample_Monte(double error_prob,size_t ErrorSize,std::mt19937& gen){
     std::vector<singlePauli> result;
     result.reserve(size_t(error_prob*ErrorSize));
@@ -87,8 +123,16 @@ inline std::vector<singlePauli> sampler::generate_sample_Monte(double error_prob
 
 
 
-
-
+/**
+ * @brief Generate many samples in parallel with fixed Pauli weight.
+ *
+ * Uses OpenMP to distribute sample generation across threads. Each thread
+ * maintains a thread-local Mersenne Twister PRNG seeded from a global seed
+ * XORed with the thread ID hash for reproducibility within a run.
+ *
+ * Each sample is generated via generate_sample_Floyd() and then its
+ * detector/observable outcome is computed via calculate_parity_output_from_one_sample().
+ */
 void sampler::generate_many_output_samples(const QEPG::QEPG& graph,std::vector<QEPG::Row>& samplecontainer, size_t pauliweight, size_t samplenumber){
     //samplecontainer.reserve(samplenumber);
     samplecontainer.resize(samplenumber);
@@ -100,7 +144,7 @@ void sampler::generate_many_output_samples(const QEPG::QEPG& graph,std::vector<Q
     {
         thread_local std::mt19937 rng{
             static_cast<std::mt19937::result_type>(
-                global_seed ^                                    // same run → same base
+                global_seed ^                                    // same run -> same base
                 std::hash<std::thread::id>{}(std::this_thread::get_id()))  // thread-specific part
         };
 
@@ -115,6 +159,12 @@ void sampler::generate_many_output_samples(const QEPG::QEPG& graph,std::vector<Q
 }
 
 
+/**
+ * @brief Generate many Monte Carlo samples in parallel.
+ *
+ * Same parallelization strategy as generate_many_output_samples() but uses
+ * Bernoulli sampling (generate_sample_Monte) instead of fixed-weight sampling.
+ */
 void sampler::generate_many_output_samples_Monte(const QEPG::QEPG& graph,std::vector<QEPG::Row>& samplecontainer,double error_prob, size_t samplenumber){
     //samplecontainer.reserve(samplenumber);
     samplecontainer.resize(samplenumber);
@@ -125,7 +175,7 @@ void sampler::generate_many_output_samples_Monte(const QEPG::QEPG& graph,std::ve
     {
         thread_local std::mt19937 rng{
             static_cast<std::mt19937::result_type>(
-                global_seed ^                                    // same run → same base
+                global_seed ^                                    // same run -> same base
                 std::hash<std::thread::id>{}(std::this_thread::get_id()))  // thread-specific part
         };
         // 3. Work-share the loop
@@ -138,18 +188,25 @@ void sampler::generate_many_output_samples_Monte(const QEPG::QEPG& graph,std::ve
 }
 
 
-/*
-Enumerat all possible noise vector with fixed weight
-Use recursion
-*/
+/**
+ * @brief Enumerate all error configurations of a given weight (stub).
+ *
+ * Intended to enumerate all C(N, weight) * 3^weight configurations
+ * using recursion. Currently not implemented.
+ */
 void sampler::generate_all_samples_with_fixed_weight(const QEPG::QEPG& graph,std::vector<QEPG::Row>& samplecontainer,size_t pauliweight){
 
 }
 
 
-/*
-In this implementation, we also return the generated random noise vector 
-*/
+/**
+ * @brief Generate many samples and also return the noise vectors (single-threaded).
+ *
+ * Unlike the parallel batch methods, this version stores both the computed
+ * detector/observable outcomes and the raw noise configurations that produced them.
+ * Useful for debugging or for algorithms that need to inspect which specific
+ * errors caused a given syndrome.
+ */
 void sampler::generate_many_output_samples_with_noise_vector(const QEPG::QEPG& graph,std::vector<std::vector<singlePauli>>& noisecontainer,std::vector<QEPG::Row>& samplecontainer, size_t pauliweight, size_t samplenumber){
     samplecontainer.reserve(samplenumber);
     noisecontainer.reserve(samplenumber);
@@ -167,6 +224,4 @@ void sampler::generate_many_output_samples_with_noise_vector(const QEPG::QEPG& g
 
 
 
-
 }
-

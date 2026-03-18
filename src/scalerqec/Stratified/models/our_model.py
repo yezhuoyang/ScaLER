@@ -1,23 +1,27 @@
 from __future__ import annotations
 
-"""
-Our S-curve model implementation (Definition 1 from the paper).
+"""Definition 1 S-curve model implementation.
 
-Model:
-    f_t[μ,α,β](w) = 0.5 / (1 + exp(-(w-μ)/α + β/√(w-t)))
+This module implements the "Our Model" S-curve from the ScaLER paper::
 
-In linear space (after log-logit transform):
-    y(w) = log(0.5/P_w - 1) = -(w-μ)/α + β/√(w-t)
-         = a*w + b + c/√(w-t)
+    P_L(w) = 0.5 / (1 + exp(-(w - mu) / alpha + beta / sqrt(w - t)))
 
-Parameter relationships:
-    a = -1/α
-    b = μ/α
-    c = β
+In log-logit (linearised) space this becomes::
 
-    α = -1/a
-    μ = -b/a = α*b
-    β = c
+    y(w) = log(0.5 / P_L - 1) = a * w + b + c / sqrt(w - t)
+
+The parameter mapping between the two representations is:
+
+===========  =====================  ======================
+Physical     Internal (fitting)     Relation
+===========  =====================  ======================
+alpha        a                      a = -1 / alpha
+mu           b                      b = mu / alpha
+beta         c                      c = beta
+===========  =====================  ======================
+
+The ``1/sqrt(w - t)`` pole at the fault-tolerant threshold *t* ensures
+``P_L -> 0`` for ``w <= t``.
 """
 
 from typing import Any, Callable, Dict, List, Tuple
@@ -28,22 +32,30 @@ from scalerqec.Stratified.models.base import ScurveModelBase
 
 
 class OurScurveModel(ScurveModelBase):
-    """
-    Our S-curve model from Definition 1 in the paper.
+    """Definition 1 S-curve model from the ScaLER paper.
 
-    This model uses the formula:
-        P_L(w) = 0.5 / (1 + exp(-(w-μ)/α + β/√(w-t)))
+    This model uses the formula::
 
-    The model has a pole at w=t (the fault-tolerant threshold), ensuring
-    P_L = 0 for w ≤ t.
+        P_L(w) = 0.5 / (1 + exp(-(w - mu) / alpha + beta / sqrt(w - t)))
 
-    Parameters:
-        alpha (α): Characteristic decay rate (controls slope)
-        mu (μ): Threshold parameter (controls position)
-        beta (β): Pole strength (controls curvature near fault-tolerant region)
+    The ``1/sqrt(w - t)`` pole at the fault-tolerant threshold *t*
+    guarantees that P_L = 0 for ``w <= t``.
 
-    Internal representation uses (a, b, c) for numerical stability:
-        a = -1/α, b = μ/α, c = β
+    Model parameters (physical):
+        alpha: Characteristic scale controlling the slope of the
+            transition from P_L ~ 0 to P_L ~ 0.5.
+        mu: Location parameter shifting the curve horizontally.
+        beta: Pole strength controlling curvature near the
+            fault-tolerant region.
+
+    Internally the model stores ``(a, b, c)`` where ``a = -1/alpha``,
+    ``b = mu/alpha``, ``c = beta``, because the log-logit transform
+    ``y = a*w + b + c/sqrt(w-t)`` is linear in these parameters and
+    numerically more stable for fitting.
+
+    Args:
+        t: Fault-tolerant threshold ``(d - 1) / 2``.
+        gamma: Sweet-spot tuning parameter.
     """
 
     def __init__(self, t: int = 0, gamma: float = 0.05):

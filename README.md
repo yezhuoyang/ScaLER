@@ -10,8 +10,24 @@
 
 ScaLERQEC is a scalable framework for estimating logical error rates (LER) of quantum error-correcting (QEC) circuits at scale.
 It combines optimized C++ backends (QEPG) with high-level Python interfaces for QEC experimentation, benchmarking, symbolic analysis, and Monte-Carlo fault injection.
-ScaLER is compatible with STIM, but use completely different approach to test logical error rate. 
+ScaLER is compatible with STIM, but use completely different approach to test logical error rate.
 
+## Citation
+---
+
+If you use ScaLERQEC in your research, please cite our paper:
+
+```bibtex
+@misc{ye2026scalabletestingquantumerror,
+      title={Scalable testing of quantum error correction},
+      author={John Zhuoyang Ye and Jens Palsberg},
+      year={2026},
+      eprint={2602.04921},
+      archivePrefix={arXiv},
+      primaryClass={quant-ph},
+      url={https://arxiv.org/abs/2602.04921},
+}
+```
 
 ## Documentation
 ---

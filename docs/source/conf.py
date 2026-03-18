@@ -7,7 +7,7 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = 'scalerqec'
-copyright = '2025, John Ye'
+copyright = '2025-2026, John Ye'
 author = 'John Ye'
 release = '0.0.1'
 
@@ -16,7 +16,7 @@ release = '0.0.1'
 
 import os
 import sys
-sys.path.insert(0, os.path.abspath("../.."))
+sys.path.insert(0, os.path.abspath("../../src"))
 
 
 extensions = [

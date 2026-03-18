@@ -1,12 +1,48 @@
+"""STIM circuit program normalization.
+
+This module provides utilities to preprocess raw STIM circuit programs into a
+canonical one-operation-per-line format. The normalized output can then be
+parsed by :meth:`~scalerqec.Clifford.clifford.CliffordCircuit.compile_from_stim_circuit_str`.
+
+Both a :class:`stimparser` class and a standalone :func:`rewrite_stim_code`
+function are provided; they perform the same transformation.
+"""
+
+
 class stimparser:
+    """Utility class for normalizing STIM circuit programs.
+
+    Provides :meth:`rewrite_stim_code` to transform a raw STIM program into
+    a canonical form where each line contains exactly one gate or measurement
+    operation, suitable for consumption by
+    :meth:`~scalerqec.Clifford.clifford.CliffordCircuit.compile_from_stim_circuit_str`.
+    """
+
     def __init__(self):
         pass
 
     def rewrite_stim_code(self, code: str) -> str:
-        """
-        Rewrites a Stim program so that each line contains at most one gate or measurement.
-        Lines starting with TICK, R, DETECTOR(, and OBSERVABLE_INCLUDE( are kept as-is.
-        Multi-target lines for CX, M, and MR are split up.
+        """Normalize a STIM program so each line has at most one gate operation.
+
+        This method performs three transformations:
+
+        1. **Splits multi-target instructions** -- gates like ``CX 0 1 2 3``
+           or ``M 1 3 5`` are expanded into one line per qubit pair or qubit.
+        2. **Decomposes composite gates** -- ``MX`` is rewritten as ``H`` +
+           ``M``; ``MY`` as ``S S S H M``; ``MR`` as ``M`` + ``R``; ``RX``
+           as ``R`` + ``H``.
+        3. **Filters noise directives** -- lines starting with ``X_ERROR``,
+           ``DEPOLARIZE1``, ``DEPOLARIZE2``, or ``SHIFT_COORDS`` are removed
+           (noise is injected separately by the compiler).
+
+        Lines starting with ``TICK``, ``DETECTOR(``, ``QUBIT_COORDS(``, or
+        ``OBSERVABLE_INCLUDE(`` are preserved unchanged.
+
+        Args:
+            code: The raw STIM circuit program as a multi-line string.
+
+        Returns:
+            A normalized STIM program string with one operation per line.
         """
         lines = code.splitlines()
         output_lines = []
@@ -104,10 +140,18 @@ class stimparser:
 
 
 def rewrite_stim_code(code: str) -> str:
-    """
-    Rewrites a Stim program so that each line contains at most one gate or measurement.
-    Lines starting with TICK, R, DETECTOR(, and OBSERVABLE_INCLUDE( are kept as-is.
-    Multi-target lines for CX, M, and MR are split up.
+    """Normalize a STIM program so each line has at most one gate operation.
+
+    This is a module-level convenience function equivalent to
+    ``stimparser().rewrite_stim_code(code)``. See
+    :meth:`stimparser.rewrite_stim_code` for full details on the
+    transformations applied.
+
+    Args:
+        code: The raw STIM circuit program as a multi-line string.
+
+    Returns:
+        A normalized STIM program string with one operation per line.
     """
     lines = code.splitlines()
     output_lines = []

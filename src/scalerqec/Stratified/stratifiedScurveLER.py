@@ -1,3 +1,16 @@
+"""Legacy stratified sampling LER estimator with S-curve fitting.
+
+This module provides :class:`StratifiedScurveLERcalc`, which extends
+the basic stratified approach by fitting the modified-linear S-curve
+model ``y(w) = a*w + b + c/sqrt(w-t)`` and using the fitted curve to
+interpolate P_L(w) at un-sampled weights.  This reduces the number of
+weight subspaces that must be sampled compared to
+:class:`~scalerqec.Stratified.stratifiedLER.StratifiedLERcalc`.
+
+For new code, prefer :class:`~scalerqec.Stratified.Scaler.Scaler` which
+adds time-budgeted multi-phase sampling and a model-abstraction layer.
+"""
+
 from __future__ import annotations
 from typing import Optional
 from scalerqec.qepg import (
@@ -21,12 +34,39 @@ from ..util import binomial_weight, format_with_uncertainty
 from .ScurveModel import *
 from .fitting import r_squared
 
-"""
-Use strafified sampling + Scurve fitting  algorithm to calculate the logical error rate
-"""
-
 
 class StratifiedScurveLERcalc:
+    """Stratified sampling LER estimator with S-curve fitting (legacy).
+
+    This class combines stratified sampling with S-curve model fitting
+    to estimate the logical error rate.  It samples a small number of
+    weight subspaces, fits the modified-linear model
+    ``y(w) = a*w + b + c/sqrt(w-t)`` in log-logit space, and uses the
+    fitted curve to interpolate P_L(w) at un-sampled weights.
+
+    The workflow is:
+
+    1. Binary-search to find the weight range ``[w_err, w_sat]``.
+    2. Sample a uniform grid of points in that range.
+    3. Fit a linear model, then the full modified-linear model.
+    4. Compute the sweet spot and optionally refine near it.
+    5. Integrate to obtain the total LER.
+
+    .. note::
+        This is the legacy implementation.  For new code, prefer
+        :class:`~scalerqec.Stratified.Scaler.Scaler`, which uses a
+        time-budget, model-abstraction layer, and multi-phase algorithm.
+
+    Args:
+        error_rate: Physical error rate per noise location.
+        sampleBudget: Maximum total number of samples (shots).
+        k_range: Number of standard deviations for the critical
+            region ``[ep - k*sigma, ep + k*sigma]``.
+        num_subspace: Number of evenly-spaced weight subspaces to
+            sample within the S-curve range.
+        beta: Initial guess for the pole-strength parameter.
+    """
+
     def __init__(
         self,
         error_rate: float = 0.0,
@@ -102,8 +142,15 @@ class StratifiedScurveLERcalc:
         MAX_SAMPLE_GAP: int,
         MAX_SUBSPACE_SAMPLE: int,
     ):
-        """
-        Set the sample bound for the subspace sampling
+        """Configure the adaptive sampling thresholds.
+
+        Args:
+            MIN_NUM_LE_EVENT: Minimum number of logical error events
+                required per subspace before it is considered converged.
+            SAMPLE_GAP: Minimum batch size when exploring a subspace
+                with no errors yet.
+            MAX_SAMPLE_GAP: Maximum batch size per sampling round.
+            MAX_SUBSPACE_SAMPLE: Hard cap on total samples per subspace.
         """
         self._min_num_ke_event = MIN_NUM_LE_EVENT
         self._sample_gap = SAMPLE_GAP
@@ -111,6 +158,7 @@ class StratifiedScurveLERcalc:
         self._max_subspace_sample = MAX_SUBSPACE_SAMPLE
 
     def clear_all(self):
+        """Reset all internal state for a fresh estimation run."""
         self._estimated_subspaceLER = {}
         self._subspace_LE_count = {}
         self._estimated_subspaceLER_second = {}
@@ -125,8 +173,18 @@ class StratifiedScurveLERcalc:
         self._R_square_score = 0
 
     def calc_logical_error_rate_with_fixed_w(self, shots: int, w: int):
-        """
-        Calculate the logical error rate with fixed w
+        """Estimate P_L(w) by sampling *shots* error patterns of weight *w*.
+
+        Generates *shots* random fault configurations with exactly *w*
+        faults, decodes each one, and returns the fraction that produce
+        a logical error.
+
+        Args:
+            shots: Number of samples to draw.
+            w: Exact Pauli fault weight.
+
+        Returns:
+            Estimated conditional logical error probability P_L(w).
         """
         assert self._QEPG_graph is not None, (
             "QEPG graph must be initialized before sampling"
@@ -146,16 +204,20 @@ class StratifiedScurveLERcalc:
         # self._subspace_LE_count[w]+=num_errors
         return num_errors / shots
 
-    """
-    Use binary search to determine the exact number of errors 
-    that give saturate logical error rate
-    We just try 10 samples
-
-    TODO: Restructure the function.
-    Add the threshold as an input parameter.
-    """
-
     def binary_search_upper(self, low: int, high: int, shots: int):
+        """Find the smallest weight where P_L exceeds the saturation threshold.
+
+        Uses binary search over ``[low, high]`` to find the first
+        weight *w* for which ``P_L(w) > _max_PL``.
+
+        Args:
+            low: Lower bound of the search range.
+            high: Upper bound of the search range.
+            shots: Number of samples per probe.
+
+        Returns:
+            The smallest weight at which P_L exceeds ``_max_PL``.
+        """
         left: int = low
         right: int = high
         epsion: float = self._max_PL
@@ -169,6 +231,19 @@ class StratifiedScurveLERcalc:
         return left
 
     def binary_search_lower(self, low: int, high: int, shots: int = 5000):
+        """Find the smallest weight where P_L is noticeably non-zero.
+
+        Uses binary search over ``[low, high]`` to find the first
+        weight *w* for which ``P_L(w) > 0.002``.
+
+        Args:
+            low: Lower bound of the search range.
+            high: Upper bound of the search range.
+            shots: Number of samples per probe.
+
+        Returns:
+            The smallest weight at which P_L is detectable.
+        """
         left: int = low
         right: int = high
         epsion: float = 0.002
@@ -182,6 +257,12 @@ class StratifiedScurveLERcalc:
         return left
 
     def determine_lower_w(self):
+        """Determine the first weight with non-zero logical errors.
+
+        Sets ``_has_logical_errorw`` to the smallest weight at which
+        P_L is detectable. For very small circuits (N <= 8) defaults
+        to 1.
+        """
         if self._num_noise <= 8:
             self._has_logical_errorw = 1
         else:
@@ -191,8 +272,14 @@ class StratifiedScurveLERcalc:
         # self._has_logical_errorw=self._t+100
 
     def determine_saturated_w(self, shots: int = 1000):
-        """
-        Use binary search to determine the minw and maxw
+        """Determine the weight at which P_L is essentially saturated.
+
+        Sets ``_saturatew`` to the smallest weight for which
+        ``P_L(w) > _max_PL``, indicating the S-curve has reached
+        its plateau.
+
+        Args:
+            shots: Number of samples per binary-search probe.
         """
         # self._saturatew=self._num_detector//30
         if self._num_noise <= 8:
@@ -206,8 +293,14 @@ class StratifiedScurveLERcalc:
         # print("Self._saturatew: ",self._saturatew)
 
     def parse_from_file(self, filepath: str):
-        """
-        Read the circuit, parse from the file
+        """Load a STIM circuit from *filepath* and prepare for sampling.
+
+        Compiles the circuit into a Clifford representation, builds the
+        QEPG graph for weight-stratified sampling, and initialises a
+        PyMatching decoder from the detector error model.
+
+        Args:
+            filepath: Path to a STIM circuit file.
         """
         stim_str = ""
         with open(filepath, "r", encoding="utf-8") as f:
@@ -232,12 +325,12 @@ class StratifiedScurveLERcalc:
         self._QEPG_graph = compile_QEPG(stim_str)
 
     def determine_range_to_sample(self):
-        """
-        We need to be exact about the range of w we want to sample.
-        We don't want to sample too many subspaces, especially those subspaces with tiny binomial weights.
-        This should comes from the analysis of the weight of each subspace.
+        """Determine the critical weight range [minw, maxw].
 
-        We use the standard deviation to approimxate the range
+        Computes the range of weights whose binomial contribution to
+        the LER is significant.  The range is centred on the expected
+        number of faults ``N * p`` and extends +/- ``k_range`` standard
+        deviations of the binomial distribution.
         """
         sigma = int(
             np.sqrt(self._error_rate * (1 - self._error_rate) * self._num_noise)
@@ -250,11 +343,12 @@ class StratifiedScurveLERcalc:
         self._maxw = min(self._maxw, self._num_noise)
 
     def subspace_sampling(self):
-        """
-        wlist store the subset of weights we need to sample and get
-        correct logical error rate.
+        """Adaptively sample weight subspaces near the sweet spot.
 
-        In each subspace, we stop sampling until 100 logical error events are detected, or we hit the total budget.
+        Draws samples at evenly-spaced weights between the sweet spot
+        and the first weight with logical errors. Sampling at each
+        weight continues until either the minimum logical error event
+        count is reached or the total sample budget is exhausted.
         """
         assert self._QEPG_graph is not None, (
             "QEPG graph must be initialized before sampling"
@@ -377,11 +471,15 @@ class StratifiedScurveLERcalc:
         # print(self._subspace_LE_count)
 
     def subspace_sampling_to_fit_curve(self, sampleBudget):
-        """
-        After we determine the minw and maxw, we generate an even distribution of points
-        between minw and maxw.
+        """Sample evenly-spaced subspaces for S-curve fitting.
 
-        The goal is for the curve fitting in the next step to get more accurate.
+        Distributes *sampleBudget* shots evenly across
+        ``num_subspace`` weights between ``w_err`` and ``w_sat``. The
+        resulting P_L(w) estimates are used in the subsequent curve
+        fitting step.
+
+        Args:
+            sampleBudget: Total number of shots to distribute.
         """
         assert self._QEPG_graph is not None, (
             "QEPG graph must be initialized before sampling"
@@ -429,6 +527,11 @@ class StratifiedScurveLERcalc:
             begin_index += quota
 
     def calculate_R_square_score(self):
+        """Compute R^2 for the current S-curve fit against measured data.
+
+        Returns:
+            Coefficient of determination (R^2).
+        """
         y_observed = [self._estimated_subspaceLER[x] for x in self._estimated_wlist]
         y_predicted = [
             scurve_function(x, self._mu, self._sigma) for x in self._estimated_wlist
@@ -438,10 +541,15 @@ class StratifiedScurveLERcalc:
         # print("R^2 score: ", r2)
         return r2
 
-    # ----------------------------------------------------------------------
-    # Calculate logical error rate
-    # The input is a list of rows with logical errors
     def calculate_LER(self):
+        """Compute the total LER from measured subspace P_L values.
+
+        Sums ``P_L(w) * Binom(N, w) * p^w * (1-p)^(N-w)`` over
+        sampled weights only (no interpolation).
+
+        Returns:
+            The estimated total logical error rate.
+        """
         self._ler = 0
         for weight in range(1, self._num_noise + 1):
             if weight in self._estimated_subspaceLER.keys():
@@ -451,11 +559,26 @@ class StratifiedScurveLERcalc:
         return self._ler
 
     def get_LER_subspace(self, weight):
+        """Return the LER contribution of a single weight subspace.
+
+        Args:
+            weight: The fault weight.
+
+        Returns:
+            ``P_L(w) * Binom(N, w) * p^w * (1-p)^(N-w)``.
+        """
         return self._estimated_subspaceLER[weight] * binomial_weight(
             self._num_noise, weight, self._error_rate
         )
 
     def fit_linear_area(self):
+        """Fit a simple linear model ``y = a*w + b`` in log-logit space.
+
+        Performs a weighted least-squares fit using bias-corrected
+        log-logit values and sigma estimates as weights.  Updates
+        ``_a``, ``_b``, ``_minw``, ``_maxw``, and saves a diagnostic
+        plot to ``total_linear_fit.pdf``.
+        """
         x_list = [
             x
             for x in self._estimated_subspaceLER.keys()
@@ -546,6 +669,19 @@ class StratifiedScurveLERcalc:
         plt.close()
 
     def fit_log_S_model(self, filename, savefigure=True, time=None):
+        """Fit the modified-linear S-curve model and update the LER.
+
+        Performs a weighted nonlinear least-squares fit of
+        ``y(w) = a*w + b + c/sqrt(w-t)`` in log-logit space, computes
+        the R^2 score, calculates the sweet spot, and optionally saves
+        a diagnostic plot.
+
+        Args:
+            filename: Output path for the diagnostic PDF plot.
+            savefigure: If ``True``, save the plot to *filename*.
+            time: Elapsed wall-clock time (seconds) to annotate on the
+                plot. Defaults to ``None``.
+        """
         x_list = [
             x
             for x in self._estimated_subspaceLER.keys()
@@ -857,11 +993,15 @@ class StratifiedScurveLERcalc:
         plt.show()
         plt.close()
 
-    """
-    Fit the distribution by 1/2-e^{alpha/W}
-    """
-
     def fit_Scurve(self):
+        """Fit a basic logistic S-curve ``P_L = 0.5/(1+exp(-(w-mu)/sigma))``.
+
+        Uses ``scipy.optimize.curve_fit`` in probability space (not
+        log-logit).  Updates ``_mu`` and ``_sigma``.
+
+        Returns:
+            Tuple of ``(code_distance, mu, sigma)``.
+        """
         if self._stratified_succeed:
             self._saturatew = self._maxw
 
@@ -882,9 +1022,12 @@ class StratifiedScurveLERcalc:
         return self._codedistance, self._mu, self._sigma
 
     def ground_truth_subspace_sampling(self):
-        """
-        Sample around the subspaces.
-        This is the ground truth value to test the accuracy of the curve fitting.
+        """Sample all subspaces exhaustively for ground-truth validation.
+
+        Uses the same adaptive sampling logic as :meth:`subspace_sampling`
+        but covers the full critical weight range ``[minw, maxw]``.
+        Results are stored in ``_ground_*`` attributes for comparison
+        against the curve-fitted estimates.
         """
         assert self._QEPG_graph is not None, (
             "QEPG graph must be initialized before sampling"
@@ -985,7 +1128,15 @@ class StratifiedScurveLERcalc:
         # print("Samples used:{}".format(self._ground_sample_used))
 
     def calc_logical_error_rate_after_curve_fitting(self):
-        # self.fit_Scurve()
+        """Compute the total LER using fitted S-curve for un-sampled weights.
+
+        For weights where direct measurements exist, the measured
+        P_L(w) is used.  For un-sampled weights in the critical range,
+        the fitted modified-sigmoid function is used to interpolate.
+
+        Returns:
+            The estimated total logical error rate.
+        """
         self._ler = 0
 
         sigma = int(
@@ -1021,7 +1172,18 @@ class StratifiedScurveLERcalc:
         return self._ler
 
     def plot_scurve(self, filename=None, savefigure=False, title="S-curve"):
-        """Plot the S-curve and its discrete estimate."""
+        """Plot the fitted S-curve overlaid on measured subspace P_L values.
+
+        Generates a bar chart of measured P_L(w) with error bars, the
+        fitted S-curve, and annotated regions (fault-tolerant, curve
+        fitting, saturation, critical).
+
+        Args:
+            filename: Output path for the PDF. If ``None``, a default
+                name is used.
+            savefigure: If ``True``, save the figure to *filename*.
+            title: Title string for the plot.
+        """
         keys = list(self._estimated_subspaceLER.keys())
         values = [self._estimated_subspaceLER[k] for k in keys]
         sigma_list = [
@@ -1160,19 +1322,33 @@ class StratifiedScurveLERcalc:
         plt.close(fig)
 
     def set_t(self, t):
-        """
-        Set the t value for the S-curve fitting.
-        This is used to determine the range of subspace we need to sample.
+        """Set the fault-tolerant threshold *t*.
+
+        This is ``(code_distance - 1) / 2`` and determines the pole
+        location in the modified-linear model.
+
+        Args:
+            t: Fault-tolerant threshold value.
         """
         self._t = t
-
-    """
-    In this function, we just try to sample the linear area
-    """
 
     def fast_calculate_LER_from_file(
         self, filepath, pvalue, codedistance, figname, titlename, repeat=1
     ):
+        """End-to-end LER estimation with S-curve fitting from a STIM file.
+
+        Runs the full pipeline: parse circuit, bracket the S-curve,
+        sample subspaces, fit the linear and modified-linear models,
+        compute LER, and print summary statistics over *repeat* trials.
+
+        Args:
+            filepath: Path to a STIM circuit file.
+            pvalue: Physical error rate.
+            codedistance: Code distance of the QEC code.
+            figname: Base filename for diagnostic plots.
+            titlename: Title string for plots.
+            repeat: Number of independent trials.
+        """
         self._error_rate = pvalue
         self._circuit_level_code_distance = codedistance
         ler_list = []
@@ -1234,9 +1410,20 @@ class StratifiedScurveLERcalc:
         print("Nerror(ours): ", format_with_uncertainty(Nerror_mean, Nerror_std))
 
     def sample_all_subspaces(self, Nclip, Budget, save_path=None):
-        """
-        Sample all subspaces from minw to maxw
-        return the result of these samples as two dictionary
+        """Sample all subspaces from ``t+1`` to ``w_sat`` exhaustively.
+
+        Adaptively samples each weight until either *Nclip* logical
+        error events are collected or *Budget* samples have been used
+        at that weight.
+
+        Args:
+            Nclip: Target number of logical error events per subspace.
+            Budget: Maximum number of samples per subspace.
+            save_path: If provided, pickle the results to this path.
+
+        Returns:
+            Tuple of ``(ler_count, sample_used, subspaceLER)`` dicts
+            mapping weight to counts and estimated P_L values.
         """
         assert self._QEPG_graph is not None, (
             "QEPG graph must be initialized before sampling"
@@ -1335,6 +1522,14 @@ class StratifiedScurveLERcalc:
         return ler_count, sample_used, subspaceLER
 
     def load_all_sample_result(self, filepath):
+        """Load previously saved subspace sampling results and plot.
+
+        Reads a pickle file produced by :meth:`sample_all_subspaces`,
+        plots the raw S-curve and a fitted log-logit model.
+
+        Args:
+            filepath: Path to the pickled results file.
+        """
         with open(filepath, "rb") as f:
             result = pickle.load(f)
 

@@ -1,3 +1,16 @@
+"""Legacy stratified sampling LER estimator (without S-curve fitting).
+
+This module provides :class:`StratifiedLERcalc`, which estimates the
+logical error rate by directly sampling each weight subspace and
+aggregating via binomial weights.  No curve fitting is performed, so
+every contributing weight must be sampled with enough shots to
+accumulate a minimum number of logical error events.
+
+For codes with many noise locations the newer :class:`Scaler` class
+(which fits an S-curve model to interpolate unsampled weights) is
+strongly preferred.
+"""
+
 from __future__ import annotations
 from typing import Optional
 import numpy as np
@@ -20,12 +33,29 @@ MIN_NUM_LE_EVENT = 1000  # Increased from 50 for better accuracy
 SAMPLE_GAP = 500
 
 
-"""
-Use strafified sampling algorithm to calculate the logical error rate
-"""
-
-
 class StratifiedLERcalc:
+    """Stratified sampling LER estimator (without S-curve fitting).
+
+    This is the legacy stratified sampler that estimates the logical
+    error rate by directly sampling each weight subspace until a
+    sufficient number of logical error events have been observed, then
+    aggregating via the binomial-weight formula::
+
+        LER = sum_w  P_L(w) * Binom(N, w) * p^w * (1-p)^(N-w)
+
+    Unlike :class:`~scalerqec.Stratified.Scaler.Scaler`, this class
+    does **not** fit an S-curve model and instead relies on brute-force
+    sampling at every weight in a heuristically chosen range. It is
+    controlled by a *sample budget* (total number of shots) rather than
+    a wall-clock time budget.
+
+    Args:
+        error_rate: Physical error rate per noise location.
+        sampleBudget: Maximum total number of samples (shots) across
+            all weight subspaces.
+        num_subspace: Number of weight subspaces to sample.
+    """
+
     def __init__(
         self, error_rate: float = 0, sampleBudget: int = 10000, num_subspace: int = 30
     ):
@@ -57,8 +87,14 @@ class StratifiedLERcalc:
         self._QEPG_graph: Optional[QEPGGraph] = None
 
     def parse_from_file(self, filepath: str):
-        """
-        Read the circuit, parse from the file
+        """Load a STIM circuit from *filepath* and prepare for sampling.
+
+        Compiles the circuit into a Clifford representation, builds the
+        QEPG graph for efficient weight-stratified sampling, and
+        initialises a PyMatching decoder from the detector error model.
+
+        Args:
+            filepath: Path to a STIM circuit file.
         """
         stim_str = ""
         with open(filepath, "r", encoding="utf-8") as f:
@@ -86,9 +122,15 @@ class StratifiedLERcalc:
         )
 
     def sample_all_subspace(self, shots_each_subspace: int = 1000000):
-        """
-        Aggressively sample all the subspace.
-        This function is only used to test the correctness of the algorithm.
+        """Sample every weight subspace with a fixed number of shots.
+
+        This is a brute-force ground-truth method intended for
+        validating the accuracy of the stratified algorithm. It samples
+        **all** weights from 0 to *N* (the total number of noise
+        locations).
+
+        Args:
+            shots_each_subspace: Number of samples drawn per weight.
         """
         wlist = list(range(0, self._num_noise + 1))
         slist = [shots_each_subspace] * len(wlist)
@@ -126,9 +168,15 @@ class StratifiedLERcalc:
             begin_index += quota
 
     def sample_all_subspace_sequential(self, shots_each_subspace: int = 1000000):
-        """
-        Sample all subspaces using return_samples_with_noise_vector (sequential version).
-        This function uses the fixed sequential C++ function for verification.
+        """Sample every weight subspace sequentially for verification.
+
+        Like :meth:`sample_all_subspace`, but uses the sequential C++
+        ``return_samples_with_noise_vector`` function instead of the
+        batched multi-weight sampler. Primarily used to verify that the
+        two sampling backends produce consistent results.
+
+        Args:
+            shots_each_subspace: Number of samples drawn per weight.
         """
         wlist = list(range(0, self._num_noise + 1))
 
@@ -175,12 +223,13 @@ class StratifiedLERcalc:
             )
 
     def determine_range_to_sample(self):
-        """
-        We need to be exact about the range of w we want to sample.
-        We don't want to sample too many subspaces, especially those subspaces with tiny binomial weights.
-        This should comes from the analysis of the weight of each subspace.
+        """Determine the weight range [minW, maxW] to sample.
 
-        We use the standard deviation to approximate the range
+        Sets ``_minW`` and ``_maxW`` to cover the weights whose
+        binomial contribution ``Binom(N, w) * p^w * (1-p)^(N-w)`` is
+        non-negligible.  The range is centred on the expected number
+        of faults ``N * p`` and extends +/- 5 standard deviations,
+        with a minimum span of 10 weights to ensure adequate coverage.
         """
         sigma = int(
             (self._error_rate * (1 - self._error_rate) * self._num_noise) ** 0.5
@@ -203,8 +252,18 @@ class StratifiedLERcalc:
             self._maxW = min(self._num_noise, self._maxW + expand_right)
 
     def subspace_sampling(self):
-        """
-        Sample around the subspaces.
+        """Adaptively sample weight subspaces to estimate P_L(w).
+
+        Iteratively allocates shots to weight subspaces, prioritising
+        those that have not yet accumulated enough logical error events
+        (``MIN_NUM_LE_EVENT``). Sampling stops when either:
+
+        1. Every subspace has at least ``MIN_NUM_LE_EVENT`` logical
+           error events, or
+        2. The total sample budget ``_sampleBudget`` is exhausted.
+
+        The method also detects the circuit-level code distance by
+        identifying weights where exhaustive sampling finds no errors.
         """
         self.determine_range_to_sample()
 
@@ -338,10 +397,21 @@ class StratifiedLERcalc:
         # print("Samples used:{}".format(self._sample_used))
         # print("circuit level code distance:{}".format(self._circuit_level_code_distance))
 
-    # ----------------------------------------------------------------------
-    # Calculate logical error rate
-    # The input is a list of rows with logical errors
     def calculate_LER(self, debug=False):
+        """Compute the total logical error rate from subspace estimates.
+
+        Aggregates the per-weight conditional logical error probabilities
+        using the formula::
+
+            LER = sum_w  P_L(w) * Binom(N, w) * p^w * (1-p)^(N-w)
+
+        Args:
+            debug: If ``True``, print a detailed table of each weight's
+                contribution and the top-5 contributing weights.
+
+        Returns:
+            The estimated total logical error rate.
+        """
         self._ler: float = 0
 
         if debug:
@@ -386,14 +456,43 @@ class StratifiedLERcalc:
         return self._ler
 
     def get_LER_subspace_no_weight(self, weight: int):
+        """Return the raw conditional logical error probability P_L(w).
+
+        Args:
+            weight: The fault weight.
+
+        Returns:
+            P_L(weight) without the binomial weight factor.
+        """
         return self._estimated_subspaceLER[weight]
 
     def get_LER_subspace(self, weight: int):
+        """Return the LER contribution of a single weight subspace.
+
+        Computes ``P_L(w) * Binom(N, w) * p^w * (1-p)^(N-w)``.
+
+        Args:
+            weight: The fault weight.
+
+        Returns:
+            The weighted contribution of this subspace to the total LER.
+        """
         return self._estimated_subspaceLER[weight] * binomial_weight(
             self._num_noise, weight, self._error_rate
         )
 
     def calculate_LER_from_file(self, filepath: str, pvalue: float, repeat: int):
+        """End-to-end LER estimation from a STIM circuit file.
+
+        Parses the circuit, runs stratified sampling, computes the LER,
+        and prints summary statistics (mean +/- std) over *repeat*
+        independent trials.
+
+        Args:
+            filepath: Path to a STIM circuit file.
+            pvalue: Physical error rate.
+            repeat: Number of independent trials to run.
+        """
         self.parse_from_file(filepath)
         self._error_rate = pvalue
         ler_list: list[float] = []
@@ -424,11 +523,23 @@ class StratifiedLERcalc:
         print("PL(ours): ", format_with_uncertainty(average_LER, ler_std))
 
     def clear_all(self):
+        """Reset internal state for a fresh estimation run."""
         pass
 
     def calculate_LER_from_StabCode(
         self, qeccirc: StabCode, noise_model: NoiseModel, repeat: int = 1
     ):
+        """Estimate LER directly from a :class:`StabCode` and noise model.
+
+        Constructs the noisy STIM circuit internally, then runs the
+        stratified sampling pipeline.
+
+        Args:
+            qeccirc: A stabiliser code with stabilisers and logical
+                operators already configured.
+            noise_model: The noise model to apply to the circuit.
+            repeat: Number of independent trials.
+        """
         qeccirc.construct_IR_standard_scheme()
         qeccirc.compile_stim_circuit_from_IR_standard()
         noisy_circuit = noise_model.reconstruct_clifford_circuit(qeccirc.circuit)
