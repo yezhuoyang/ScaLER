@@ -9,6 +9,7 @@
 
 #include "sampler.hpp"
 #include "chrono"
+#include <bit>
 #include <thread>
 
 
@@ -17,7 +18,12 @@ namespace SAMPLE{
 /*---------------------------------------ctor----------*/
 sampler::sampler()=default;
 
-sampler::sampler(size_t num_total_paulierror):num_total_pauliError_(num_total_paulierror){};
+sampler::sampler(size_t num_total_paulierror)
+    : num_total_pauliError_(num_total_paulierror),
+      collision_bitmap_(num_total_paulierror, 0),
+      scratch_sample_() {
+    scratch_sample_.reserve(num_total_paulierror);
+};
 
 sampler::~sampler()=default;
 
@@ -34,33 +40,32 @@ sampler::~sampler()=default;
  * @note More efficient than Floyd's insertion method when weight is
  *       close to num_total_pauliError_ (avoids collision overhead).
  */
-inline std::vector<singlePauli> sampler::generate_sample_removal(size_t weight, std::mt19937& gen){
-    // Create set of all positions
-    std::unordered_set<size_t> remaining_positions;
-    for(size_t i = 0; i < num_total_pauliError_; i++){
-        remaining_positions.insert(i);
+inline std::size_t sampler::generate_sample_removal(size_t weight, std::mt19937& gen){
+    // Mark all positions as active using bitmap
+    std::memset(collision_bitmap_.data(), 1, num_total_pauliError_);
+    size_t remaining = num_total_pauliError_;
+
+    // Remove random positions until only `weight` remain
+    std::uniform_int_distribution<size_t> posdistrib(0, num_total_pauliError_-1);
+    while(remaining > weight){
+        size_t pos = posdistrib(gen);
+        if(collision_bitmap_[pos]){
+            collision_bitmap_[pos] = 0;
+            --remaining;
+        }
     }
 
-    // Remove (num_total_pauliError_ - weight) random positions
-    std::uniform_int_distribution<> posdistrib(0, num_total_pauliError_-1);
-    size_t num_to_remove = num_total_pauliError_ - weight;
-
-    // Use same collision-based removal (mirrors addition logic)
-    while(remaining_positions.size() > weight){
-        size_t pos_to_remove = posdistrib(gen);
-        remaining_positions.erase(pos_to_remove);  // erase() is no-op if not found
+    // Collect remaining positions into scratch buffer
+    scratch_sample_.clear();
+    std::uniform_int_distribution<size_t> typedistrib(1, 3);
+    for(size_t i = 0; i < num_total_pauliError_; ++i){
+        if(collision_bitmap_[i]){
+            scratch_sample_.push_back(singlePauli{i, typedistrib(gen)});
+        }
     }
-
-    // Convert remaining positions to result with random Pauli types
-    std::vector<singlePauli> result;
-    result.reserve(weight);
-    std::uniform_int_distribution<> typedistrib(1, 3);
-
-    for(size_t pos : remaining_positions){
-        result.emplace_back(singlePauli{pos, (size_t)typedistrib(gen)});
-    }
-
-    return result;
+    // Clear bitmap for positions we used
+    std::memset(collision_bitmap_.data(), 0, num_total_pauliError_);
+    return scratch_sample_.size();
 }
 
 /**
@@ -73,30 +78,30 @@ inline std::vector<singlePauli> sampler::generate_sample_removal(size_t weight, 
  *
  * Each selected position receives a uniformly random Pauli type (1=X, 2=Y, 3=Z).
  */
-inline std::vector<singlePauli> sampler::generate_sample_Floyd(size_t weight, std::mt19937& gen){
+inline std::size_t sampler::generate_sample_Floyd(size_t weight, std::mt19937& gen){
     // Hybrid strategy: use removal when weight > half of total
-    // This avoids collision inefficiency for high weights
     if(weight > num_total_pauliError_ / 2){
         return generate_sample_removal(weight, gen);
     }
 
-    // Original addition strategy for low weights
-    std::vector<singlePauli> result;
-    result.reserve(weight);
+    // Addition strategy with bitmap collision detection (no heap allocation)
+    scratch_sample_.clear();
 
-    // Uniform distribution in the range [1, 6]
-    std::uniform_int_distribution<> posdistrib(0, num_total_pauliError_-1);
-    std::uniform_int_distribution<> typedistrib(1, 3);
-    std::unordered_set<size_t> usedpos;
+    std::uniform_int_distribution<size_t> posdistrib(0, num_total_pauliError_-1);
+    std::uniform_int_distribution<size_t> typedistrib(1, 3);
 
-
-    while(result.size()<weight){
-        size_t newpos=(size_t)posdistrib(gen);
-        if(usedpos.insert(newpos).second){
-            result.emplace_back(std::move(singlePauli{ newpos, (size_t)typedistrib(gen)}));  // OK
+    while(scratch_sample_.size() < weight){
+        size_t newpos = posdistrib(gen);
+        if(!collision_bitmap_[newpos]){
+            collision_bitmap_[newpos] = 1;
+            scratch_sample_.push_back(singlePauli{newpos, typedistrib(gen)});
         }
     }
-    return result;
+    // Clear only the used positions (O(weight) not O(N))
+    for(std::size_t i = 0; i < scratch_sample_.size(); ++i){
+        collision_bitmap_[scratch_sample_[i].qindex] = 0;
+    }
+    return scratch_sample_.size();
 }
 
 
@@ -107,17 +112,74 @@ inline std::vector<singlePauli> sampler::generate_sample_Floyd(size_t weight, st
  * has an error with probability error_prob. Activated locations receive a
  * uniformly random Pauli type.
  */
-inline std::vector<singlePauli> sampler::generate_sample_Monte(double error_prob,size_t ErrorSize,std::mt19937& gen){
-    std::vector<singlePauli> result;
-    result.reserve(size_t(error_prob*ErrorSize));
-    std::uniform_int_distribution<> typedistrib(1, 3);
+inline std::size_t sampler::generate_sample_Monte(double error_prob,size_t ErrorSize,std::mt19937& gen){
+    scratch_sample_.clear();
+    std::uniform_int_distribution<size_t> typedistrib(1, 3);
     std::bernoulli_distribution dist(error_prob);
     for(size_t pos=0;pos<ErrorSize;++pos){
         if(dist(gen)){
-            result.emplace_back(std::move(singlePauli{ pos, (size_t)typedistrib(gen)}));
+            scratch_sample_.push_back(singlePauli{pos, typedistrib(gen)});
         }
     }
-    return result;
+    return scratch_sample_.size();
+}
+
+
+/*----------- Xoshiro256++ overloads -----------*/
+
+inline std::size_t sampler::generate_sample_removal(size_t weight, Xoshiro256pp& gen){
+    std::memset(collision_bitmap_.data(), 1, num_total_pauliError_);
+    size_t remaining = num_total_pauliError_;
+
+    while(remaining > weight){
+        size_t pos = gen.bounded(num_total_pauliError_);
+        if(collision_bitmap_[pos]){
+            collision_bitmap_[pos] = 0;
+            --remaining;
+        }
+    }
+
+    scratch_sample_.clear();
+    for(size_t i = 0; i < num_total_pauliError_; ++i){
+        if(collision_bitmap_[i]){
+            scratch_sample_.push_back(singlePauli{i, 1 + gen.bounded(3)});
+        }
+    }
+    std::memset(collision_bitmap_.data(), 0, num_total_pauliError_);
+    return scratch_sample_.size();
+}
+
+inline std::size_t sampler::generate_sample_Floyd(size_t weight, Xoshiro256pp& gen){
+    if(weight > num_total_pauliError_ / 2){
+        return generate_sample_removal(weight, gen);
+    }
+
+    scratch_sample_.clear();
+
+    while(scratch_sample_.size() < weight){
+        size_t newpos = gen.bounded(num_total_pauliError_);
+        if(!collision_bitmap_[newpos]){
+            collision_bitmap_[newpos] = 1;
+            scratch_sample_.push_back(singlePauli{newpos, 1 + gen.bounded(3)});
+        }
+    }
+    for(std::size_t i = 0; i < scratch_sample_.size(); ++i){
+        collision_bitmap_[scratch_sample_[i].qindex] = 0;
+    }
+    return scratch_sample_.size();
+}
+
+inline std::size_t sampler::generate_sample_Monte(double error_prob, size_t ErrorSize, Xoshiro256pp& gen){
+    scratch_sample_.clear();
+    // Use threshold on upper 32 bits for speed (sufficient precision for error rates)
+    const std::uint32_t threshold = static_cast<std::uint32_t>(error_prob * 4294967296.0);
+    for(size_t pos = 0; pos < ErrorSize; ++pos){
+        // Use upper 32 bits of random value for threshold test
+        if(static_cast<std::uint32_t>(gen() >> 32) < threshold){
+            scratch_sample_.push_back(singlePauli{pos, 1 + (gen() % 3)});
+        }
+    }
+    return scratch_sample_.size();
 }
 
 
@@ -134,27 +196,36 @@ inline std::vector<singlePauli> sampler::generate_sample_Monte(double error_prob
  * detector/observable outcome is computed via calculate_parity_output_from_one_sample().
  */
 void sampler::generate_many_output_samples(const QEPG::QEPG& graph,std::vector<QEPG::Row>& samplecontainer, size_t pauliweight, size_t samplenumber){
-    //samplecontainer.reserve(samplenumber);
     samplecontainer.resize(samplenumber);
 
-    static const std::uint64_t global_seed = std::random_device{}();   // log this if you need to replay
+    static const std::uint64_t global_seed = std::random_device{}();
+    const size_t n_err = num_total_pauliError_;
+    const auto& flat = graph.get_parityPropMatrixTransFlat();
+    const std::size_t n_noise = flat.n_rows() / 3;
+    const std::size_t n_words = flat.words_per_row();
+    const std::size_t n_cols = flat.n_cols();
 
-    // 2. Parallel region
     #pragma omp parallel
     {
-        thread_local std::mt19937 rng{
-            static_cast<std::mt19937::result_type>(
-                global_seed ^                                    // same run -> same base
-                std::hash<std::thread::id>{}(std::this_thread::get_id()))  // thread-specific part
-        };
+        sampler local_sampler(n_err);
+        Xoshiro256pp rng(global_seed ^ std::hash<std::thread::id>{}(std::this_thread::get_id()));
 
+        // Per-thread aligned result buffer
+        std::uint64_t* result_buf = simd::aligned_alloc_u64(flat.stride_words());
 
-        // 3. Work-share the loop
         #pragma omp for schedule(static)
         for (long long i = 0; i < static_cast<long long>(samplenumber); ++i) {
-            auto sample = generate_sample_Floyd(pauliweight, rng);
-            samplecontainer[i] = calculate_parity_output_from_one_sample(graph, sample);
+            std::size_t n = local_sampler.generate_sample_Floyd(pauliweight, rng);
+
+            // Zero result, accumulate XOR via SIMD, copy to Row
+            simd::zero_words(result_buf, n_words);
+            local_sampler.calculate_parity_output_flat(
+                flat, n_noise, local_sampler.scratch_data(), n, result_buf);
+
+            samplecontainer[i] = QEPG::Row(n_cols, result_buf, n_words);
         }
+
+        simd::aligned_free(result_buf);
     }
 }
 
@@ -166,24 +237,33 @@ void sampler::generate_many_output_samples(const QEPG::QEPG& graph,std::vector<Q
  * Bernoulli sampling (generate_sample_Monte) instead of fixed-weight sampling.
  */
 void sampler::generate_many_output_samples_Monte(const QEPG::QEPG& graph,std::vector<QEPG::Row>& samplecontainer,double error_prob, size_t samplenumber){
-    //samplecontainer.reserve(samplenumber);
     samplecontainer.resize(samplenumber);
     size_t total_error=graph.get_total_noise();
-    static const std::uint64_t global_seed = std::random_device{}();   // log this if you need to replay
-    // 2. Parallel region
+    static const std::uint64_t global_seed = std::random_device{}();
+    const size_t n_err = num_total_pauliError_;
+    const auto& flat = graph.get_parityPropMatrixTransFlat();
+    const std::size_t n_noise = flat.n_rows() / 3;
+    const std::size_t n_words = flat.words_per_row();
+    const std::size_t n_cols = flat.n_cols();
+
     #pragma omp parallel
     {
-        thread_local std::mt19937 rng{
-            static_cast<std::mt19937::result_type>(
-                global_seed ^                                    // same run -> same base
-                std::hash<std::thread::id>{}(std::this_thread::get_id()))  // thread-specific part
-        };
-        // 3. Work-share the loop
+        sampler local_sampler(n_err);
+        Xoshiro256pp rng(global_seed ^ std::hash<std::thread::id>{}(std::this_thread::get_id()));
+        std::uint64_t* result_buf = simd::aligned_alloc_u64(flat.stride_words());
+
         #pragma omp for schedule(static)
         for (long long i = 0; i < static_cast<long long>(samplenumber); ++i) {
-            auto sample = generate_sample_Monte(error_prob,total_error, rng);
-            samplecontainer[i] = calculate_parity_output_from_one_sample(graph, sample);
+            std::size_t n = local_sampler.generate_sample_Monte(error_prob, total_error, rng);
+
+            simd::zero_words(result_buf, n_words);
+            local_sampler.calculate_parity_output_flat(
+                flat, n_noise, local_sampler.scratch_data(), n, result_buf);
+
+            samplecontainer[i] = QEPG::Row(n_cols, result_buf, n_words);
         }
+
+        simd::aligned_free(result_buf);
     }
 }
 
@@ -210,18 +290,113 @@ void sampler::generate_all_samples_with_fixed_weight(const QEPG::QEPG& graph,std
 void sampler::generate_many_output_samples_with_noise_vector(const QEPG::QEPG& graph,std::vector<std::vector<singlePauli>>& noisecontainer,std::vector<QEPG::Row>& samplecontainer, size_t pauliweight, size_t samplenumber){
     samplecontainer.reserve(samplenumber);
     noisecontainer.reserve(samplenumber);
-    std::random_device rd;
     auto seed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
-    // Mersenne Twister engine seeded with rd()
-    std::mt19937 gen(seed);
+    std::mt19937 gen(static_cast<std::mt19937::result_type>(seed));
     for(size_t i=0;i<samplenumber;i++){
-        std::vector<singlePauli> sample = generate_sample_Floyd(pauliweight,gen);
-        samplecontainer.push_back(std::move(calculate_parity_output_from_one_sample(graph,sample)));
-        noisecontainer.push_back(std::move(sample));
+        std::size_t n = generate_sample_Floyd(pauliweight, gen);
+        samplecontainer.push_back(calculate_parity_output_from_one_sample(graph, scratch_data(), n));
+        noisecontainer.emplace_back(scratch_sample_.begin(), scratch_sample_.begin() + n);
     }
 }
 
 
+/// Helper: unpack result_buf (uint64_t words) into numpy byte buffers
+static inline void unpack_result_to_numpy(
+    const std::uint64_t* result_buf,
+    std::uint8_t* det_dst,
+    std::uint8_t& obs_dst,
+    std::size_t n_det,
+    std::size_t n_words) noexcept
+{
+    constexpr std::size_t WORD_BITS = 64;
+    const std::size_t full_words = n_det / WORD_BITS;
+
+    for(std::size_t b = 0; b < full_words; ++b){
+        std::uint64_t word = result_buf[b];
+        for(std::size_t k = 0; k < WORD_BITS; ++k, word >>= 1)
+            det_dst[b * WORD_BITS + k] = static_cast<std::uint8_t>(word & 1);
+    }
+
+    const std::size_t rem = n_det % WORD_BITS;
+    if(rem){
+        std::uint64_t word = result_buf[full_words];
+        for(std::size_t k = 0; k < rem; ++k, word >>= 1)
+            det_dst[full_words * WORD_BITS + k] = static_cast<std::uint8_t>(word & 1);
+    }
+
+    // Observable is the last bit (at position n_det)
+    obs_dst = static_cast<std::uint8_t>(
+        (result_buf[n_det / WORD_BITS] >> (n_det % WORD_BITS)) & 1);
+}
+
+
+void sampler::generate_many_output_samples_to_numpy(
+    const QEPG::QEPG& graph,
+    std::uint8_t* det_buf, std::uint8_t* obs_buf,
+    std::size_t n_det, size_t pauliweight, size_t samplenumber)
+{
+    static const std::uint64_t global_seed = std::random_device{}();
+    const size_t n_err = num_total_pauliError_;
+    const auto& flat = graph.get_parityPropMatrixTransFlat();
+    const std::size_t n_noise = flat.n_rows() / 3;
+    const std::size_t n_words = flat.words_per_row();
+
+    #pragma omp parallel
+    {
+        sampler local_sampler(n_err);
+        Xoshiro256pp rng(global_seed ^ std::hash<std::thread::id>{}(std::this_thread::get_id()));
+        std::uint64_t* result_buf = simd::aligned_alloc_u64(flat.stride_words());
+
+        #pragma omp for schedule(static)
+        for (long long i = 0; i < static_cast<long long>(samplenumber); ++i) {
+            std::size_t n = local_sampler.generate_sample_Floyd(pauliweight, rng);
+
+            simd::zero_words(result_buf, n_words);
+            local_sampler.calculate_parity_output_flat(
+                flat, n_noise, local_sampler.scratch_data(), n, result_buf);
+
+            unpack_result_to_numpy(result_buf,
+                det_buf + i * n_det, obs_buf[i], n_det, n_words);
+        }
+
+        simd::aligned_free(result_buf);
+    }
+}
+
+
+void sampler::generate_many_output_samples_Monte_to_numpy(
+    const QEPG::QEPG& graph,
+    std::uint8_t* det_buf, std::uint8_t* obs_buf,
+    std::size_t n_det, double error_prob, size_t samplenumber)
+{
+    static const std::uint64_t global_seed = std::random_device{}();
+    const size_t n_err = num_total_pauliError_;
+    const size_t total_error = graph.get_total_noise();
+    const auto& flat = graph.get_parityPropMatrixTransFlat();
+    const std::size_t n_noise = flat.n_rows() / 3;
+    const std::size_t n_words = flat.words_per_row();
+
+    #pragma omp parallel
+    {
+        sampler local_sampler(n_err);
+        Xoshiro256pp rng(global_seed ^ std::hash<std::thread::id>{}(std::this_thread::get_id()));
+        std::uint64_t* result_buf = simd::aligned_alloc_u64(flat.stride_words());
+
+        #pragma omp for schedule(static)
+        for (long long i = 0; i < static_cast<long long>(samplenumber); ++i) {
+            std::size_t n = local_sampler.generate_sample_Monte(error_prob, total_error, rng);
+
+            simd::zero_words(result_buf, n_words);
+            local_sampler.calculate_parity_output_flat(
+                flat, n_noise, local_sampler.scratch_data(), n, result_buf);
+
+            unpack_result_to_numpy(result_buf,
+                det_buf + i * n_det, obs_buf[i], n_det, n_words);
+        }
+
+        simd::aligned_free(result_buf);
+    }
+}
 
 
 }

@@ -1,6 +1,9 @@
 """
 Shared pytest fixtures for ScaLER tests.
 """
+import matplotlib
+matplotlib.use('Agg')  # non-interactive backend; avoids tkinter dependency
+
 import pytest
 
 

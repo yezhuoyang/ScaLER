@@ -230,6 +230,9 @@ void QEPG::backward_graph_construction(){
             current_x_parity_prop[qindex].swap(current_z_parity_prop[qindex]);
         }
     }
+
+    // Build contiguous SIMD-aligned copy for fast sampling
+    build_flat_parity_table();
 }
 
 
@@ -250,6 +253,25 @@ const std::vector<Row>& QEPG::get_parityPropMatrix() const noexcept{
 
 const std::vector<Row>& QEPG::get_parityPropMatrixTrans() const noexcept{
     return parityPropMatrixTranspose_;
+}
+
+const qepg_bits::FlatBitTable& QEPG::get_parityPropMatrixTransFlat() const noexcept{
+    return parityPropMatrixTransFlat_;
+}
+
+void QEPG::build_flat_parity_table(){
+    if(parityPropMatrixTranspose_.empty()) return;
+    const std::size_t n_rows = parityPropMatrixTranspose_.size();
+    const std::size_t n_cols = parityPropMatrixTranspose_[0].size();
+
+    parityPropMatrixTransFlat_ = qepg_bits::FlatBitTable(n_rows, n_cols);
+
+    for(std::size_t r = 0; r < n_rows; ++r){
+        const Row& src = parityPropMatrixTranspose_[r];
+        std::uint64_t* dst = parityPropMatrixTransFlat_.row_ptr(r);
+        // Copy block data directly
+        src.to_block_range(dst);
+    }
 }
 
 /**

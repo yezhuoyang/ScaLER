@@ -59,6 +59,12 @@ class DynamicBitset {
     explicit DynamicBitset(std::size_t num_bits)
         : num_bits_(num_bits), blocks_(blocks_needed(num_bits), block_type{0}) {}
 
+    /// Construct from raw uint64_t words (copies n_words from src).
+    DynamicBitset(std::size_t num_bits, const block_type* src, std::size_t n_words)
+        : num_bits_(num_bits), blocks_(src, src + n_words) {
+        sanitize();
+    }
+
     // ---------------------------------------------------------------
     // Size
     // ---------------------------------------------------------------

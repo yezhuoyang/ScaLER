@@ -20,6 +20,7 @@
 #include <string>
 #include <bitset>
 #include "dynamic_bitset.hpp"
+#include "flat_bit_table.hpp"
 #include "clifford.hpp"
 #include <iostream>
 
@@ -174,6 +175,12 @@ class QEPG{
         /// @brief Destructor.
         ~QEPG();
 
+        /// Move operations (needed because FlatBitTable is non-copyable).
+        QEPG(QEPG&&) = default;
+        QEPG& operator=(QEPG&&) = default;
+        QEPG(const QEPG&) = delete;
+        QEPG& operator=(const QEPG&) = delete;
+
         /**
          * @brief Build the error propagation graph by backward traversal of the circuit.
          *
@@ -242,6 +249,9 @@ class QEPG{
         /// @return Reference to the detector count.
         const size_t& get_total_detector() const noexcept;
 
+        /// @brief Get the flat (contiguous, SIMD-aligned) parity propagation matrix transpose.
+        const qepg_bits::FlatBitTable& get_parityPropMatrixTransFlat() const noexcept;
+
 
     private:
 
@@ -259,6 +269,9 @@ class QEPG{
 
         std::vector<Row> detectorMatrixTranspose_; ///< Transpose of detectorMatrix_.
 
+        /// Contiguous, SIMD-aligned version of parityPropMatrixTranspose_.
+        qepg_bits::FlatBitTable parityPropMatrixTransFlat_;
+
         /**
          * @brief Compute the parity propagation matrix via explicit matrix multiplication.
          *
@@ -267,6 +280,9 @@ class QEPG{
          * backward_graph_construction() achieves the same result more efficiently.
          */
         void compute_parityPropMatrix();
+
+        /// Build the FlatBitTable from the vector<Row> parity propagation matrix transpose.
+        void build_flat_parity_table();
 };
 }
 
