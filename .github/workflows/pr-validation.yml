@@ -150,7 +150,12 @@ jobs:
       - name: Install system dependencies
         run: |
           vcpkg install boost-dynamic-bitset:x64-windows eigen3:x64-windows
-      
+
+      - name: Set vcpkg include path
+        shell: bash
+        run: |
+          echo "VCPKG_INSTALLED_DIR=$VCPKG_ROOT/installed" >> $GITHUB_ENV
+
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip

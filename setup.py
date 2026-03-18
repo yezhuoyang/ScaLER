@@ -35,7 +35,19 @@ if sys.platform == "win32":
     extra_compile_args = ["/std:c++20", "/EHsc", "/O2", "/openmp:llvm"]
     extra_link_args = ["/DEBUG"]
 
-    win_includes = [r"C:\local\boost_1_87_0", r"C:\vcpkg\installed\x64-windows\include"]
+    # Build candidate include paths from environment and well-known locations
+    win_includes = [r"C:\local\boost_1_87_0"]
+
+    # Discover vcpkg include path from VCPKG_ROOT or VCPKG_INSTALLED_DIR
+    vcpkg_installed = os.environ.get("VCPKG_INSTALLED_DIR")
+    vcpkg_root = os.environ.get("VCPKG_ROOT")
+    if vcpkg_installed:
+        win_includes.append(os.path.join(vcpkg_installed, "x64-windows", "include"))
+    if vcpkg_root:
+        win_includes.append(os.path.join(vcpkg_root, "installed", "x64-windows", "include"))
+    # Fallback to common location
+    win_includes.append(r"C:\vcpkg\installed\x64-windows\include")
+
     for path in win_includes:
         if os.path.isdir(path) and path not in include_dirs:
             include_dirs.append(path)
