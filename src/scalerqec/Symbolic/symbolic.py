@@ -215,7 +215,7 @@ def print_table(i, j):
     header += r"\resizebox{\columnwidth}{!}{%" "\n"
     header += (
         r"\begin{tabular}{|l|l|l|l|l|}"
-        "\n   \hline "
+        "\n   \\hline "
         r"\n Index  & $D_0$ & $O_0$  & Probability\\\n  \hline"
     )
     print(header)
@@ -228,7 +228,7 @@ def print_table(i, j):
         print(f" {idx} {error_tag}  & {D0} & {O0}  & ${prob_latex}$\\\\")
         print("  \\hline")
 
-    footer = r"\end{tabular}" "\n}\n\end{table}\n"
+    footer = r"\end{tabular}" "\n}\n" + r"\end{table}" + "\n"
     print(footer)
 
 

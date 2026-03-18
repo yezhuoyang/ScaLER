@@ -4,6 +4,7 @@ Test symbolic DP algorithm by comparing with stim Monte Carlo simulation.
 This test validates that the symbolic dynamic programming method produces
 exact results that match stim Monte Carlo within sampling error.
 """
+
 import os
 import pytest
 from scalerqec.Symbolic.symbolicLER import SymbolicLERcalc
@@ -34,17 +35,20 @@ class TestSymbolicVsStim:
     """Test symbolic DP method against stim Monte Carlo."""
 
     def test_symbolic_ler_single_circuit(
-        self, circuit_base_path, error_rate_symbolic,
-        stim_sample_size_symbolic, symbolic_tolerance
+        self,
+        circuit_base_path,
+        error_rate_symbolic,
+        stim_sample_size_symbolic,
+        symbolic_tolerance,
     ):
         """Test symbolic LER for a single small circuit against stim."""
         filepath = os.path.join(circuit_base_path, "simple")
 
-        print(f"\n{'='*70}")
+        print(f"\n{'=' * 70}")
         print(f"Testing circuit: simple")
         print(f"Error rate: {error_rate_symbolic}")
         print(f"Stim sample size: {stim_sample_size_symbolic}")
-        print(f"{'='*70}")
+        print(f"{'=' * 70}")
 
         # Calculate exact LER with symbolic DP
         print(f"\nRunning Symbolic DP (exact calculation)...")
@@ -63,7 +67,7 @@ class TestSymbolicVsStim:
         print(f"  Stim:        PL = {stim_result:.6e}")
 
         # Compare - symbolic should match stim
-        print(f"\n{'='*70}")
+        print(f"\n{'=' * 70}")
         # Note: If there's a large discrepancy, it may indicate differences in
         # how the methods interpret the circuit or apply error models
         if symbolic_result > 0 and stim_result > 0:
@@ -83,15 +87,15 @@ class TestSymbolicVsStim:
                 print(f"Status: XFAIL (differs by more than {symbolic_tolerance:.0%})")
                 # Soft failure - just log for now
                 pytest.xfail(f"Symbolic vs stim discrepancy: {relative_error:.2%}")
-        print(f"{'='*70}")
+        print(f"{'=' * 70}")
 
     def test_symbolic_ler_all_circuits(
-        self, circuit_base_path,
-        error_rate_symbolic, symbolic_tolerance
+        self, circuit_base_path, error_rate_symbolic, symbolic_tolerance
     ):
         """Test symbolic LER for small circuits against stim."""
-        # Use small sample size for fast tests
-        sample_size = 50000
+        # Use enough samples and min errors for reliable comparison
+        sample_size = 1000000
+        min_errors = 200
 
         # Only test circuits with non-zero LER (exclude circuits that always return zero)
         # Circuits like cnot0, cnot01, cnot1, etc. have zero LER and cause formatting errors
@@ -125,9 +129,9 @@ class TestSymbolicVsStim:
                 print(f"[SKIP] {circuit_name}: file not found")
                 continue
 
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print(f"Testing circuit: {circuit_name}")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
 
             try:
                 # Symbolic DP (exact)
@@ -140,7 +144,9 @@ class TestSymbolicVsStim:
 
                 # Stim Monte Carlo
                 print(f"Running Stim Monte Carlo (samples={sample_size})...")
-                stim_calculator = MonteLERcalc()
+                stim_calculator = MonteLERcalc(
+                    samplebudget=sample_size, MIN_NUM_LE_EVENT=min_errors
+                )
                 stim_result = stim_calculator.calculate_LER_from_file(
                     sample_size, filepath, error_rate_symbolic
                 )
@@ -148,16 +154,22 @@ class TestSymbolicVsStim:
 
                 # Compare
                 if symbolic_result > 0 and stim_result > 0:
-                    relative_error = abs(stim_result - symbolic_result) / symbolic_result
+                    relative_error = (
+                        abs(stim_result - symbolic_result) / symbolic_result
+                    )
                     print(f"  Relative error: {relative_error:.2%}")
-                    results.append((circuit_name, symbolic_result, stim_result, relative_error))
+                    results.append(
+                        (circuit_name, symbolic_result, stim_result, relative_error)
+                    )
 
                     if relative_error < symbolic_tolerance:
                         passed_circuits.append(circuit_name)
                         print(f"  Status: PASS")
                     elif relative_error < 0.50:  # Between 25% and 50%
                         xfail_circuits.append(circuit_name)
-                        print(f"  Status: XFAIL (error {relative_error:.2%}, marked for investigation)")
+                        print(
+                            f"  Status: XFAIL (error {relative_error:.2%}, marked for investigation)"
+                        )
                     else:
                         failed_circuits.append(circuit_name)
                         print(f"  Status: FAIL (error {relative_error:.2%} >= 50%)")
@@ -167,9 +179,9 @@ class TestSymbolicVsStim:
                 failed_circuits.append(circuit_name)
 
         # Print summary
-        print(f"\n{'='*70}")
+        print(f"\n{'=' * 70}")
         print(f"{'Circuit':<20} {'Symbolic':>12} {'Stim':>12} {'Rel Error':>10}")
-        print(f"{'='*70}")
+        print(f"{'=' * 70}")
         for circuit_name, symb_val, stim_val, rel_err in results:
             if circuit_name in passed_circuits:
                 status = "PASS"
@@ -177,35 +189,43 @@ class TestSymbolicVsStim:
                 status = "XFAIL"
             else:
                 status = "FAIL"
-            print(f"{circuit_name:<20} {symb_val:>12.6e} {stim_val:>12.6e} {rel_err:>9.2%} [{status}]")
-        print(f"{'='*70}")
+            print(
+                f"{circuit_name:<20} {symb_val:>12.6e} {stim_val:>12.6e} {rel_err:>9.2%} [{status}]"
+            )
+        print(f"{'=' * 70}")
         print(f"Passed: {len(passed_circuits)}/{len(small_circuits)}")
         print(f"XFail (investigate): {len(xfail_circuits)}")
         print(f"Failed: {len(failed_circuits)}")
-        print(f"{'='*70}")
+        print(f"{'=' * 70}")
 
         # At least 60% should pass (allowing for method differences and sampling variance)
         pass_rate = len(passed_circuits) / len(small_circuits)
-        assert pass_rate >= 0.60, \
+        assert pass_rate >= 0.60, (
             f"Only {pass_rate:.1%} passed (need ≥60%). Hard failures: {failed_circuits}"
+        )
 
-    @pytest.mark.skip(reason="SymbolicLERcalc.evaluate_subspace_prob method not implemented")
+    @pytest.mark.skip(
+        reason="SymbolicLERcalc.evaluate_subspace_prob method not implemented"
+    )
     def test_symbolic_subspace_probabilities(
         self, circuit_base_path, error_rate_symbolic
     ):
         """Test that symbolic DP computes correct subspace probabilities."""
         pass
 
-    @pytest.mark.parametrize("circuit_name", [
-        "simple",
-        "1cnot",
-        "1cnot1R",
-        "1cnoth",
-        "2cnot",
-        "2cnot2",
-        "simpleh",
-        # "repetition3r2",  # Disabled for faster testing
-    ])
+    @pytest.mark.parametrize(
+        "circuit_name",
+        [
+            "simple",
+            "1cnot",
+            "1cnot1R",
+            "1cnoth",
+            "2cnot",
+            "2cnot2",
+            "simpleh",
+            # "repetition3r2",  # Disabled for faster testing
+        ],
+    )
     def test_polynomial_at_multiple_error_rates(self, circuit_base_path, circuit_name):
         """
         Test that the SAME symbolic polynomial evaluated at different error rates
@@ -228,9 +248,9 @@ class TestSymbolicVsStim:
         tolerance = 0.15  # 15% tolerance — symbolic is exact, only STIM has variance
         min_errors = 500  # Need ~500 errors for ~4.5% statistical error (1/sqrt(500))
 
-        print(f"\n{'='*70}")
+        print(f"\n{'=' * 70}")
         print(f"Testing polynomial accuracy for: {circuit_name}")
-        print(f"{'='*70}")
+        print(f"{'=' * 70}")
 
         # Step 1: Calculate symbolic polynomial ONCE
         print(f"\n[Step 1] Computing symbolic polynomial...")
@@ -245,8 +265,10 @@ class TestSymbolicVsStim:
         all_passed = True
 
         for error_rate in error_rates:
-            print(f"\n[Step 2.{error_rates.index(error_rate)+1}] Testing at p={error_rate}")
-            print(f"{'-'*50}")
+            print(
+                f"\n[Step 2.{error_rates.index(error_rate) + 1}] Testing at p={error_rate}"
+            )
+            print(f"{'-' * 50}")
 
             # Evaluate symbolic polynomial at this error rate
             print(f"  Evaluating symbolic polynomial at p={error_rate}...")
@@ -255,8 +277,12 @@ class TestSymbolicVsStim:
 
             # Run STIM at this error rate with enough samples for tight statistics
             print(f"  Running STIM with {stim_samples:,} sample budget...")
-            stim_calc = MonteLERcalc(samplebudget=stim_samples, MIN_NUM_LE_EVENT=min_errors)
-            stim_ler = stim_calc.calculate_LER_from_file(stim_samples, filepath, error_rate)
+            stim_calc = MonteLERcalc(
+                samplebudget=stim_samples, MIN_NUM_LE_EVENT=min_errors
+            )
+            stim_ler = stim_calc.calculate_LER_from_file(
+                stim_samples, filepath, error_rate
+            )
             print(f"  STIM LER:     {stim_ler:.6e}")
 
             # Compare
@@ -271,64 +297,81 @@ class TestSymbolicVsStim:
                 if not passed:
                     all_passed = False
 
-                results.append({
-                    'error_rate': error_rate,
-                    'stim': stim_ler,
-                    'symbolic': symbolic_ler,
-                    'rel_error': rel_error,
-                    'passed': passed
-                })
+                results.append(
+                    {
+                        "error_rate": error_rate,
+                        "stim": stim_ler,
+                        "symbolic": symbolic_ler,
+                        "rel_error": rel_error,
+                        "passed": passed,
+                    }
+                )
             else:
                 # STIM is zero
                 if symbolic_ler == 0:
                     print(f"  Both zero:    [PASS]")
-                    results.append({
-                        'error_rate': error_rate,
-                        'stim': stim_ler,
-                        'symbolic': symbolic_ler,
-                        'rel_error': 0,
-                        'passed': True
-                    })
+                    results.append(
+                        {
+                            "error_rate": error_rate,
+                            "stim": stim_ler,
+                            "symbolic": symbolic_ler,
+                            "rel_error": 0,
+                            "passed": True,
+                        }
+                    )
                 else:
                     print(f"  STIM zero but symbolic={symbolic_ler:.6e}: [FAIL]")
                     all_passed = False
-                    results.append({
-                        'error_rate': error_rate,
-                        'stim': stim_ler,
-                        'symbolic': symbolic_ler,
-                        'rel_error': float('inf'),
-                        'passed': False
-                    })
+                    results.append(
+                        {
+                            "error_rate": error_rate,
+                            "stim": stim_ler,
+                            "symbolic": symbolic_ler,
+                            "rel_error": float("inf"),
+                            "passed": False,
+                        }
+                    )
 
         # Summary
-        print(f"\n{'='*70}")
+        print(f"\n{'=' * 70}")
         print(f"SUMMARY: {circuit_name}")
-        print(f"{'='*70}")
-        print(f"{'Error Rate':<15} {'STIM':<15} {'Symbolic':<15} {'Rel Error':<12} {'Status'}")
-        print(f"{'-'*70}")
+        print(f"{'=' * 70}")
+        print(
+            f"{'Error Rate':<15} {'STIM':<15} {'Symbolic':<15} {'Rel Error':<12} {'Status'}"
+        )
+        print(f"{'-' * 70}")
 
         for r in results:
-            status = "PASS" if r['passed'] else "FAIL"
-            if r['rel_error'] == float('inf'):
-                print(f"{r['error_rate']:<15} {r['stim']:<15.6e} {r['symbolic']:<15.6e} {'N/A':<12} [{status}]")
+            status = "PASS" if r["passed"] else "FAIL"
+            if r["rel_error"] == float("inf"):
+                print(
+                    f"{r['error_rate']:<15} {r['stim']:<15.6e} {r['symbolic']:<15.6e} {'N/A':<12} [{status}]"
+                )
             else:
-                print(f"{r['error_rate']:<15} {r['stim']:<15.6e} {r['symbolic']:<15.6e} {r['rel_error']:<12.2%} [{status}]")
+                print(
+                    f"{r['error_rate']:<15} {r['stim']:<15.6e} {r['symbolic']:<15.6e} {r['rel_error']:<12.2%} [{status}]"
+                )
 
-        passed_count = sum(1 for r in results if r['passed'])
+        passed_count = sum(1 for r in results if r["passed"])
         print(f"\nPassed: {passed_count}/{len(results)}")
 
-        assert all_passed, \
-            f"Symbolic polynomial failed at {len(results)-passed_count} error rate(s)"
+        assert all_passed, (
+            f"Symbolic polynomial failed at {len(results) - passed_count} error rate(s)"
+        )
 
         print(f"\n[SUCCESS] Polynomial is accurate at all error rates")
 
     @pytest.mark.skip(reason="Disabled for faster testing")
-    def test_symbolic_vs_stim_repetition_code(self, error_rate_symbolic, symbolic_tolerance):
+    def test_symbolic_vs_stim_repetition_code(
+        self, error_rate_symbolic, symbolic_tolerance
+    ):
         """Test symbolic vs stim for repetition code."""
         import os
+
         base_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-            "stimprograms", "repetition"
+            "stimprograms",
+            "repetition",
         )
         filepath = os.path.join(base_path, "repetition3")
 
