@@ -34,6 +34,7 @@ from ..util import binomial_weight, format_with_uncertainty
 from .ScurveModel import *
 from .fitting import r_squared
 
+
 class StratifiedScurveLERcalc:
     """Stratified sampling LER estimator with S-curve fitting (legacy).
 
