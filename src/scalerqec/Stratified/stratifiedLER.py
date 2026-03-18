@@ -1,21 +1,23 @@
-import time
-
+from __future__ import annotations
+from typing import Optional
 import numpy as np
-import pymatching
-
-from ..Clifford.clifford import CliffordCircuit
 from ..qepg import (
-    compile_QEPG,
     return_samples_many_weights_separate_obs,
+    compile_QEPG,
     return_samples_many_weights_separate_obs_with_QEPG,
+    QEPGGraph,
+    return_samples_with_noise_vector,
 )
+from ..Clifford.clifford import *
+import pymatching
+import time
 from ..QEC.noisemodel import NoiseModel
 from ..QEC.qeccircuit import StabCode
-from ..util import binomial_weight, format_with_uncertainty, subspace_size
+from ..util import binomial_weight, subspace_size, format_with_uncertainty
 
 
-MIN_NUM_LE_EVENT = 50
-SAMPLE_GAP = 100
+MIN_NUM_LE_EVENT = 1000  # Increased from 50 for better accuracy
+SAMPLE_GAP = 500
 
 
 """
@@ -24,35 +26,37 @@ Use strafified sampling algorithm to calculate the logical error rate
 
 
 class StratifiedLERcalc:
-    def __init__(self, error_rate=0, sampleBudget=10000, num_subspace=30):
-        self._num_detector = 0
-        self._num_noise = 0
-        self._error_rate = error_rate
-        self._cliffordcircuit = CliffordCircuit(4)
+    def __init__(
+        self, error_rate: float = 0, sampleBudget: int = 10000, num_subspace: int = 30
+    ):
+        self._num_detector: int = 0
+        self._num_noise: int = 0
+        self._error_rate: float = error_rate
+        self._cliffordcircuit: CliffordCircuit = CliffordCircuit(4)
 
-        self._LER = 0
+        self._ler: float = 0
         """
         Use a dictionary to store the estimated subspace logical error rate
         """
-        self._estimated_subspaceLER = {}
-        self._subspace_LE_count = {}
-        self._subspace_sample_used = {}
+        self._estimated_subspaceLER: dict[int, float] = {}
+        self._subspace_LE_count: dict[int, int] = {}
+        self._subspace_sample_used: dict[int, int] = {}
 
-        self._sampleBudget = sampleBudget
-        self._num_subspace = num_subspace
-        self._minW = 0
-        self._maxW = 0
+        self._sampleBudget: int = sampleBudget
+        self._num_subspace: int = num_subspace
+        self._minW: int = 0
+        self._maxW: int = 0
 
-        self._stim_str_after_rewrite = ""
+        self._stim_str_after_rewrite: str = ""
 
-        self._sample_used = 0
-        self._uncertainty = 0
+        self._sample_used: int = 0
+        self._uncertainty: float = 0
 
-        self._circuit_level_code_distance = 1
+        self._circuit_level_code_distance: int = 1
 
-        self._QEPG_graph = None
+        self._QEPG_graph: Optional[QEPGGraph] = None
 
-    def parse_from_file(self, filepath):
+    def parse_from_file(self, filepath: str):
         """
         Read the circuit, parse from the file
         """
@@ -62,9 +66,14 @@ class StratifiedLERcalc:
 
         self._cliffordcircuit.error_rate = self._error_rate
         self._cliffordcircuit.compile_from_stim_circuit_str(stim_str)
-        self._num_noise = self._cliffordcircuit.totalnoise
-        self._num_detector = len(self._cliffordcircuit.parityMatchGroup)
         self._stim_str_after_rewrite = stim_str
+
+        # Compile QEPG graph and get the correct noise count from it
+        # IMPORTANT: Use QEPG's noise count, not clifford's totalnoise
+        # They differ because QEPG merges noise operations
+        self._QEPG_graph = compile_QEPG(stim_str)
+        self._num_noise = self._QEPG_graph.get_total_noise()
+        self._num_detector = self._QEPG_graph.get_total_detector()
 
         # Configure a decoder using the circuit.
         self._detector_error_model = (
@@ -76,9 +85,7 @@ class StratifiedLERcalc:
             self._detector_error_model
         )
 
-        self._QEPG_graph = compile_QEPG(stim_str)
-
-    def sample_all_subspace(self, shots_each_subspace=1000000):
+    def sample_all_subspace(self, shots_each_subspace: int = 1000000):
         """
         Aggressively sample all the subspace.
         This function is only used to test the correctness of the algorithm.
@@ -99,7 +106,7 @@ class StratifiedLERcalc:
         for w_idx, (w, quota) in enumerate(zip(wlist, slist)):
             observables = np.asarray(
                 obsresult[begin_index : begin_index + quota]
-            )  # (shots,)
+            ).ravel()  # (shots,)
             # 2. batch-decode (decode_batch should accept ndarray) -------------------
             # shape (shots,) or (shots,1)
             predictions = np.asarray(
@@ -118,28 +125,90 @@ class StratifiedLERcalc:
             # print(f"Logical error rate when w={w}: {self._estimated_subspaceLER[w]*binomial_weight(self._num_noise, w,self._error_rate):.6g}")
             begin_index += quota
 
-    def determine_range_to_sample(self, epsilon=0.01):
+    def sample_all_subspace_sequential(self, shots_each_subspace: int = 1000000):
+        """
+        Sample all subspaces using return_samples_with_noise_vector (sequential version).
+        This function uses the fixed sequential C++ function for verification.
+        """
+        wlist = list(range(0, self._num_noise + 1))
+
+        # Initialize counters
+        for w in wlist:
+            self._subspace_LE_count[w] = 0
+            self._estimated_subspaceLER[w] = 0
+            self._subspace_sample_used[w] = shots_each_subspace
+
+        # Sample each weight separately using the sequential function
+        for w in wlist:
+            if w == 0:
+                # Weight 0: no errors, no logical errors
+                self._subspace_LE_count[w] = 0
+                self._estimated_subspaceLER[w] = 0.0
+                continue
+
+            # Use return_samples_with_noise_vector for this weight
+            # Returns (noise_vectors, results) where results is list of [det0, det1, ..., detN, observable]
+            _noise_vectors, results = return_samples_with_noise_vector(
+                self._stim_str_after_rewrite, w, shots_each_subspace
+            )
+
+            # Convert to numpy array for easier manipulation
+            results_array = np.array(
+                results, dtype=bool
+            )  # shape: (shots, num_detectors+1)
+
+            # Split into detectors and observables
+            detectors = results_array[:, :-1]  # All columns except last
+            observables = results_array[:, -1]  # Last column
+
+            # Decode detectors
+            predictions = self._matcher.decode_batch(detectors)
+            predictions = np.asarray(predictions).ravel()
+            observables = observables.ravel()
+
+            # Count mismatches
+            num_errors = np.count_nonzero(observables != predictions)
+
+            self._subspace_LE_count[w] = num_errors
+            self._estimated_subspaceLER[w] = (
+                self._subspace_LE_count[w] / self._subspace_sample_used[w]
+            )
+
+    def determine_range_to_sample(self):
         """
         We need to be exact about the range of w we want to sample.
         We don't want to sample too many subspaces, especially those subspaces with tiny binomial weights.
         This should comes from the analysis of the weight of each subspace.
 
-        We use the standard deviation to approimxate the range
+        We use the standard deviation to approximate the range
         """
         sigma = int(
-            np.sqrt(self._error_rate * (1 - self._error_rate) * self._num_noise)
+            (self._error_rate * (1 - self._error_rate) * self._num_noise) ** 0.5
         )
         if sigma == 0:
             sigma = 1
         ep = int(self._error_rate * self._num_noise)
         self._minW = max(1, ep - 5 * sigma)
-        self._maxW = max(2, ep + 5 * sigma)
+        # Cap at num_noise to avoid exceeding available noise sources
+        # The C++ sampler now handles weight == num_noise correctly via removal strategy
+        self._maxW = max(2, min(self._num_noise, ep + 5 * sigma))
+
+        # Ensure we sample at least 10 weights for better coverage
+        if self._maxW - self._minW + 1 < 10:
+            # Expand range symmetrically around the mean
+            needed = 10 - (self._maxW - self._minW + 1)
+            expand_left = needed // 2
+            expand_right = needed - expand_left
+            self._minW = max(1, self._minW - expand_left)
+            self._maxW = min(self._num_noise, self._maxW + expand_right)
 
     def subspace_sampling(self):
         """
         Sample around the subspaces.
         """
         self.determine_range_to_sample()
+
+        # print("Sampling weights from {} to {}".format(self._minW,self._maxW))
         """
         wlist store the subset of weights we need to sample and get
         correct logical error rate.
@@ -232,6 +301,10 @@ class StratifiedLERcalc:
             # print("wlist: ",wlist)
             # print("slist: ",slist)
             # detector_result,obsresult=return_samples_many_weights_separate_obs(self._stim_str_after_rewrite,wlist,slist)
+            assert self._QEPG_graph is not None, (
+                "QEPG graph must be initialized before sampling"
+            )
+
             detector_result, obsresult = (
                 return_samples_many_weights_separate_obs_with_QEPG(
                     self._QEPG_graph, wlist, slist
@@ -244,7 +317,7 @@ class StratifiedLERcalc:
             for w_idx, (w, quota) in enumerate(zip(wlist, slist)):
                 observables = np.asarray(
                     obsresult[begin_index : begin_index + quota]
-                )  # (shots,)
+                ).ravel()  # (shots,)
                 predictions = np.asarray(
                     predictions_result[begin_index : begin_index + quota]
                 ).ravel()
@@ -268,31 +341,93 @@ class StratifiedLERcalc:
     # ----------------------------------------------------------------------
     # Calculate logical error rate
     # The input is a list of rows with logical errors
-    def calculate_LER(self):
-        self._LER = 0
+    def calculate_LER(self, debug=False):
+        self._ler: float = 0
+
+        if debug:
+            print(f"\n{'=' * 90}")
+            print(f"DEBUG: calculate_LER() - Combining subspace results")
+            print(f"{'=' * 90}")
+            print(f"  Total noise sources: {self._num_noise}")
+            print(f"  Error rate: {self._error_rate}")
+            print(
+                f"\n  {'Weight':<8} {'Samples':<12} {'LE Count':<12} {'P(LE|w)':<15} {'P(w)':<15} {'Contribution':<15}"
+            )
+            print(f"  {'-' * 8} {'-' * 12} {'-' * 12} {'-' * 15} {'-' * 15} {'-' * 15}")
+
+        contributions = []
         for weight in range(1, self._num_noise + 1):
             if weight in self._estimated_subspaceLER.keys():
-                self._LER += self._estimated_subspaceLER[weight] * binomial_weight(
-                    self._num_noise, weight, self._error_rate
-                )
-        return self._LER
+                p_le_given_w = self._estimated_subspaceLER[weight]
+                p_w = binomial_weight(self._num_noise, weight, self._error_rate)
+                contribution = p_le_given_w * p_w
+                self._ler += contribution
 
-    def get_LER_subspace_no_weight(self, weight):
+                if debug:
+                    samples = self._subspace_sample_used.get(weight, 0)
+                    le_count = self._subspace_LE_count.get(weight, 0)
+                    print(
+                        f"  {weight:<8} {samples:<12,} {le_count:<12,} {p_le_given_w:<15.6e} {p_w:<15.6e} {contribution:<15.6e}"
+                    )
+                    contributions.append((weight, contribution))
+
+        if debug:
+            print(f"  {'-' * 90}")
+            print(f"  Total LER: {self._ler:.6e}")
+
+            # Show top 5 contributors
+            contributions.sort(key=lambda x: x[1], reverse=True)
+            print(f"\n  Top 5 contributing weights:")
+            for i, (w, contrib) in enumerate(contributions[:5]):
+                pct = 100 * contrib / self._ler if self._ler > 0 else 0
+                print(f"    {i + 1}. Weight {w}: {contrib:.6e} ({pct:.1f}% of total)")
+            print(f"{'=' * 90}\n")
+
+        return self._ler
+
+    def get_LER_subspace_no_weight(self, weight: int):
         return self._estimated_subspaceLER[weight]
 
-    def get_LER_subspace(self, weight):
+    def get_LER_subspace(self, weight: int):
         return self._estimated_subspaceLER[weight] * binomial_weight(
             self._num_noise, weight, self._error_rate
         )
 
-    def calculate_LER_from_file(self, filepath, pvalue):
-        pass
+    def calculate_LER_from_file(self, filepath: str, pvalue: float, repeat: int):
+        self.parse_from_file(filepath)
+        self._error_rate = pvalue
+        ler_list: list[float] = []
+        sample_used_list: list[int] = []
+        time_list: list[float] = []
+
+        for i in range(repeat):
+            starttime = time.perf_counter()
+
+            self.subspace_sampling()
+            self.calculate_LER()
+            ler_list.append(self._ler)
+            sample_used_list.append(self._sample_used)
+            endtime = time.perf_counter()
+            time_list.append(endtime - starttime)
+
+        average_LER = sum(ler_list) / len(ler_list)
+        average_sample_used = sum(sample_used_list) / len(sample_used_list)
+        time_mean = sum(time_list) / len(time_list)
+        ler_std: float = float(np.std(ler_list))
+        sample_used_std: float = float(np.std(sample_used_list))
+        time_std: float = float(np.std(time_list))
+        print(
+            "Samples(ours): ",
+            format_with_uncertainty(average_sample_used, sample_used_std),
+        )
+        print("Time(our): ", format_with_uncertainty(time_mean, time_std))
+        print("PL(ours): ", format_with_uncertainty(average_LER, ler_std))
 
     def clear_all(self):
         pass
 
     def calculate_LER_from_StabCode(
-        self, qeccirc: StabCode, noise_model: NoiseModel, repeat=1
+        self, qeccirc: StabCode, noise_model: NoiseModel, repeat: int = 1
     ):
         qeccirc.construct_IR_standard_scheme()
         qeccirc.compile_stim_circuit_from_IR_standard()
@@ -314,16 +449,16 @@ class StratifiedLERcalc:
         )
         self._QEPG_graph = compile_QEPG(self._stim_str_after_rewrite)
 
-        ler_list = []
-        sample_used_list = []
-        time_list = []
+        ler_list: list[float] = []
+        sample_used_list: list[int] = []
+        time_list: list[float] = []
 
         for i in range(repeat):
             starttime = time.perf_counter()
 
             self.subspace_sampling()
             self.calculate_LER()
-            ler_list.append(self._LER)
+            ler_list.append(self._ler)
             sample_used_list.append(self._sample_used)
             endtime = time.perf_counter()
             time_list.append(endtime - starttime)
@@ -331,9 +466,9 @@ class StratifiedLERcalc:
         average_LER = sum(ler_list) / len(ler_list)
         average_sample_used = sum(sample_used_list) / len(sample_used_list)
         time_mean = sum(time_list) / len(time_list)
-        ler_std = np.std(ler_list)
-        sample_used_std = np.std(sample_used_list)
-        time_std = np.std(time_list)
+        ler_std: float = float(np.std(ler_list))
+        sample_used_std: float = float(np.std(sample_used_list))
+        time_std: float = float(np.std(time_list))
         print(
             "Samples(ours): ",
             format_with_uncertainty(average_sample_used, sample_used_std),

@@ -1,24 +1,52 @@
+from __future__ import annotations
+
+"""
+Legacy S-curve model functions.
+
+This module contains the original S-curve model functions for backward compatibility.
+For new code, prefer using the model classes from scalerqec.Stratified.models:
+
+    from scalerqec.Stratified.models import OurScurveModel, IBMScurveModel, ModelFactory
+
+The new model classes provide:
+- Abstract base class for polymorphism
+- Support for multiple model types (Our Model, IBM Model)
+- Tunable gamma parameter for sweet spot calculation
+- Better separation of concerns
+
+DEPRECATION NOTE:
+These functions are maintained for backward compatibility but may be removed
+in a future version. Please migrate to the new model classes.
+"""
+
+import warnings
 import numpy as np
+from typing import Callable
+from numpy.typing import NDArray
 
 
-def scurve_function(x, center, sigma):
-    return 0.5 / (1 + np.exp(-(x - center) / sigma))
+def scurve_function(x: float, center: float, sigma: float) -> float:
+    return float(0.5 / (1 + np.exp(-(x - center) / sigma)))
     # return 0*x
 
 
 # Define the inverse transform: y → 1/2 * 1 / (1 + e^y)
-def inv_logit_half(y):
-    return 0.5 / (1 + np.exp(y))
+def inv_logit_half(y: float) -> float:
+    return float(0.5 / (1 + np.exp(y)))
 
 
-def linear_function(x, a, b):
+def linear_function(
+    x: float | NDArray[np.floating], a: float, b: float
+) -> float | NDArray[np.floating]:
     """
     Linear function for curve fitting.
     """
-    return a * x + b
+    return a * x + b  # type: ignore[return-value]
 
 
-def modified_linear_function_with_d(x, a, b, c, d):
+def modified_linear_function_with_d(
+    x: float | NDArray[np.floating], a: float, b: float, c: float, d: float
+) -> float | NDArray[np.floating]:
     eps = 1e-12
     delta = (x - d) ** 0.5
     delta = np.where(np.abs(delta) < eps, np.sign(delta) * eps, delta)
@@ -26,14 +54,18 @@ def modified_linear_function_with_d(x, a, b, c, d):
 
 
 # Strategy A: keep the model safe near the pole
-def modified_linear_function(d):
-    def tempfunc(x, a, b, c, d=d):
+def modified_linear_function(
+    d: float,
+) -> Callable[[float, float, float, float, float], float]:
+    def tempfunc(x: float, a: float, b: float, c: float, d: float = d) -> float:
         return modified_linear_function_with_d(x, a, b, c, d)
 
     return tempfunc
 
 
-def modified_sigmoid_function(x, a, b, c, d):
+def modified_sigmoid_function(
+    x: float | NDArray[np.floating], a: float, b: float, c: float, d: float
+) -> float | NDArray[np.floating]:
     """
     Modified sigmoid function for curve fitting.
     This function is used to fit the S-curve.
@@ -45,14 +77,14 @@ def modified_sigmoid_function(x, a, b, c, d):
     return y
 
 
-def quadratic_function(x, a, b, c):
+def quadratic_function(x: float, a: float, b: float, c: float) -> float:
     """
     Linear function for curve fitting.
     """
     return a * x**2 + b * x + c
 
 
-def poly_function(x, a, b, c, d):
+def poly_function(x: float, a: float, b: float, c: float, d: float) -> float:
     """
     Linear function for curve fitting.
     """
@@ -60,11 +92,13 @@ def poly_function(x, a, b, c, d):
 
 
 # Redefine turning point where the 2nd term is still significant in dy/dw
-def refined_sweet_spot(alpha, beta, t, ratio=0.05):
+def refined_sweet_spot(
+    alpha: float, beta: float, t: float, ratio: float = 0.05
+) -> float:
     # We define turning point by solving: 1/alpha = ratio * (1/2) * beta / (w - t)^{3/2}
     # => (w - t)^{3/2} = (ratio * beta * alpha) / 2
     # => w = t + [(ratio * beta * alpha / 2)]^{2/3}
-    return t + ((ratio * beta * alpha / 2) ** (2 / 3))
+    return float(t + ((ratio * beta * alpha / 2) ** (2 / 3)))
 
 
 """
@@ -72,8 +106,8 @@ Return the estimated sigma of y(w)
 """
 
 
-def sigma_estimator(N, M):
-    return np.sqrt(N**2 * (N - M) / (M * (N - 1) * (N - 2 * M) ** 2))
+def sigma_estimator(N: int, M: int) -> float:
+    return float(np.sqrt(N**2 * (N - M) / (M * (N - 1) * (N - 2 * M) ** 2)))
 
 
 """
@@ -81,11 +115,11 @@ Return the estimated sigma of Pw
 """
 
 
-def subspace_sigma_estimator(N, M):
-    return np.sqrt(M * (N - M) / (N - 1)) / N
+def subspace_sigma_estimator(N: int, M: int) -> float:
+    return float(np.sqrt(M * (N - M) / (N - 1)) / N)
 
 
-def bias_estimator(N, M):
+def bias_estimator(N: int, M: int) -> float:
     """
     Bias = E[y(w)] - y(w)
     Estimated by: (1/2) * f''(P_w) * Var(P_w)
@@ -99,7 +133,7 @@ def bias_estimator(N, M):
     return 1 / 2 * (N / M) * (N - 4 * M) / (N - 2 * M) ** 2 * (N - M) / (N - 1)
 
 
-def show_bias_estimator(N, M):
+def show_bias_estimator(N: int, M: int) -> float:
     """
     Bias = E[y(w)] - y(w)
     Estimated by: (1/2) * f''(P_w) * Var(P_w)
@@ -109,7 +143,7 @@ def show_bias_estimator(N, M):
     return (1 - Pw) / (2 * Pw * N)
 
 
-def evenly_spaced_ints(minw, maxw, N):
+def evenly_spaced_ints(minw: int, maxw: int, N: int) -> list[int]:
     if N == 1:
         return [minw]
     if N > (maxw - minw + 1):

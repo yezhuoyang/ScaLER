@@ -1,7 +1,15 @@
+from __future__ import annotations
+
+from typing import Sequence
 import numpy as np
+import numpy.typing as npt
+
+FloatArray = npt.NDArray[np.float64]
 
 
-def r_squared(y_true, y_pred, clip=False):
+def r_squared(
+    y_true: Sequence[float], y_pred: Sequence[float], clip: bool = False
+) -> float:
     """
     Compute the coefficient of determination (R²).
 
@@ -19,14 +27,14 @@ def r_squared(y_true, y_pred, clip=False):
     float
         The R² statistic.
     """
-    y_true = np.asarray(y_true, dtype=float)
-    y_pred = np.asarray(y_pred, dtype=float)
+    yt: FloatArray = np.asarray(y_true, dtype=np.float64)
+    yp: FloatArray = np.asarray(y_pred, dtype=np.float64)
 
-    if y_true.shape != y_pred.shape:
+    if yt.shape != yp.shape:
         raise ValueError("y_true and y_pred must have the same shape")
 
-    ss_res = np.sum((y_true - y_pred) ** 2)  # residual sum of squares
-    ss_tot = np.sum((y_true - y_true.mean()) ** 2)  # total sum of squares
+    ss_res = np.sum((yt - yp) ** 2)  # residual sum of squares
+    ss_tot = np.sum((yt - yt.mean()) ** 2)  # total sum of squares
 
     # Handle the degenerate case where variance is zero
     if ss_tot == 0.0:

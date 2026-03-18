@@ -496,7 +496,7 @@ def verify_small_code_logical_operators():
     """
     Verify logical operators for small codes: five-qubit code, Steane code, and Shor code.
     """
-    from small import fivequbitCode, steaneCode, ShorCode
+    from .small import fivequbitCode, steaneCode, ShorCode
 
     codes = [fivequbitCode("Standard"), steaneCode("Standard"), ShorCode("Standard")]
     for code in codes:
@@ -524,7 +524,7 @@ def verify_surface_code_logical_operators():
     """
     Verify logical operators for surface codes of various sizes.
     """
-    from .qeccircuit import generate_surface_code
+    from .qeccircuit import generate_surface_code  # type: ignore[attr-defined]
 
     sizes = [3, 5, 7]
     for size in sizes:
@@ -550,7 +550,7 @@ def check_stabilizer_for_small_code():
     """
     Check stabilizer commutation for small codes: five-qubit code, Steane code, and Shor code.
     """
-    from small import fivequbitCode, steaneCode, ShorCode
+    from .small import fivequbitCode, steaneCode, ShorCode
 
     codes = [fivequbitCode("Standard"), steaneCode("Standard"), ShorCode("Standard")]
     for code in codes:
@@ -566,7 +566,7 @@ def find_logical_X_for_small_code():
     """
     Find and print logical X operators for small codes: five-qubit code, Steane code, and Shor code.
     """
-    from small import fivequbitCode, steaneCode, ShorCode
+    from .small import fivequbitCode, steaneCode, ShorCode
 
     codes = [fivequbitCode("Standard"), steaneCode("Standard"), ShorCode("Standard")]
     for code in codes:
@@ -581,7 +581,7 @@ def find_logical_H_for_small_code():
     """
     Find and print logical H operators for small codes: five-qubit code, Steane code, and Shor code.
     """
-    from small import fivequbitCode, steaneCode, ShorCode
+    from .small import fivequbitCode, steaneCode, ShorCode
 
     codes = [fivequbitCode("Standard"), steaneCode("Standard"), ShorCode("Standard")]
     for code in codes:
@@ -596,7 +596,7 @@ def find_logical_S_for_small_code():
     """
     Find and print logical S operators for small codes: five-qubit code, Steane code, and Shor code.
     """
-    from small import fivequbitCode, steaneCode, ShorCode
+    from .small import fivequbitCode, steaneCode, ShorCode
 
     codes = [fivequbitCode("Standard"), steaneCode("Standard"), ShorCode("Standard")]
     for code in codes:

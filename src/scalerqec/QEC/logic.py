@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 # This is the file define the semantic of logical circuits
 # This is useful for Magic state distillation which works on logical level
 import re
+from .qeccircuit import StabCode
 
 
 """
@@ -252,35 +255,34 @@ class LogicalCircuit:
         """
         Check if the gate is compatible with the code blocks
         """
-        gate_type = gate.type
-        if gate_type in ("H", "T", "Measure", "Reset"):
+        if gate.type in ("H", "T", "Measure", "Reset"):
             # Single-qubit gates
-            if gate._index >= gate._block._k:
+            if gate._index >= gate._block._k:  # type: ignore[attr-defined]
                 raise ValueError(
                     f"Index {gate._index} out of range for block {gate._block._name} with {gate._block._k} logical qubits."
-                )
+                )  # type: ignore[attr-defined]
             self.gates.append(gate)
-        elif gate_type == "CNOT":
+        elif gate.type == "CNOT":
             # Two-qubit gates
-            if gate._control_index >= gate._control_block._k:
+            if gate._control_index >= gate._control_block._k:  # type: ignore[attr-defined]
                 raise ValueError(
                     f"Control index {gate._control_index} out of range for block {gate._control_block._name} with {gate._control_block._k} logical qubits."
-                )
-            if gate._target_index >= gate._target_block._k:
+                )  # type: ignore[attr-defined]
+            if gate._target_index >= gate._target_block._k:  # type: ignore[attr-defined]
                 raise ValueError(
                     f"Target index {gate._target_index} out of range for block {gate._target_block._name} with {gate._target_block._k} logical qubits."
-                )
+                )  # type: ignore[attr-defined]
             self.gates.append(gate)
-        elif gate_type == "InjectT":
-            if gate._dest_index >= gate._dest_block._k:
+        elif gate.type == "InjectT":
+            if gate._dest_index >= gate._dest_block._k:  # type: ignore[attr-defined]
                 raise ValueError(
                     f"Index {gate._dest_index} out of range for block {gate._dest_block._name} with {gate._dest_block._k} logical qubits."
-                )
-            if gate._MGT_handle not in self._MGT_handles:
-                raise ValueError(f"Magic T handle {gate._MGT_handle} not recognized.")
+                )  # type: ignore[attr-defined]
+            if gate._MGT_handle not in self._MGT_handles:  # type: ignore[attr-defined]
+                raise ValueError(f"Magic T handle {gate._MGT_handle} not recognized.")  # type: ignore[attr-defined]
             self.gates.append(gate)
         else:
-            raise ValueError(f"Unsupported gate type: {gate_type}")
+            raise ValueError(f"Unsupported gate type: {gate.type}")
 
     def __repr__(self):
         output = ""
