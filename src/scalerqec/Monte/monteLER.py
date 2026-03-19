@@ -327,12 +327,10 @@ class MonteLERcalc:
         noise_model = extract_noise_model(stim_circuit_str)
 
         # 3. Compile QEPG from normalized circuit (Python + C++ backend)
+        # The error_rate here is a placeholder — it populates DEPOLARIZE1 in the
+        # compiled circuit structure, but actual sampling uses noise_model probabilities.
         circuit = CliffordCircuit(2)
-        # TODO: [Review-P1] Placeholder error rate gets baked into the intermediate
-        # STIM circuit's DEPOLARIZE1 instructions. The actual sampling uses noise_model
-        # probabilities, but this creates a confusing intermediate state. Consider
-        # compiling the QEPG without injecting any noise into the stim.Circuit.
-        circuit.error_rate = 0.001  # placeholder; actual rates from noise_model
+        circuit.error_rate = 0.001
         circuit.compile_from_stim_circuit_str(normalized)
 
         graph = QEPGpython(circuit)
@@ -345,11 +343,15 @@ class MonteLERcalc:
         except Exception:
             graph._cpp_graph = None
 
-        # TODO: [Review-P1] Silent truncation/padding of noise model hides bugs.
-        # A mismatch between parser and QEPG compiler likely indicates a bug in
-        # _GATE_NOISE_COUNT. Should log a warning or raise in debug mode.
         qepg_noise = circuit.totalnoise
         if noise_model.num_noise != qepg_noise:
+            import warnings
+            warnings.warn(
+                f"Noise model has {noise_model.num_noise} sources but QEPG has "
+                f"{qepg_noise}. This may indicate a bug in _GATE_NOISE_COUNT. "
+                f"Resizing noise_probs to match QEPG.",
+                stacklevel=2,
+            )
             # Resize noise_probs to match QEPG if needed
             if noise_model.num_noise < qepg_noise:
                 padded = np.zeros((qepg_noise, 3), dtype=np.float64)
