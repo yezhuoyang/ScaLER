@@ -58,7 +58,7 @@ ext_modules = [
 
 setuptools.setup(
     name="scalerqec",
-    version="0.0.1",
+    version="1.0.0",
     description="Scalable Quantum Error Correction testing Tools for logical error rate and software correctness",
     author="John Ye",
     packages=setuptools.find_packages(where="src"),
