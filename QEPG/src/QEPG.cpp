@@ -21,10 +21,7 @@ QEPG::QEPG(){
 
 }
 
-// TODO: [Review-P1-Perf] Constructor takes cliffordcircuit BY VALUE, copying the
-// entire gate vector, parity groups, and measurement mappings. Change to
-// const reference or move semantics to avoid O(N) copy.
-QEPG::QEPG(clifford::cliffordcircuit othercircuit, size_t total_detectors, size_t total_noise):
+QEPG::QEPG(const clifford::cliffordcircuit& othercircuit, size_t total_detectors, size_t total_noise):
                     circuit_(othercircuit),
                     total_detectors_(total_detectors),
                     total_noise_(total_noise),

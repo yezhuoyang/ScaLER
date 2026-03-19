@@ -170,7 +170,7 @@ class QEPG{
          * @param total_detectors Number of detectors in the circuit.
          * @param total_noise     Number of depolarizing noise locations.
          */
-        QEPG(clifford::cliffordcircuit othercircuit, size_t total_detectors, size_t total_noise);
+        QEPG(const clifford::cliffordcircuit& othercircuit, size_t total_detectors, size_t total_noise);
 
         /// @brief Destructor.
         ~QEPG();
