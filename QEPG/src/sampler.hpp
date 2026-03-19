@@ -20,7 +20,9 @@
 #include <random>
 #include <cstring>
 #include "QEPG.hpp"
-#include <omp.h>          // just include and -fopenmp / /openmp
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 
 namespace SAMPLE{
 
