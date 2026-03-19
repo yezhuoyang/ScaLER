@@ -107,11 +107,6 @@ MAX_SAMPLE_GAP: int = 500000
 """Maximum batch size that adaptive batching is allowed to grow to."""
 
 
-# TODO: [Review-P2-Maintainability] The adaptive batching loop is copy-pasted 5 times
-# across calculate_LER_from_StabCode, calculate_LER_from_stim_circuit,
-# calculate_LER_from_my_random_sampler, calculate_LER_from_file_sinter, and
-# calculate_LER_from_file. Extract into a single private method
-# _adaptive_monte_carlo(sample_fn, decode_fn) to reduce ~400 lines of duplication.
 class MonteLERcalc:
     """Adaptive Monte Carlo estimator for logical error rates.
 
