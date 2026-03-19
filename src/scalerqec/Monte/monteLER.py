@@ -19,13 +19,10 @@ sample/time budget is exhausted.
 
 from __future__ import annotations
 from typing import Optional
-# TODO: [Review-P2-Maintainability] Wildcard imports pollute namespace and make
-# it impossible to know which names come from where. Use explicit imports:
-# from ..Clifford.clifford import CliffordCircuit
-# from ..Clifford.stimparser import rewrite_stim_code
-from ..Clifford.clifford import *
+from ..Clifford.clifford import CliffordCircuit
+from ..Clifford.stimparser import rewrite_stim_code
 import pymatching
-from ..Clifford.stimparser import *
+import stim
 import time
 import os
 from contextlib import redirect_stdout
