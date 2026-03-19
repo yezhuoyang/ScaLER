@@ -331,6 +331,7 @@ class MonteLERcalc:
         # Attach C++ QEPG graph for accelerated sampling
         try:
             from scalerqec import qepg as qepg_cpp
+
             graph._cpp_graph = qepg_cpp.compile_QEPG(normalized)
         except Exception:
             graph._cpp_graph = None
@@ -338,6 +339,7 @@ class MonteLERcalc:
         qepg_noise = circuit.totalnoise
         if noise_model.num_noise != qepg_noise:
             import warnings
+
             warnings.warn(
                 f"Noise model has {noise_model.num_noise} sources but QEPG has "
                 f"{qepg_noise}. This may indicate a bug in _GATE_NOISE_COUNT. "
@@ -347,7 +349,7 @@ class MonteLERcalc:
             # Resize noise_probs to match QEPG if needed
             if noise_model.num_noise < qepg_noise:
                 padded = np.zeros((qepg_noise, 3), dtype=np.float64)
-                padded[:noise_model.num_noise] = noise_model.noise_probs
+                padded[: noise_model.num_noise] = noise_model.noise_probs
                 noise_model.noise_probs = padded
                 noise_model.num_noise = qepg_noise
             else:
@@ -356,9 +358,7 @@ class MonteLERcalc:
 
         # 4. Build decoder from the ORIGINAL noisy circuit's DEM
         stim_circuit = stim.Circuit(stim_circuit_str)
-        detector_error_model = stim_circuit.detector_error_model(
-            decompose_errors=True
-        )
+        detector_error_model = stim_circuit.detector_error_model(decompose_errors=True)
         matcher = pymatching.Matching.from_detector_error_model(detector_error_model)
 
         # 5. Adaptive batching with non-uniform sampling
@@ -385,7 +385,9 @@ class MonteLERcalc:
             ler_count += num_errors
             sampleused += SAMPLE_GAP_INITIAL
 
-            while ler_count < self._min_num_ke_event and sampleused < self._samplebudget:
+            while (
+                ler_count < self._min_num_ke_event and sampleused < self._samplebudget
+            ):
                 if ler_count == 0:
                     current_sample_gap = sampleused * 10
                     current_sample_gap = min(current_sample_gap, MAX_SAMPLE_GAP)

@@ -22,17 +22,17 @@ _1Q_PASSTHROUGH = {"H", "S", "M", "R", "X", "Y", "Z"}
 # Single-qubit gates decomposed to primitive sequences.
 # Each value is a list of primitive gate names to emit per qubit.
 _1Q_DECOMPOSITIONS = {
-    "S_DAG":      ["S", "S", "S"],
-    "MX":         ["H", "M"],
-    "MY":         ["S", "S", "S", "H", "M"],
-    "MR":         ["M", "R"],
-    "MRX":        ["H", "M", "R", "H"],
-    "MRY":        ["S", "S", "S", "H", "M", "R", "S", "S", "S", "H"],
-    "RX":         ["R", "H"],
-    "RY":         ["R", "S", "S", "S", "H"],
-    "SQRT_X":     ["H", "S", "H"],
+    "S_DAG": ["S", "S", "S"],
+    "MX": ["H", "M"],
+    "MY": ["S", "S", "S", "H", "M"],
+    "MR": ["M", "R"],
+    "MRX": ["H", "M", "R", "H"],
+    "MRY": ["S", "S", "S", "H", "M", "R", "S", "S", "S", "H"],
+    "RX": ["R", "H"],
+    "RY": ["R", "S", "S", "S", "H"],
+    "SQRT_X": ["H", "S", "H"],
     "SQRT_X_DAG": ["H", "S", "S", "S", "H"],
-    "SQRT_Y":     ["S", "H"],
+    "SQRT_Y": ["S", "H"],
     "SQRT_Y_DAG": ["H", "S"],
 }
 
@@ -51,9 +51,13 @@ _ANNOTATION_KEYWORDS = {"TICK", "DETECTOR", "QUBIT_COORDS", "OBSERVABLE_INCLUDE"
 # Noise/metadata directives stripped by the normalizer.
 # Matched by first token (with any trailing '(' stripped).
 _NOISE_KEYWORDS = {
-    "X_ERROR", "Y_ERROR", "Z_ERROR",
-    "DEPOLARIZE1", "DEPOLARIZE2",
-    "PAULI_CHANNEL_1", "PAULI_CHANNEL_2",
+    "X_ERROR",
+    "Y_ERROR",
+    "Z_ERROR",
+    "DEPOLARIZE1",
+    "DEPOLARIZE2",
+    "PAULI_CHANNEL_1",
+    "PAULI_CHANNEL_2",
     "SHIFT_COORDS",
 }
 
@@ -61,6 +65,7 @@ _NOISE_KEYWORDS = {
 # ---------------------------------------------------------------------------
 # Core rewrite logic
 # ---------------------------------------------------------------------------
+
 
 def _rewrite(code: str) -> str:
     """Normalize a STIM program so each line has at most one gate operation.
@@ -141,6 +146,7 @@ def _rewrite(code: str) -> str:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 class stimparser:
     """Utility class for normalizing STIM circuit programs.

@@ -249,18 +249,19 @@ class QEPGpython:
         )
 
         # Use C++ backend if available
-        if hasattr(self, '_cpp_graph') and self._cpp_graph is not None:
+        if hasattr(self, "_cpp_graph") and self._cpp_graph is not None:
             from scalerqec import qepg as qepg_cpp
 
             probs = np.ascontiguousarray(noise_probs, dtype=np.float64)
 
             if correlated_pairs:
-                corr_a = np.array([p.source_a for p in correlated_pairs],
-                                  dtype=np.uint64)
-                corr_b = np.array([p.source_b for p in correlated_pairs],
-                                  dtype=np.uint64)
-                corr_p = np.array([p.prob for p in correlated_pairs],
-                                  dtype=np.float64)
+                corr_a = np.array(
+                    [p.source_a for p in correlated_pairs], dtype=np.uint64
+                )
+                corr_b = np.array(
+                    [p.source_b for p in correlated_pairs], dtype=np.uint64
+                )
+                corr_p = np.array([p.prob for p in correlated_pairs], dtype=np.float64)
             else:
                 corr_a = np.empty(0, dtype=np.uint64)
                 corr_b = np.empty(0, dtype=np.uint64)
@@ -310,6 +311,7 @@ class QEPGpython:
 
         if correlated_pairs:
             from ..Monte.noise_model_parser import TWO_QUBIT_PAULIS
+
             for pair in correlated_pairs:
                 fire = rng.random(num_shots) < pair.prob
                 num_fired = np.count_nonzero(fire)

@@ -28,11 +28,21 @@ from ..Clifford.stimparser import (
 # The 15 non-identity two-qubit Paulis for DEPOLARIZE2.
 # Each tuple is (pauli_on_qubit_a, pauli_on_qubit_b) where 0=I, 1=X, 2=Y, 3=Z.
 TWO_QUBIT_PAULIS = [
-    (1, 0), (2, 0), (3, 0),           # XI, YI, ZI
-    (0, 1), (0, 2), (0, 3),           # IX, IY, IZ
-    (1, 1), (1, 2), (1, 3),           # XX, XY, XZ
-    (2, 1), (2, 2), (2, 3),           # YX, YY, YZ
-    (3, 1), (3, 2), (3, 3),           # ZX, ZY, ZZ
+    (1, 0),
+    (2, 0),
+    (3, 0),  # XI, YI, ZI
+    (0, 1),
+    (0, 2),
+    (0, 3),  # IX, IY, IZ
+    (1, 1),
+    (1, 2),
+    (1, 3),  # XX, XY, XZ
+    (2, 1),
+    (2, 2),
+    (2, 3),  # YX, YY, YZ
+    (3, 1),
+    (3, 2),
+    (3, 3),  # ZX, ZY, ZZ
 ]
 
 
@@ -45,6 +55,7 @@ class CorrelatedNoisePair:
         source_b: QEPG noise source index for the second qubit.
         prob: Total DEPOLARIZE2 probability (each of 15 Paulis has prob/15).
     """
+
     source_a: int
     source_b: int
     prob: float
@@ -62,6 +73,7 @@ class NonuniformNoiseModel:
         correlated_source_indices: Set of noise source indices involved
             in DEPOLARIZE2 pairs.
     """
+
     noise_probs: np.ndarray
     correlated_pairs: list[CorrelatedNoisePair] = field(default_factory=list)
     num_noise: int = 0
@@ -88,13 +100,20 @@ def _build_gate_noise_count() -> dict[str, int]:
         counts[gate] = sum(2 if which == "ct" else 1 for _, which in seq)
     return counts
 
+
 _GATE_NOISE_COUNT: dict[str, int] = _build_gate_noise_count()
 
 # Noise directives recognized from Stim
 _NOISE_CHANNELS = {"DEPOLARIZE1", "DEPOLARIZE2", "X_ERROR", "Y_ERROR", "Z_ERROR"}
 
 # Annotation/metadata instructions (no noise sources)
-_ANNOTATIONS = {"TICK", "QUBIT_COORDS", "SHIFT_COORDS", "DETECTOR", "OBSERVABLE_INCLUDE"}
+_ANNOTATIONS = {
+    "TICK",
+    "QUBIT_COORDS",
+    "SHIFT_COORDS",
+    "DETECTOR",
+    "OBSERVABLE_INCLUDE",
+}
 
 
 def _flatten_stim_circuit(circuit: stim.Circuit):
@@ -220,8 +239,9 @@ def extract_noise_model(original_circuit_str: str) -> NonuniformNoiseModel:
                 dep2_key = (q1, q2)
                 if dep2_key in pending_2q:
                     p = pending_2q.pop(dep2_key)
-                    correlated_pairs.append(CorrelatedNoisePair(
-                        source_a=ctrl_idx, source_b=tgt_idx, prob=p))
+                    correlated_pairs.append(
+                        CorrelatedNoisePair(source_a=ctrl_idx, source_b=tgt_idx, prob=p)
+                    )
                     correlated_indices.add(ctrl_idx)
                     correlated_indices.add(tgt_idx)
 
@@ -248,8 +268,9 @@ def extract_noise_model(original_circuit_str: str) -> NonuniformNoiseModel:
                 dep2_key = (q1, q2)
                 if dep2_key in pending_2q:
                     p = pending_2q.pop(dep2_key)
-                    correlated_pairs.append(CorrelatedNoisePair(
-                        source_a=ctrl_idx, source_b=tgt_idx, prob=p))
+                    correlated_pairs.append(
+                        CorrelatedNoisePair(source_a=ctrl_idx, source_b=tgt_idx, prob=p)
+                    )
                     correlated_indices.add(ctrl_idx)
                     correlated_indices.add(tgt_idx)
 
@@ -330,7 +351,9 @@ def _compose_prob(p1: float, p2: float) -> float:
 def _accumulate_noise(
     pending: dict[int, tuple[float, float, float]],
     qubit: int,
-    px: float, py: float, pz: float,
+    px: float,
+    py: float,
+    pz: float,
 ) -> None:
     """Accumulate noise probabilities for a qubit.
 
