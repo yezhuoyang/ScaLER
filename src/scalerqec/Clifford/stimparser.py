@@ -45,15 +45,17 @@ _2Q_DECOMPOSITIONS = {
     "CZ": [("H", "t"), ("CX", "ct"), ("H", "t")],
 }
 
-# TODO: [Review-P1] Prefix matching with "DETECTOR(" fails if there is a space
-# between DETECTOR and the opening paren (e.g. "DETECTOR (0,1,2) rec[-1]").
-# Stim allows optional spaces. Split on first token instead of prefix matching.
-_ANNOTATION_PREFIXES = ("TICK", "DETECTOR(", "QUBIT_COORDS(", "OBSERVABLE_INCLUDE(")
+# Annotation keywords — matched by first token (with any trailing '(' stripped).
+_ANNOTATION_KEYWORDS = {"TICK", "DETECTOR", "QUBIT_COORDS", "OBSERVABLE_INCLUDE"}
 
-# Noise/metadata directives stripped by the normalizer
-# TODO: [Review-P1] Missing PAULI_CHANNEL_1 and PAULI_CHANNEL_2. These Stim
-# directives would pass through as unknown gates and crash the C++ parser.
-_NOISE_PREFIXES = ("X_ERROR", "Y_ERROR", "Z_ERROR", "DEPOLARIZE1", "DEPOLARIZE2", "SHIFT_COORDS")
+# Noise/metadata directives stripped by the normalizer.
+# Matched by first token (with any trailing '(' stripped).
+_NOISE_KEYWORDS = {
+    "X_ERROR", "Y_ERROR", "Z_ERROR",
+    "DEPOLARIZE1", "DEPOLARIZE2",
+    "PAULI_CHANNEL_1", "PAULI_CHANNEL_2",
+    "SHIFT_COORDS",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -82,16 +84,19 @@ def _rewrite(code: str) -> str:
         if not stripped_line:
             continue
 
+        tokens = stripped_line.split()
+        # Extract keyword: strip trailing '(' for instructions like "DETECTOR(0,1)"
+        keyword = tokens[0].split("(")[0]
+
         # Preserve annotations
-        if any(stripped_line.startswith(p) for p in _ANNOTATION_PREFIXES):
+        if keyword in _ANNOTATION_KEYWORDS:
             output_lines.append(stripped_line)
             continue
 
         # Strip noise directives
-        if any(stripped_line.startswith(p) for p in _NOISE_PREFIXES):
+        if keyword in _NOISE_KEYWORDS:
             continue
 
-        tokens = stripped_line.split()
         gate = tokens[0]
         qubits = tokens[1:]
 
