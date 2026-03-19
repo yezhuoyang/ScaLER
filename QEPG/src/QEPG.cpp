@@ -11,7 +11,8 @@
 #include "QEPG.hpp"
 #include <iostream>
 #include <chrono>
-#include <algorithm>      // <algorithm> also works but <ranges> is canonical
+#include <algorithm>
+#include <unordered_set>
 
 namespace QEPG{
 
@@ -156,6 +157,7 @@ void QEPG::backward_graph_construction(){
     size_t current_noise_index=total_noise_-1;
 
     const clifford::paritygroup& observable=circuit_.get_observable_parity_group();
+    const std::unordered_set<size_t> observable_set(observable.indexlist.begin(), observable.indexlist.end());
 
     // NOTE: String comparison per gate is a known performance bottleneck for large
     // circuits. A future optimization would replace Gate::name with enum GateKind + switch.
@@ -196,9 +198,7 @@ void QEPG::backward_graph_construction(){
             /*
             This measurement will flip the observable
             */
-            // TODO: [Review-P1-Perf] Linear search in observable list for every measurement.
-            // Pre-convert to std::unordered_set before the loop for O(1) lookup.
-            if(std::find(observable.indexlist.begin(), observable.indexlist.end(), current_meas_index) != observable.indexlist.end()){
+            if(observable_set.count(current_meas_index)){
                     current_x_parity_prop[qindex].set(num_detectors);
                     current_y_parity_prop[qindex].set(num_detectors);
             }
