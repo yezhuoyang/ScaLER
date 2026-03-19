@@ -16,7 +16,13 @@ from dataclasses import dataclass, field
 import numpy as np
 import stim
 
-from ..Clifford.stimparser import rewrite_stim_code
+from ..Clifford.stimparser import (
+    rewrite_stim_code,
+    _1Q_PASSTHROUGH,
+    _1Q_DECOMPOSITIONS,
+    _2Q_PASSTHROUGH,
+    _2Q_DECOMPOSITIONS,
+)
 
 
 # The 15 non-identity two-qubit Paulis for DEPOLARIZE2.
@@ -63,30 +69,26 @@ class NonuniformNoiseModel:
 
 
 # Number of QEPG noise sources created by each gate after normalization.
-# This must match the decompositions in stimparser.py and the noise
-# injection convention in clifford.py (1 depolarize per non-Reset primitive).
-# TODO: [Review-P2-Maintainability] This table duplicates information from
-# stimparser._1Q_DECOMPOSITIONS and _2Q_DECOMPOSITIONS. A mismatch is a
-# silent correctness bug. Derive _GATE_NOISE_COUNT from the decomposition
-# tables automatically (count = sum(1 for prim in seq if prim != "R")).
-_GATE_NOISE_COUNT: dict[str, int] = {
-    "H": 1, "S": 1, "X": 1, "Y": 1, "Z": 1, "M": 1,
-    "R": 0,
-    "CX": 2,        # 1 per qubit
-    "CZ": 4,        # H(1) + CX(2) + H(1)
-    "S_DAG": 3,     # S+S+S
-    "MX": 2,        # H+M
-    "MY": 5,        # S+S+S+H+M
-    "MR": 1,        # M(1)+R(0)
-    "MRX": 3,       # H(1)+M(1)+R(0)+H(1)
-    "MRY": 8,       # S(1)*3+H(1)+M(1)+R(0)+S(1)*3+H(1)
-    "RX": 1,        # R(0)+H(1)
-    "RY": 4,        # R(0)+S(1)*3+H(1)
-    "SQRT_X": 3,    # H+S+H
-    "SQRT_X_DAG": 5,  # H+S+S+S+H
-    "SQRT_Y": 2,    # S+H
-    "SQRT_Y_DAG": 2,  # H+S
-}
+# Auto-derived from stimparser decomposition tables to stay in sync.
+# Convention: 1 depolarize per non-Reset primitive gate.
+def _build_gate_noise_count() -> dict[str, int]:
+    """Derive noise source counts from stimparser gate tables."""
+    counts: dict[str, int] = {}
+    # Single-qubit passthrough: 1 noise source each (except R which has 0)
+    for gate in _1Q_PASSTHROUGH:
+        counts[gate] = 0 if gate == "R" else 1
+    # Single-qubit decompositions: count non-R primitives
+    for gate, seq in _1Q_DECOMPOSITIONS.items():
+        counts[gate] = sum(1 for prim in seq if prim != "R")
+    # Two-qubit passthrough: 1 per qubit
+    for gate in _2Q_PASSTHROUGH:
+        counts[gate] = 2
+    # Two-qubit decompositions: count primitives (each "ct" is 2 sources)
+    for gate, seq in _2Q_DECOMPOSITIONS.items():
+        counts[gate] = sum(2 if which == "ct" else 1 for _, which in seq)
+    return counts
+
+_GATE_NOISE_COUNT: dict[str, int] = _build_gate_noise_count()
 
 # Noise directives recognized from Stim
 _NOISE_CHANNELS = {"DEPOLARIZE1", "DEPOLARIZE2", "X_ERROR", "Y_ERROR", "Z_ERROR"}
