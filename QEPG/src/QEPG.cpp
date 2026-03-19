@@ -217,10 +217,6 @@ void QEPG::backward_graph_construction(){
             current_x_parity_prop[qindex].reset();
             current_y_parity_prop[qindex].reset();
             current_z_parity_prop[qindex].reset();
-            // TODO: [Review-P0-Bug] Missing 'continue' here. Execution falls through
-            // to the cnot/h/p checks below, wasting comparisons. Currently correct by
-            // accident ("R"!="cnot") but fragile — adding a gate type above cnot would
-            // break silently.
             continue;
         }
         /*
