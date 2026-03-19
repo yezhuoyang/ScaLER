@@ -6,8 +6,132 @@ parsed by :meth:`~scalerqec.Clifford.clifford.CliffordCircuit.compile_from_stim_
 
 Both a :class:`stimparser` class and a standalone :func:`rewrite_stim_code`
 function are provided; they perform the same transformation.
+
+Gate support is table-driven: to add a new gate, add an entry to
+``_1Q_PASSTHROUGH``, ``_1Q_DECOMPOSITIONS``, ``_2Q_PASSTHROUGH``, or
+``_2Q_DECOMPOSITIONS`` below.
 """
 
+# ---------------------------------------------------------------------------
+# Gate dispatch tables
+# ---------------------------------------------------------------------------
+
+# Single-qubit gates that pass through as-is (one line per qubit)
+_1Q_PASSTHROUGH = {"H", "S", "M", "R", "X", "Y", "Z"}
+
+# Single-qubit gates decomposed to primitive sequences.
+# Each value is a list of primitive gate names to emit per qubit.
+_1Q_DECOMPOSITIONS = {
+    "S_DAG":      ["S", "S", "S"],
+    "MX":         ["H", "M"],
+    "MY":         ["S", "S", "S", "H", "M"],
+    "MR":         ["M", "R"],
+    "MRX":        ["H", "M", "R", "H"],
+    "MRY":        ["S", "S", "S", "H", "M", "R", "S", "S", "S", "H"],
+    "RX":         ["R", "H"],
+    "RY":         ["R", "S", "S", "S", "H"],
+    "SQRT_X":     ["H", "S", "H"],
+    "SQRT_X_DAG": ["H", "S", "S", "S", "H"],
+    "SQRT_Y":     ["S", "H"],
+    "SQRT_Y_DAG": ["H", "S"],
+}
+
+# Two-qubit gates that pass through as-is (pairwise split)
+_2Q_PASSTHROUGH = {"CX"}
+
+# Two-qubit gates decomposed to primitive sequences per pair.
+# Each value is a list of (gate_name, "c"|"t") tuples indicating which qubit.
+_2Q_DECOMPOSITIONS = {
+    "CZ": [("H", "t"), ("CX", "ct"), ("H", "t")],
+}
+
+# Annotations preserved as-is
+_ANNOTATION_PREFIXES = ("TICK", "DETECTOR(", "QUBIT_COORDS(", "OBSERVABLE_INCLUDE(")
+
+# Noise/metadata directives stripped by the normalizer
+_NOISE_PREFIXES = ("X_ERROR", "Y_ERROR", "Z_ERROR", "DEPOLARIZE1", "DEPOLARIZE2", "SHIFT_COORDS")
+
+
+# ---------------------------------------------------------------------------
+# Core rewrite logic
+# ---------------------------------------------------------------------------
+
+def _rewrite(code: str) -> str:
+    """Normalize a STIM program so each line has at most one gate operation.
+
+    Transformations:
+    1. Splits multi-target instructions (one op per qubit or qubit pair).
+    2. Decomposes composite gates to primitives via the tables above.
+    3. Strips noise directives (noise is injected separately by the compiler).
+
+    Args:
+        code: The raw STIM circuit program as a multi-line string.
+
+    Returns:
+        A normalized STIM program string with one operation per line.
+    """
+    lines = code.splitlines()
+    output_lines: list[str] = []
+
+    for line in lines:
+        stripped_line = line.strip()
+        if not stripped_line:
+            continue
+
+        # Preserve annotations
+        if any(stripped_line.startswith(p) for p in _ANNOTATION_PREFIXES):
+            output_lines.append(stripped_line)
+            continue
+
+        # Strip noise directives
+        if any(stripped_line.startswith(p) for p in _NOISE_PREFIXES):
+            continue
+
+        tokens = stripped_line.split()
+        gate = tokens[0]
+        qubits = tokens[1:]
+
+        # --- Single-qubit passthrough ---
+        if gate in _1Q_PASSTHROUGH:
+            for q in qubits:
+                output_lines.append(f"{gate} {q}")
+
+        # --- Single-qubit decomposition ---
+        elif gate in _1Q_DECOMPOSITIONS:
+            seq = _1Q_DECOMPOSITIONS[gate]
+            for q in qubits:
+                for prim in seq:
+                    output_lines.append(f"{prim} {q}")
+
+        # --- Two-qubit passthrough ---
+        elif gate in _2Q_PASSTHROUGH:
+            for i in range(0, len(qubits), 2):
+                q1, q2 = qubits[i], qubits[i + 1]
+                output_lines.append(f"{gate} {q1} {q2}")
+
+        # --- Two-qubit decomposition ---
+        elif gate in _2Q_DECOMPOSITIONS:
+            seq = _2Q_DECOMPOSITIONS[gate]
+            for i in range(0, len(qubits), 2):
+                q1, q2 = qubits[i], qubits[i + 1]
+                for prim_name, which in seq:
+                    if which == "c":
+                        output_lines.append(f"{prim_name} {q1}")
+                    elif which == "t":
+                        output_lines.append(f"{prim_name} {q2}")
+                    elif which == "ct":
+                        output_lines.append(f"{prim_name} {q1} {q2}")
+
+        else:
+            # Unknown gate: preserve as-is
+            output_lines.append(stripped_line)
+
+    return "\n".join(output_lines)
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
 
 class stimparser:
     """Utility class for normalizing STIM circuit programs.
@@ -24,19 +148,7 @@ class stimparser:
     def rewrite_stim_code(self, code: str) -> str:
         """Normalize a STIM program so each line has at most one gate operation.
 
-        This method performs three transformations:
-
-        1. **Splits multi-target instructions** -- gates like ``CX 0 1 2 3``
-           or ``M 1 3 5`` are expanded into one line per qubit pair or qubit.
-        2. **Decomposes composite gates** -- ``MX`` is rewritten as ``H`` +
-           ``M``; ``MY`` as ``S S S H M``; ``MR`` as ``M`` + ``R``; ``RX``
-           as ``R`` + ``H``.
-        3. **Filters noise directives** -- lines starting with ``X_ERROR``,
-           ``DEPOLARIZE1``, ``DEPOLARIZE2``, or ``SHIFT_COORDS`` are removed
-           (noise is injected separately by the compiler).
-
-        Lines starting with ``TICK``, ``DETECTOR(``, ``QUBIT_COORDS(``, or
-        ``OBSERVABLE_INCLUDE(`` are preserved unchanged.
+        See :func:`rewrite_stim_code` for full details.
 
         Args:
             code: The raw STIM circuit program as a multi-line string.
@@ -44,108 +156,15 @@ class stimparser:
         Returns:
             A normalized STIM program string with one operation per line.
         """
-        lines = code.splitlines()
-        output_lines = []
-
-        for line in lines:
-            stripped_line = line.strip()
-            if not stripped_line:
-                # Skip empty lines (optional: you could also preserve them)
-                continue
-
-            # Keep lines that we do NOT want to split
-            if (
-                stripped_line.startswith("TICK")
-                or stripped_line.startswith("DETECTOR(")
-                or stripped_line.startswith("QUBIT_COORDS(")
-                or stripped_line.startswith("OBSERVABLE_INCLUDE(")
-            ):
-                output_lines.append(stripped_line)
-                continue
-
-            if (
-                stripped_line.startswith("X_ERROR")
-                or stripped_line.startswith("DEPOLARIZE1")
-                or stripped_line.startswith("DEPOLARIZE2")
-                or stripped_line.startswith("SHIFT_COORDS")
-            ):
-                continue
-
-            tokens = stripped_line.split()
-            gate = tokens[0]
-
-            # Handle 2-qubit gate lines like "CX 0 1 2 3 4 5 ..."
-            if gate == "CX":
-                qubits = tokens[1:]
-                # Pair up the qubits [q0, q1, q2, q3, ...] => (q0,q1), (q2,q3), ...
-                for i in range(0, len(qubits), 2):
-                    q1, q2 = qubits[i], qubits[i + 1]
-                    output_lines.append(f"CX {q1} {q2}")
-
-            # Handle multi-qubit measurements "M 1 3 5 ..." => each on its own line
-            elif gate == "M":
-                qubits = tokens[1:]
-                for q in qubits:
-                    output_lines.append(f"M {q}")
-
-            elif gate == "MX":
-                qubits = tokens[1:]
-                for q in qubits:
-                    output_lines.append(f"H {q}")
-                    output_lines.append(f"M {q}")
-
-            elif gate == "MY":
-                qubits = tokens[1:]
-                for q in qubits:
-                    output_lines.append(f"S {q}")
-                    output_lines.append(f"S {q}")
-                    output_lines.append(f"S {q}")
-                    output_lines.append(f"H {q}")
-                    output_lines.append(f"M {q}")
-
-            elif gate == "H":
-                qubits = tokens[1:]
-                for q in qubits:
-                    output_lines.append(f"H {q}")
-
-            elif gate == "S":
-                qubits = tokens[1:]
-                for q in qubits:
-                    output_lines.append(f"S {q}")
-
-            # Handle multi-qubit measure+reset "MR 1 3 5 ..." => each on its own line
-            elif gate == "MR":
-                qubits = tokens[1:]
-                for q in qubits:
-                    output_lines.append(f"M {q}")
-                    output_lines.append(f"R {q}")
-
-            elif gate == "R":
-                qubits = tokens[1:]
-                for q in qubits:
-                    output_lines.append(f"R {q}")
-
-            elif gate == "RX":
-                qubits = tokens[1:]
-                for q in qubits:
-                    output_lines.append(f"R {q}")
-                    output_lines.append(f"H {q}")
-
-            else:
-                # If there's some other gate we don't specifically handle,
-                # keep it as is, or add more logic if needed.
-                output_lines.append(stripped_line)
-
-        return "\n".join(output_lines)
+        return _rewrite(code)
 
 
 def rewrite_stim_code(code: str) -> str:
     """Normalize a STIM program so each line has at most one gate operation.
 
     This is a module-level convenience function equivalent to
-    ``stimparser().rewrite_stim_code(code)``. See
-    :meth:`stimparser.rewrite_stim_code` for full details on the
-    transformations applied.
+    ``stimparser().rewrite_stim_code(code)``. See the module-level dispatch
+    tables for the full list of supported gates and their decompositions.
 
     Args:
         code: The raw STIM circuit program as a multi-line string.
@@ -153,96 +172,4 @@ def rewrite_stim_code(code: str) -> str:
     Returns:
         A normalized STIM program string with one operation per line.
     """
-    lines = code.splitlines()
-    output_lines = []
-
-    for line in lines:
-        stripped_line = line.strip()
-        if not stripped_line:
-            # Skip empty lines (optional: you could also preserve them)
-            continue
-
-        # Keep lines that we do NOT want to split
-        if (
-            stripped_line.startswith("TICK")
-            or stripped_line.startswith("DETECTOR(")
-            or stripped_line.startswith("QUBIT_COORDS(")
-            or stripped_line.startswith("OBSERVABLE_INCLUDE(")
-        ):
-            output_lines.append(stripped_line)
-            continue
-
-        if (
-            stripped_line.startswith("X_ERROR")
-            or stripped_line.startswith("DEPOLARIZE1")
-            or stripped_line.startswith("DEPOLARIZE2")
-            or stripped_line.startswith("SHIFT_COORDS")
-        ):
-            continue
-
-        tokens = stripped_line.split()
-        gate = tokens[0]
-
-        # Handle 2-qubit gate lines like "CX 0 1 2 3 4 5 ..."
-        if gate == "CX":
-            qubits = tokens[1:]
-            # Pair up the qubits [q0, q1, q2, q3, ...] => (q0,q1), (q2,q3), ...
-            for i in range(0, len(qubits), 2):
-                q1, q2 = qubits[i], qubits[i + 1]
-                output_lines.append(f"CX {q1} {q2}")
-
-        # Handle multi-qubit measurements "M 1 3 5 ..." => each on its own line
-        elif gate == "M":
-            qubits = tokens[1:]
-            for q in qubits:
-                output_lines.append(f"M {q}")
-
-        elif gate == "MX":
-            qubits = tokens[1:]
-            for q in qubits:
-                output_lines.append(f"H {q}")
-                output_lines.append(f"M {q}")
-
-        elif gate == "MY":
-            qubits = tokens[1:]
-            for q in qubits:
-                output_lines.append(f"S {q}")
-                output_lines.append(f"S {q}")
-                output_lines.append(f"S {q}")
-                output_lines.append(f"H {q}")
-                output_lines.append(f"M {q}")
-
-        elif gate == "H":
-            qubits = tokens[1:]
-            for q in qubits:
-                output_lines.append(f"H {q}")
-
-        elif gate == "S":
-            qubits = tokens[1:]
-            for q in qubits:
-                output_lines.append(f"S {q}")
-
-        # Handle multi-qubit measure+reset "MR 1 3 5 ..." => each on its own line
-        elif gate == "MR":
-            qubits = tokens[1:]
-            for q in qubits:
-                output_lines.append(f"M {q}")
-                output_lines.append(f"R {q}")
-
-        elif gate == "R":
-            qubits = tokens[1:]
-            for q in qubits:
-                output_lines.append(f"R {q}")
-
-        elif gate == "RX":
-            qubits = tokens[1:]
-            for q in qubits:
-                output_lines.append(f"R {q}")
-                output_lines.append(f"H {q}")
-
-        else:
-            # If there's some other gate we don't specifically handle,
-            # keep it as is, or add more logic if needed.
-            output_lines.append(stripped_line)
-
-    return "\n".join(output_lines)
+    return _rewrite(code)

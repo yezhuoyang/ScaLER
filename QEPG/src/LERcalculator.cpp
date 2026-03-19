@@ -500,5 +500,62 @@ std::vector<std::vector<bool>> return_detector_matrix(const std::string& prog_st
 }
 
 
+/// @copydoc LERcalculator::return_samples_nonuniform_to_numpy
+std::pair<py::array_t<std::uint8_t>, py::array_t<std::uint8_t>>
+return_samples_nonuniform_to_numpy(
+    const QEPG::QEPG& graph,
+    py::array_t<double> noise_probs_arr,
+    py::array_t<std::size_t> corr_sources_a_arr,
+    py::array_t<std::size_t> corr_sources_b_arr,
+    py::array_t<double> corr_probs_arr,
+    std::size_t shot)
+{
+    // Extract noise_probs pointer and dimensions
+    auto np_info = noise_probs_arr.request();
+    if (np_info.ndim != 2 || np_info.shape[1] != 3)
+        throw std::runtime_error("noise_probs must have shape (N, 3)");
+    const std::size_t num_noise = static_cast<std::size_t>(np_info.shape[0]);
+    const double* noise_probs = static_cast<const double*>(np_info.ptr);
+
+    // Extract correlated pairs
+    auto ca_info = corr_sources_a_arr.request();
+    auto cb_info = corr_sources_b_arr.request();
+    auto cp_info = corr_probs_arr.request();
+    const std::size_t num_corr = static_cast<std::size_t>(ca_info.shape[0]);
+
+    std::vector<SAMPLE::CorrelatedPair> corr_pairs(num_corr);
+    if (num_corr > 0) {
+        const std::size_t* ca = static_cast<const std::size_t*>(ca_info.ptr);
+        const std::size_t* cb = static_cast<const std::size_t*>(cb_info.ptr);
+        const double* cp = static_cast<const double*>(cp_info.ptr);
+        for (std::size_t i = 0; i < num_corr; ++i) {
+            corr_pairs[i] = {ca[i], cb[i], cp[i]};
+        }
+    }
+
+    // Allocate output numpy arrays
+    const std::size_t n_det = graph.get_total_detector();
+    py::array_t<std::uint8_t> det_result({shot, n_det});
+    py::array_t<std::uint8_t> obs_result(shot);
+
+    auto det_info = det_result.request();
+    auto obs_info = obs_result.request();
+    auto* det_buf = static_cast<std::uint8_t*>(det_info.ptr);
+    auto* obs_buf = static_cast<std::uint8_t*>(obs_info.ptr);
+
+    // Run the sampler
+    SAMPLE::sampler sampler(graph.get_total_noise());
+    {
+        py::gil_scoped_release release;
+        sampler.generate_many_output_samples_nonuniform_to_numpy(
+            graph, det_buf, obs_buf, n_det,
+            noise_probs, num_noise,
+            num_corr > 0 ? corr_pairs.data() : nullptr, num_corr,
+            shot);
+    }
+
+    return {std::move(det_result), std::move(obs_result)};
+}
+
 
 }

@@ -30,6 +30,7 @@ import numpy as np
 from ..qepg import compile_QEPG, return_samples_Monte_separate_obs_with_QEPG, QEPGGraph
 from ..QEC.noisemodel import NoiseModel
 from ..QEC.qeccircuit import StabCode
+from .noise_model_parser import extract_noise_model, NonuniformNoiseModel
 
 import sinter
 
@@ -275,6 +276,154 @@ class MonteLERcalc:
             "Nerror(STIM): ", format_with_uncertainty(ler_count_average, std_ler_count)
         )
         print("Sample(STIM): ", format_with_uncertainty(self._sample_used, std_sample))
+
+    def calculate_LER_from_stim_circuit(
+        self,
+        stim_circuit_str: str,
+        samplebudget: int = 100000,
+        repeat: int = 1,
+    ) -> float:
+        """Estimate the LER of any Stim circuit with non-uniform noise.
+
+        This method accepts a raw Stim circuit string that may contain
+        arbitrary noise channels (DEPOLARIZE1 with varying rates, X_ERROR,
+        Y_ERROR, Z_ERROR, DEPOLARIZE2) and estimates the logical error
+        rate using QEPG-accelerated non-uniform Monte Carlo sampling.
+
+        The method:
+        1. Normalizes the circuit (strips noise) for QEPG compilation.
+        2. Extracts the per-noise-source probability model from the
+           original circuit.
+        3. Compiles a Python QEPG from the normalized circuit.
+        4. Builds a pymatching decoder from the original circuit's
+           detector error model.
+        5. Runs adaptive batching with non-uniform sampling.
+
+        Args:
+            stim_circuit_str: Raw Stim circuit string with noise directives.
+            samplebudget: Maximum number of Monte Carlo shots per run.
+            repeat: Number of independent averaging runs.
+
+        Returns:
+            The estimated logical error rate (averaged over ``repeat`` runs).
+        """
+        from ..Clifford.QEPGpython import QEPGpython
+
+        self._samplebudget = samplebudget
+
+        # 1. Normalize the circuit (strip noise for QEPG compilation)
+        normalized = rewrite_stim_code(stim_circuit_str)
+
+        # 2. Extract per-source noise model from the original circuit
+        noise_model = extract_noise_model(stim_circuit_str)
+
+        # 3. Compile QEPG from normalized circuit (Python + C++ backend)
+        circuit = CliffordCircuit(2)
+        circuit.error_rate = 0.001  # placeholder; actual rates from noise_model
+        circuit.compile_from_stim_circuit_str(normalized)
+
+        graph = QEPGpython(circuit)
+        graph.backword_graph_construction()
+
+        # Attach C++ QEPG graph for accelerated sampling
+        try:
+            from scalerqec import qepg as qepg_cpp
+            graph._cpp_graph = qepg_cpp.compile_QEPG(normalized)
+        except Exception:
+            graph._cpp_graph = None
+
+        # Verify noise source counts match
+        qepg_noise = circuit.totalnoise
+        if noise_model.num_noise != qepg_noise:
+            # Resize noise_probs to match QEPG if needed
+            if noise_model.num_noise < qepg_noise:
+                padded = np.zeros((qepg_noise, 3), dtype=np.float64)
+                padded[:noise_model.num_noise] = noise_model.noise_probs
+                noise_model.noise_probs = padded
+                noise_model.num_noise = qepg_noise
+            else:
+                noise_model.noise_probs = noise_model.noise_probs[:qepg_noise]
+                noise_model.num_noise = qepg_noise
+
+        # 4. Build decoder from the ORIGINAL noisy circuit's DEM
+        stim_circuit = stim.Circuit(stim_circuit_str)
+        detector_error_model = stim_circuit.detector_error_model(
+            decompose_errors=True
+        )
+        matcher = pymatching.Matching.from_detector_error_model(detector_error_model)
+
+        # 5. Adaptive batching with non-uniform sampling
+        Ler_list: list[float] = []
+        samples_list: list[float] = []
+        time_list: list[float] = []
+        ler_count_list: list[int] = []
+
+        for _ in range(repeat):
+            start = time.perf_counter()
+            ler_count = 0
+            sampleused = 0
+
+            # Initial batch
+            det, obs = graph.sample_nonuniform_batch(
+                noise_model.noise_probs,
+                SAMPLE_GAP_INITIAL,
+                correlated_pairs=noise_model.correlated_pairs or None,
+            )
+            predictions = matcher.decode_batch(det)
+            observables = obs.ravel()
+            predictions_flat = np.asarray(predictions).ravel()
+            num_errors = np.count_nonzero(observables != predictions_flat)
+            ler_count += num_errors
+            sampleused += SAMPLE_GAP_INITIAL
+
+            while ler_count < self._min_num_ke_event and sampleused < self._samplebudget:
+                if ler_count == 0:
+                    current_sample_gap = sampleused * 10
+                    current_sample_gap = min(current_sample_gap, MAX_SAMPLE_GAP)
+                else:
+                    current_sample_gap = min(
+                        int(self._min_num_ke_event / ler_count) * sampleused,
+                        MAX_SAMPLE_GAP,
+                    )
+
+                det, obs = graph.sample_nonuniform_batch(
+                    noise_model.noise_probs,
+                    current_sample_gap,
+                    correlated_pairs=noise_model.correlated_pairs or None,
+                )
+                predictions = matcher.decode_batch(det)
+                observables = obs.ravel()
+                predictions_flat = np.asarray(predictions).ravel()
+                num_errors = np.count_nonzero(observables != predictions_flat)
+                ler_count += num_errors
+                sampleused += current_sample_gap
+
+            ler_count_list.append(ler_count)
+            Ler_list.append(ler_count / sampleused)
+            samples_list.append(sampleused)
+            elapsed = time.perf_counter() - start
+            time_list.append(elapsed)
+
+        ler_count_average = float(np.mean(ler_count_list))
+        std_ler_count = float(np.std(ler_count_list))
+        self._estimated_LER = float(np.mean(Ler_list))
+        self._sample_used = float(np.mean(samples_list))
+        std_ler = float(np.std(Ler_list))
+        std_sample = float(np.std(samples_list))
+        time_mean = float(np.mean(time_list))
+        time_std = float(np.std(time_list))
+
+        print("Time(NonUniform): ", format_with_uncertainty(time_mean, time_std))
+        print("PL(NonUniform): ", format_with_uncertainty(self._estimated_LER, std_ler))
+        print(
+            "Nerror(NonUniform): ",
+            format_with_uncertainty(ler_count_average, std_ler_count),
+        )
+        print(
+            "Sample(NonUniform): ",
+            format_with_uncertainty(self._sample_used, std_sample),
+        )
+        return self._estimated_LER
 
     def calculate_LER_from_my_random_sampler(
         self, samplebudget: int, filepath: str, pvalue: float, repeat: int = 1

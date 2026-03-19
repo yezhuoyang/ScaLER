@@ -429,6 +429,22 @@ void cliffordcircuit::compile_from_rewrited_stim_string(std::string stim_str){
             size_t qindex=to_size_t(next_token(rest));
             add_hadamard(qindex);
         }
+        else if(op=="S"){
+            size_t qindex=to_size_t(next_token(rest));
+            add_phase(qindex);
+        }
+        else if(op=="X"){
+            size_t qindex=to_size_t(next_token(rest));
+            add_pauliX(qindex);
+        }
+        else if(op=="Y"){
+            size_t qindex=to_size_t(next_token(rest));
+            add_pauliy(qindex);
+        }
+        else if(op=="Z"){
+            size_t qindex=to_size_t(next_token(rest));
+            add_pauliz(qindex);
+        }
         else if(op=="CX"){
             size_t qcontrol=to_size_t(next_token(rest));
             size_t qtarget=to_size_t(next_token(rest));

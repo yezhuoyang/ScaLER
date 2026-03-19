@@ -11,6 +11,8 @@
 #include "chrono"
 #include <bit>
 #include <thread>
+#include <cmath>
+#include <algorithm>
 
 
 namespace SAMPLE{
@@ -390,6 +392,185 @@ void sampler::generate_many_output_samples_Monte_to_numpy(
             local_sampler.calculate_parity_output_flat(
                 flat, n_noise, local_sampler.scratch_data(), n, result_buf);
 
+            unpack_result_to_numpy(result_buf,
+                det_buf + i * n_det, obs_buf[i], n_det, n_words);
+        }
+
+        simd::aligned_free(result_buf);
+    }
+}
+
+
+/// Convert uint64 to uniform double in [0, 1) with 53-bit precision.
+static inline double to_double_01(std::uint64_t v) noexcept {
+    return (v >> 11) * (1.0 / (std::uint64_t{1} << 53));
+}
+
+/// Sample from Poisson(lambda) using Knuth's algorithm for small lambda,
+/// normal approximation for large lambda.
+static inline std::size_t sample_poisson(Xoshiro256pp& rng, double lambda) noexcept {
+    if (lambda < 30.0) {
+        // Knuth's algorithm: exact for small lambda
+        double L = std::exp(-lambda);
+        std::size_t k = 0;
+        double p = 1.0;
+        do {
+            ++k;
+            p *= to_double_01(rng());
+        } while (p > L);
+        return k - 1;
+    } else {
+        // Normal approximation: N(lambda, sqrt(lambda))
+        // Box-Muller transform
+        double u1 = to_double_01(rng());
+        double u2 = to_double_01(rng());
+        if (u1 < 1e-300) u1 = 1e-300;  // avoid log(0)
+        double z = std::sqrt(-2.0 * std::log(u1)) * std::cos(2.0 * 3.14159265358979323846 * u2);
+        double x = lambda + std::sqrt(lambda) * z;
+        return x > 0.0 ? static_cast<std::size_t>(x + 0.5) : 0;
+    }
+}
+
+
+void sampler::generate_many_output_samples_nonuniform_to_numpy(
+    const QEPG::QEPG& graph,
+    std::uint8_t* det_buf, std::uint8_t* obs_buf,
+    std::size_t n_det,
+    const double* noise_probs,
+    std::size_t num_noise,
+    const CorrelatedPair* corr_pairs,
+    std::size_t num_corr_pairs,
+    std::size_t samplenumber)
+{
+    const auto& flat = graph.get_parityPropMatrixTransFlat();
+    const std::size_t n_noise_flat = flat.n_rows() / 3;
+    const std::size_t n_words = flat.words_per_row();
+
+    // Pre-compute per-source total probability and CDF for sparse sampling.
+    // cdf[i+1] = sum of p_total for sources 0..i.
+    std::vector<double> ptotal(num_noise);
+    std::vector<double> cdf(num_noise + 1, 0.0);
+    for (std::size_t i = 0; i < num_noise; ++i) {
+        ptotal[i] = noise_probs[3 * i] + noise_probs[3 * i + 1] + noise_probs[3 * i + 2];
+        cdf[i + 1] = cdf[i] + ptotal[i];
+    }
+    double P_all = cdf[num_noise];
+
+    // Pre-compute conditional Pauli type thresholds for each source.
+    // cond_x[i] = px / ptotal  (fraction that is X)
+    // cond_xy[i] = (px + py) / ptotal  (fraction that is X or Y)
+    std::vector<double> cond_x(num_noise, 0.0);
+    std::vector<double> cond_xy(num_noise, 0.0);
+    for (std::size_t i = 0; i < num_noise; ++i) {
+        if (ptotal[i] > 0.0) {
+            cond_x[i]  = noise_probs[3 * i] / ptotal[i];
+            cond_xy[i] = (noise_probs[3 * i] + noise_probs[3 * i + 1]) / ptotal[i];
+        }
+    }
+
+    // Use sparse (Poisson + CDF) when the max per-source probability is small.
+    // The Poisson approximation has error O(p_i^2) per source, so at p > 0.01
+    // the bias becomes noticeable. Also require P_all < 6% of N to avoid
+    // excessive CDF lookups.
+    double p_max = 0.0;
+    for (std::size_t i = 0; i < num_noise; ++i) {
+        if (ptotal[i] > p_max) p_max = ptotal[i];
+    }
+    const bool use_sparse = (p_max < 0.01) && (P_all < 0.06 * num_noise);
+
+    // Dense path: precompute uint32 thresholds
+    std::vector<std::uint32_t> thresh;
+    if (!use_sparse) {
+        thresh.resize(3 * num_noise);
+        for (std::size_t i = 0; i < num_noise; ++i) {
+            double px  = noise_probs[3 * i];
+            double py  = noise_probs[3 * i + 1];
+            double pz  = noise_probs[3 * i + 2];
+            thresh[3 * i]     = static_cast<std::uint32_t>(px * 4294967296.0);
+            thresh[3 * i + 1] = static_cast<std::uint32_t>((px + py) * 4294967296.0);
+            thresh[3 * i + 2] = static_cast<std::uint32_t>((px + py + pz) * 4294967296.0);
+        }
+    }
+
+    // Precompute correlated pair thresholds
+    std::vector<std::uint32_t> corr_thresh(num_corr_pairs);
+    for (std::size_t i = 0; i < num_corr_pairs; ++i) {
+        corr_thresh[i] = static_cast<std::uint32_t>(corr_pairs[i].prob * 4294967296.0);
+    }
+
+    static const std::uint64_t global_seed = std::random_device{}();
+
+    #pragma omp parallel
+    {
+        Xoshiro256pp rng(global_seed ^ std::hash<std::thread::id>{}(std::this_thread::get_id()));
+        std::uint64_t* result_buf = simd::aligned_alloc_u64(flat.stride_words());
+
+        #pragma omp for schedule(static)
+        for (long long i = 0; i < static_cast<long long>(samplenumber); ++i) {
+            simd::zero_words(result_buf, n_words);
+
+            if (use_sparse) {
+                // --- SPARSE PATH: Poisson + CDF binary search ---
+                // Sample total number of independent errors (Poisson approximation).
+                // At low p, Poisson(sum(p_i)) closely approximates sum of Bernoulli(p_i).
+                std::size_t num_errors = sample_poisson(rng, P_all);
+
+                for (std::size_t e = 0; e < num_errors; ++e) {
+                    // Which source? Binary search in CDF.
+                    double u = to_double_01(rng()) * P_all;
+                    auto it = std::upper_bound(cdf.begin(), cdf.end(), u);
+                    std::size_t src = static_cast<std::size_t>(it - cdf.begin());
+                    if (src > 0) --src;
+                    if (src >= num_noise) src = num_noise - 1;
+
+                    // Which Pauli type? Conditional probability within this source.
+                    double r = to_double_01(rng());
+                    std::size_t type;
+                    if (r < cond_x[src])       type = 1;  // X
+                    else if (r < cond_xy[src]) type = 2;  // Y
+                    else                       type = 3;  // Z
+
+                    // XOR propagation row directly into result (GF(2))
+                    std::size_t row_idx = src + (type - 1) * n_noise_flat;
+                    flat.xor_row_into(row_idx, result_buf);
+                }
+            } else {
+                // --- DENSE PATH: direct per-source iteration ---
+                for (std::size_t s = 0; s < num_noise; ++s) {
+                    std::uint32_t r = static_cast<std::uint32_t>(rng() >> 32);
+                    std::uint32_t t_xyz = thresh[3 * s + 2];
+                    if (r < t_xyz) {
+                        std::size_t type;
+                        if (r < thresh[3 * s])          type = 1;
+                        else if (r < thresh[3 * s + 1]) type = 2;
+                        else                            type = 3;
+                        std::size_t row_idx = s + (type - 1) * n_noise_flat;
+                        flat.xor_row_into(row_idx, result_buf);
+                    }
+                }
+            }
+
+            // --- Correlated pairs (DEPOLARIZE2) ---
+            for (std::size_t c = 0; c < num_corr_pairs; ++c) {
+                std::uint32_t r = static_cast<std::uint32_t>(rng() >> 32);
+                if (r < corr_thresh[c]) {
+                    std::size_t pidx = rng.bounded(15);
+                    std::size_t pa = TWO_QUBIT_PAULIS[pidx][0];
+                    std::size_t pb = TWO_QUBIT_PAULIS[pidx][1];
+                    if (pa > 0) {
+                        flat.xor_row_into(
+                            corr_pairs[c].source_a + (pa - 1) * n_noise_flat,
+                            result_buf);
+                    }
+                    if (pb > 0) {
+                        flat.xor_row_into(
+                            corr_pairs[c].source_b + (pb - 1) * n_noise_flat,
+                            result_buf);
+                    }
+                }
+            }
+
+            // --- Unpack to numpy ---
             unpack_result_to_numpy(result_buf,
                 det_buf + i * n_det, obs_buf[i], n_det, n_words);
         }

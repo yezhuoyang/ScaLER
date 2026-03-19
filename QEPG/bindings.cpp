@@ -16,6 +16,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <pybind11/operators.h>
+#include <pybind11/numpy.h>
 
 #include "src/clifford.hpp"
 #include "src/QEPG.hpp"
@@ -49,6 +50,14 @@ namespace LERcalculator{
     std::pair<py::array_t<bool>,py::array_t<bool>> return_samples_many_weights_separate_obs_with_QEPG(const QEPG::QEPG& graph,const std::vector<size_t>& weight, const std::vector<size_t>& shots);
     std::vector<std::vector<bool>> return_samples_with_fixed_QEPG(const QEPG::QEPG& graph,size_t weight, size_t shots);
     std::pair<py::array_t<bool>,py::array_t<bool>> return_samples_Monte_separate_obs_with_QEPG(const QEPG::QEPG& graph,const double& error_rate, const size_t& shot);
+    std::pair<py::array_t<std::uint8_t>, py::array_t<std::uint8_t>>
+    return_samples_nonuniform_to_numpy(
+        const QEPG::QEPG& graph,
+        py::array_t<double> noise_probs,
+        py::array_t<std::size_t> corr_sources_a,
+        py::array_t<std::size_t> corr_sources_b,
+        py::array_t<double> corr_probs,
+        std::size_t shot);
 }
 
 
@@ -330,6 +339,34 @@ PYBIND11_MODULE(qepg, m) {
 
             Returns:
                 Tuple of (detector_outcomes, observable_outcomes) as NumPy bool arrays.
+        )pbdoc");
+
+
+    m.def("return_samples_nonuniform_to_numpy",
+        &LERcalculator::return_samples_nonuniform_to_numpy,
+        py::arg("graph"),
+        py::arg("noise_probs"),
+        py::arg("corr_sources_a"),
+        py::arg("corr_sources_b"),
+        py::arg("corr_probs"),
+        py::arg("shot"),
+        py::return_value_policy::move,
+        R"pbdoc(
+            Generate non-uniform noise samples with per-source (px, py, pz) probabilities.
+
+            Supports DEPOLARIZE2 correlated pairs. Uses SIMD XOR accumulation,
+            OpenMP parallelism, and Xoshiro256pp RNG.
+
+            Args:
+                graph: Pre-compiled QEPGGraph object.
+                noise_probs: NumPy float64 array of shape (N, 3) with [px, py, pz] per source.
+                corr_sources_a: NumPy array of source_a indices for correlated pairs.
+                corr_sources_b: NumPy array of source_b indices for correlated pairs.
+                corr_probs: NumPy array of probabilities for correlated pairs.
+                shot: Number of samples to generate.
+
+            Returns:
+                Tuple of (detector_outcomes, observable_outcomes) as NumPy uint8 arrays.
         )pbdoc");
 
 }

@@ -228,6 +228,24 @@ void QEPG::backward_graph_construction(){
         if(name=="h"){
             size_t qindex=gate.qubits[0];
             current_x_parity_prop[qindex].swap(current_z_parity_prop[qindex]);
+            continue;
+        }
+        /*
+        *   Phase (S) gate: S†XS = Y, S†YS = -X, S†ZS = Z
+        *   In GF(2) (signs ignored): swap X and Y propagation, Z unchanged.
+        */
+        if(name=="p"){
+            size_t qindex=gate.qubits[0];
+            current_x_parity_prop[qindex].swap(current_y_parity_prop[qindex]);
+            continue;
+        }
+        /*
+        *   Pauli X/Y/Z gates are self-inverse Cliffords.
+        *   Their conjugation only introduces signs (e.g., X†ZX = -Z),
+        *   which vanish in GF(2). Propagation is identity (no-op).
+        */
+        if(name=="x" || name=="y" || name=="z"){
+            continue;
         }
     }
 

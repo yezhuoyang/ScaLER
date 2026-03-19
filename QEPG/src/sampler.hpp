@@ -31,6 +31,34 @@ const size_t PAULIZ = 3;   ///< Constant identifying a Pauli-Z error.
 
 
 /**
+ * @brief A correlated noise pair from DEPOLARIZE2.
+ *
+ * Represents two noise sources that are jointly sampled: with probability
+ * `prob`, a uniformly random two-qubit Pauli (from 15 non-identity options)
+ * is applied across sources `source_a` and `source_b`.
+ */
+struct CorrelatedPair {
+    std::size_t source_a;   ///< First noise source index.
+    std::size_t source_b;   ///< Second noise source index.
+    double prob;            ///< Total probability of any two-qubit error.
+};
+
+/**
+ * @brief Lookup table for the 15 non-identity two-qubit Paulis.
+ *
+ * Each entry is (pa, pb) where 0=I, 1=X, 2=Y, 3=Z.
+ * Ordering: XI,YI,ZI, IX,IY,IZ, XX,XY,XZ, YX,YY,YZ, ZX,ZY,ZZ.
+ */
+static constexpr std::size_t TWO_QUBIT_PAULIS[15][2] = {
+    {1,0}, {2,0}, {3,0},
+    {0,1}, {0,2}, {0,3},
+    {1,1}, {1,2}, {1,3},
+    {2,1}, {2,2}, {2,3},
+    {3,1}, {3,2}, {3,3},
+};
+
+
+/**
  * @brief xoshiro256++ PRNG — fast, small-state (32 bytes) alternative to mt19937.
  *
  * Passes BigCrush, ~3x faster than mt19937, and fits in registers.
@@ -306,6 +334,34 @@ class sampler{
             const QEPG::QEPG& graph,
             std::uint8_t* det_buf, std::uint8_t* obs_buf,
             std::size_t n_det, double error_prob, size_t samplenumber);
+
+
+        /**
+         * @brief Generate many non-uniform noise samples in parallel, writing directly to NumPy buffers.
+         *
+         * Each noise source has independent (px, py, pz) probabilities. Optionally handles
+         * DEPOLARIZE2 correlated pairs. Uses OpenMP parallelism, SIMD XOR accumulation,
+         * Xoshiro256pp RNG, and uint32 threshold comparisons for maximum throughput.
+         *
+         * @param graph           The QEPG to evaluate samples against.
+         * @param det_buf         Output buffer for detector outcomes, shape (samplenumber, n_det).
+         * @param obs_buf         Output buffer for observable outcomes, shape (samplenumber,).
+         * @param n_det           Number of detectors.
+         * @param noise_probs     Flat array of shape (num_noise, 3): [px0, py0, pz0, px1, ...].
+         * @param num_noise       Number of independent noise sources.
+         * @param corr_pairs      Array of correlated pairs (DEPOLARIZE2), or nullptr if none.
+         * @param num_corr_pairs  Number of correlated pairs.
+         * @param samplenumber    Total number of samples to generate.
+         */
+        void generate_many_output_samples_nonuniform_to_numpy(
+            const QEPG::QEPG& graph,
+            std::uint8_t* det_buf, std::uint8_t* obs_buf,
+            std::size_t n_det,
+            const double* noise_probs,
+            std::size_t num_noise,
+            const CorrelatedPair* corr_pairs,
+            std::size_t num_corr_pairs,
+            std::size_t samplenumber);
 
     private:
 

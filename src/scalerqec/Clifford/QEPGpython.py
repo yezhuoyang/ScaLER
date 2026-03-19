@@ -163,6 +163,23 @@ class QEPGpython:
                 current_z_prop[qubitindex, :] = tmp_row
                 continue
 
+            """
+            Phase (S) gate: S†XS = Y, S†YS = -X, S†ZS = Z
+            In GF(2): swap X and Y propagation, Z unchanged.
+            """
+            if gate._name == "P":
+                qubitindex = gate._qubitindex
+                tmp_row = current_x_prop[qubitindex, :].copy()
+                current_x_prop[qubitindex, :] = current_y_prop[qubitindex, :]
+                current_y_prop[qubitindex, :] = tmp_row
+                continue
+
+            """
+            Pauli X/Y/Z: identity in GF(2) (signs vanish).
+            """
+            if gate._name in ("X", "Y", "Z"):
+                continue
+
     def sample_x_error(self, noise_index: int) -> list[int]:
         """Get the detector/observable flip vector for an X error at a noise source.
 
@@ -197,6 +214,129 @@ class QEPGpython:
             A list of length ``num_detectors + 1`` with binary entries.
         """
         return list(self._propMatrix[2 * self._total_noise + noise_index, :])
+
+    def sample_nonuniform_batch(
+        self,
+        noise_probs: np.ndarray,
+        num_shots: int,
+        correlated_pairs: list | None = None,
+        rng: np.random.Generator | None = None,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Sample detector/observable outcomes with per-source error probabilities.
+
+        Delegates to the C++ QEPG backend for SIMD-accelerated, OpenMP-parallel
+        non-uniform sampling. Falls back to a Python implementation if the C++
+        graph is not available.
+
+        Args:
+            noise_probs: Array of shape ``(num_noise, 3)`` with columns
+                ``[px, py, pz]`` giving per-source error probabilities.
+            num_shots: Number of Monte Carlo shots to generate.
+            correlated_pairs: Optional list of ``CorrelatedNoisePair``
+                objects for DEPOLARIZE2 events.
+            rng: Optional numpy random Generator (only used in Python fallback).
+
+        Returns:
+            A tuple ``(detector_outcomes, observable_outcomes)`` where
+            ``detector_outcomes`` has shape ``(num_shots, num_detectors)``
+            and ``observable_outcomes`` has shape ``(num_shots,)``, both
+            with dtype ``uint8``.
+        """
+        N = self._total_noise
+        assert noise_probs.shape == (N, 3), (
+            f"noise_probs shape {noise_probs.shape} != expected ({N}, 3)"
+        )
+
+        # Use C++ backend if available
+        if hasattr(self, '_cpp_graph') and self._cpp_graph is not None:
+            from scalerqec import qepg as qepg_cpp
+
+            probs = np.ascontiguousarray(noise_probs, dtype=np.float64)
+
+            if correlated_pairs:
+                corr_a = np.array([p.source_a for p in correlated_pairs],
+                                  dtype=np.uint64)
+                corr_b = np.array([p.source_b for p in correlated_pairs],
+                                  dtype=np.uint64)
+                corr_p = np.array([p.prob for p in correlated_pairs],
+                                  dtype=np.float64)
+            else:
+                corr_a = np.empty(0, dtype=np.uint64)
+                corr_b = np.empty(0, dtype=np.uint64)
+                corr_p = np.empty(0, dtype=np.float64)
+
+            det, obs = qepg_cpp.return_samples_nonuniform_to_numpy(
+                self._cpp_graph, probs, corr_a, corr_b, corr_p, num_shots
+            )
+            return det, obs
+
+        # Python fallback
+        return self._sample_nonuniform_batch_python(
+            noise_probs, num_shots, correlated_pairs, rng
+        )
+
+    def _sample_nonuniform_batch_python(
+        self,
+        noise_probs: np.ndarray,
+        num_shots: int,
+        correlated_pairs: list | None = None,
+        rng: np.random.Generator | None = None,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Python fallback for non-uniform sampling (used when C++ is unavailable)."""
+        if rng is None:
+            rng = np.random.default_rng()
+
+        N = self._total_noise
+        column_size = self._propMatrix.shape[1]
+
+        cum = np.cumsum(noise_probs, axis=1)
+        rand = rng.random((num_shots, N))
+
+        x_fired = rand < cum[np.newaxis, :, 0]
+        y_fired = (rand >= cum[np.newaxis, :, 0]) & (rand < cum[np.newaxis, :, 1])
+        z_fired = (rand >= cum[np.newaxis, :, 1]) & (rand < cum[np.newaxis, :, 2])
+
+        result = np.zeros((num_shots, column_size), dtype=np.uint8)
+
+        for fired, offset in [(x_fired, 0), (y_fired, N), (z_fired, 2 * N)]:
+            shot_indices, source_indices = np.nonzero(fired)
+            if len(shot_indices) == 0:
+                continue
+            for src in np.unique(source_indices):
+                mask = source_indices == src
+                shots_for_src = shot_indices[mask]
+                result[shots_for_src] ^= self._propMatrix[offset + src]
+
+        if correlated_pairs:
+            from ..Monte.noise_model_parser import TWO_QUBIT_PAULIS
+            for pair in correlated_pairs:
+                fire = rng.random(num_shots) < pair.prob
+                num_fired = np.count_nonzero(fire)
+                if num_fired == 0:
+                    continue
+
+                pauli_idx = rng.integers(0, 15, size=num_fired)
+                full_pauli = np.full(num_shots, -1, dtype=np.int32)
+                full_pauli[fire] = pauli_idx
+
+                for pidx, (pa, pb) in enumerate(TWO_QUBIT_PAULIS):
+                    mask = full_pauli == pidx
+                    if not np.any(mask):
+                        continue
+                    shots_mask = np.nonzero(mask)[0]
+                    if pa > 0:
+                        result[shots_mask] ^= self._propMatrix[
+                            (pa - 1) * N + pair.source_a
+                        ]
+                    if pb > 0:
+                        result[shots_mask] ^= self._propMatrix[
+                            (pb - 1) * N + pair.source_b
+                        ]
+
+        detector_outcomes = result[:, :-1]
+        observable_outcomes = result[:, -1]
+
+        return detector_outcomes, observable_outcomes
 
     def sample_noise_vector(self, noise_vector: np.ndarray) -> np.ndarray:
         """Compute the detector/observable outcome for an arbitrary error pattern.
