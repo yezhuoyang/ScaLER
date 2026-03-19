@@ -183,9 +183,7 @@ class stimparser:
     def __init__(self):
         pass
 
-    def rewrite_stim_code(
-        self, code: str, *, keep_noise: bool = False
-    ) -> str:
+    def rewrite_stim_code(self, code: str, *, keep_noise: bool = False) -> str:
         """Normalize a STIM program so each line has at most one gate operation.
 
         See :func:`rewrite_stim_code` for full details.

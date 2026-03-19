@@ -116,9 +116,7 @@ class MonteLDPC:
 
         # Create sampler and BPOSD decoder
         sampler = noisy_stim.compile_detector_sampler()
-        detector_error_model = noisy_stim.detector_error_model(
-            decompose_errors=False
-        )
+        detector_error_model = noisy_stim.detector_error_model(decompose_errors=False)
 
         self._decoder = BPOSD(
             detector_error_model,
@@ -230,9 +228,7 @@ class MonteLDPC:
         noisy_stim = SIDNoiseModel(pvalue).inject_noise(circuit.stimcircuit)
 
         sampler = noisy_stim.compile_detector_sampler()
-        detector_error_model = noisy_stim.detector_error_model(
-            decompose_errors=False
-        )
+        detector_error_model = noisy_stim.detector_error_model(decompose_errors=False)
 
         self._decoder = BPOSD(
             detector_error_model,

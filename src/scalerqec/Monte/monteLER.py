@@ -478,9 +478,7 @@ class MonteLERcalc:
         circuit.compile_from_stim_circuit_str(stim_circuit)
         noisy_stim = SIDNoiseModel(pvalue).inject_noise(circuit.stimcircuit)
 
-        detector_error_model = noisy_stim.detector_error_model(
-            decompose_errors=False
-        )
+        detector_error_model = noisy_stim.detector_error_model(decompose_errors=False)
         matcher = pymatching.Matching.from_detector_error_model(detector_error_model)
 
         Ler_list: list[float] = []
@@ -710,9 +708,7 @@ class MonteLERcalc:
         noisy_stim = SIDNoiseModel(pvalue).inject_noise(circuit.stimcircuit)
 
         sampler = noisy_stim.compile_detector_sampler()
-        detector_error_model = noisy_stim.detector_error_model(
-            decompose_errors=False
-        )
+        detector_error_model = noisy_stim.detector_error_model(decompose_errors=False)
         matcher = pymatching.Matching.from_detector_error_model(detector_error_model)
 
         Ler_list: list[float] = []
@@ -821,9 +817,7 @@ class MonteLERcalc:
         noisy_stim = SIDNoiseModel(pvalue).inject_noise(circuit.stimcircuit)
 
         sampler = noisy_stim.compile_detector_sampler()
-        detector_error_model = noisy_stim.detector_error_model(
-            decompose_errors=False
-        )
+        detector_error_model = noisy_stim.detector_error_model(decompose_errors=False)
         matcher = pymatching.Matching.from_detector_error_model(detector_error_model)
 
         start_time = time.perf_counter()

@@ -680,9 +680,7 @@ class StabCode:
                 # noise in the stim circuit.
                 total_qubits = self._n + len(self._stabs)
                 self._circuit = CliffordCircuit(total_qubits)
-                self._circuit.compile_from_noisy_stim_circuit_str(
-                    str(noisy_circuit)
-                )
+                self._circuit.compile_from_noisy_stim_circuit_str(str(noisy_circuit))
         else:
             raise NotImplementedError(f"Scheme {self._scheme} not implemented yet.")
 
@@ -812,9 +810,7 @@ class StabCode:
                 last_syndrome_dest = prev_stab_meas_addr[stabidx]
                 # Data qubit indices where this stabilizer has Z
                 data_dests = [
-                    data_meas_dests[q]
-                    for q, pauli in enumerate(stab)
-                    if pauli == "Z"
+                    data_meas_dests[q] for q, pauli in enumerate(stab) if pauli == "Z"
                 ]
                 detector_dest = f"d{current_detector_idx}"
                 detector_instr = DetectorInstruction(
@@ -828,9 +824,7 @@ class StabCode:
             logicalZ = self._logicalZ[logical_idx]
             # Observable references data qubit measurements where logicalZ has Z or Y
             obs_dests = [
-                data_meas_dests[q]
-                for q, pauli in enumerate(logicalZ)
-                if pauli in "ZY"
+                data_meas_dests[q] for q, pauli in enumerate(logicalZ) if pauli in "ZY"
             ]
             observable_dest = f"o{logical_idx}"
             observable_instr = ObservableInstruction(observable_dest, obs_dests)
@@ -894,13 +888,8 @@ class StabCode:
         for irinst in self._IRList:
             if isinstance(irinst, StabPropInstruction):
                 # New round? flush the previous one
-                if (
-                    current_round_stabs
-                    and irinst.round != current_round_stabs[0].round
-                ):
-                    rounds_data.append(
-                        (current_round_stabs, current_round_detectors)
-                    )
+                if current_round_stabs and irinst.round != current_round_stabs[0].round:
+                    rounds_data.append((current_round_stabs, current_round_detectors))
                     current_round_stabs = []
                     current_round_detectors = []
                 current_round_stabs.append(irinst)
@@ -912,9 +901,7 @@ class StabCode:
             elif isinstance(irinst, DataMeasureInstruction):
                 # Flush the last syndrome round
                 if current_round_stabs:
-                    rounds_data.append(
-                        (current_round_stabs, current_round_detectors)
-                    )
+                    rounds_data.append((current_round_stabs, current_round_detectors))
                     current_round_stabs = []
                     current_round_detectors = []
                 data_measure = irinst
@@ -923,9 +910,7 @@ class StabCode:
 
         # Flush any remaining round
         if current_round_stabs:
-            rounds_data.append(
-                (current_round_stabs, current_round_detectors)
-            )
+            rounds_data.append((current_round_stabs, current_round_detectors))
 
         # ------------------------------------------------------------------
         # Phase 2: Build stim.Circuit with batched operations and TICKs
@@ -944,9 +929,7 @@ class StabCode:
 
         for round_stabs, round_detectors in rounds_data:
             # --- Reset all ancillas for this round ---
-            ancillas = [
-                self._n + sp.get_stabindex() for sp in round_stabs
-            ]
+            ancillas = [self._n + sp.get_stabindex() for sp in round_stabs]
             circuit.append("R", ancillas)
             circuit.append("TICK")
 
@@ -996,9 +979,7 @@ class StabCode:
                 rec_targets = []
                 for arg in det.args:
                     abs_idx = dest_to_meas_idx[arg]
-                    rec_targets.append(
-                        stim.target_rec(abs_idx - total_meas)
-                    )
+                    rec_targets.append(stim.target_rec(abs_idx - total_meas))
                 circuit.append("DETECTOR", rec_targets)
 
             circuit.append("TICK")

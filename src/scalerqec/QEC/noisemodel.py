@@ -56,8 +56,18 @@ class ErrorType(Enum):
 
 
 # Gate names that are single-qubit Clifford gates
-_1Q_GATES = {"H", "S", "S_DAG", "X", "Y", "Z", "SQRT_X", "SQRT_X_DAG",
-             "SQRT_Y", "SQRT_Y_DAG"}
+_1Q_GATES = {
+    "H",
+    "S",
+    "S_DAG",
+    "X",
+    "Y",
+    "Z",
+    "SQRT_X",
+    "SQRT_X_DAG",
+    "SQRT_Y",
+    "SQRT_Y_DAG",
+}
 # Gate names that are two-qubit gates
 _2Q_GATES = {"CX", "CZ"}
 
@@ -148,9 +158,9 @@ class NoiseModel:
         for instruction in circuit:
             if isinstance(instruction, stim.CircuitRepeatBlock):
                 inner_noisy = self.inject_noise(instruction.body_copy())
-                noisy.append(stim.CircuitRepeatBlock(
-                    instruction.repeat_count, inner_noisy
-                ))
+                noisy.append(
+                    stim.CircuitRepeatBlock(instruction.repeat_count, inner_noisy)
+                )
                 continue
 
             name = instruction.name
@@ -345,9 +355,9 @@ class SI1000NoiseModel(NoiseModel):
         for instruction in circuit:
             if isinstance(instruction, stim.CircuitRepeatBlock):
                 inner_noisy = self.inject_noise(instruction.body_copy())
-                noisy.append(stim.CircuitRepeatBlock(
-                    instruction.repeat_count, inner_noisy
-                ))
+                noisy.append(
+                    stim.CircuitRepeatBlock(instruction.repeat_count, inner_noisy)
+                )
                 continue
 
             name = instruction.name
@@ -407,9 +417,21 @@ class SIDNoiseModel(NoiseModel):
     """
 
     # All gate types that carry qubit operands
-    _NOISY_OPS = _1Q_GATES | _2Q_GATES | {
-        "R", "RX", "RY", "M", "MX", "MY", "MR", "MRX", "MRY",
-    }
+    _NOISY_OPS = (
+        _1Q_GATES
+        | _2Q_GATES
+        | {
+            "R",
+            "RX",
+            "RY",
+            "M",
+            "MX",
+            "MY",
+            "MR",
+            "MRX",
+            "MRY",
+        }
+    )
 
     def __init__(self, p: float) -> None:
         super().__init__(error_rate=p)
@@ -422,9 +444,9 @@ class SIDNoiseModel(NoiseModel):
         for instruction in circuit:
             if isinstance(instruction, stim.CircuitRepeatBlock):
                 inner_noisy = self.inject_noise(instruction.body_copy())
-                noisy.append(stim.CircuitRepeatBlock(
-                    instruction.repeat_count, inner_noisy
-                ))
+                noisy.append(
+                    stim.CircuitRepeatBlock(instruction.repeat_count, inner_noisy)
+                )
                 continue
 
             name = instruction.name

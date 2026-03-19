@@ -313,6 +313,7 @@ class StratifiedScurveLERcalc:
 
         # Inject noise for decoder (DEM needs noisy circuit)
         from ..QEC.noisemodel import SIDNoiseModel
+
         noisy_stim = SIDNoiseModel(self._error_rate).inject_noise(
             self._cliffordcircuit.stimcircuit
         )

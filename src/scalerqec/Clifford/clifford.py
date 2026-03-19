@@ -442,7 +442,10 @@ class CliffordCircuit:
         current_line_index = 0
         current_measure_index = 0
         _SKIP_KEYWORDS_PASS1 = {
-            "TICK", "DETECTOR", "QUBIT_COORDS", "OBSERVABLE_INCLUDE",
+            "TICK",
+            "DETECTOR",
+            "QUBIT_COORDS",
+            "OBSERVABLE_INCLUDE",
         }
         for line in lines:
             stripped_line = line.strip()
@@ -471,9 +474,7 @@ class CliffordCircuit:
         measure_stack: list[int] = []
         for line in lines:
             stripped_line = line.strip()
-            keyword = (
-                stripped_line.split()[0].split("(")[0] if stripped_line else ""
-            )
+            keyword = stripped_line.split()[0].split("(")[0] if stripped_line else ""
             if keyword == "DETECTOR":
                 meas_index_str = [
                     token.strip()
@@ -520,7 +521,10 @@ class CliffordCircuit:
             "M": self.add_measurement,
         }
         _SKIP_KEYWORDS_PASS3 = {
-            "TICK", "DETECTOR", "QUBIT_COORDS", "OBSERVABLE_INCLUDE",
+            "TICK",
+            "DETECTOR",
+            "QUBIT_COORDS",
+            "OBSERVABLE_INCLUDE",
         }
         for line in lines:
             stripped_line = line.strip()
@@ -614,9 +618,17 @@ class CliffordCircuit:
         measure_index_to_line: dict[int, int] = {}
         measure_line_to_measure_index: dict[int, int] = {}
         _SKIP_KEYWORDS = {
-            "TICK", "DETECTOR", "QUBIT_COORDS", "OBSERVABLE_INCLUDE",
-            "DEPOLARIZE1", "DEPOLARIZE2", "X_ERROR", "Y_ERROR",
-            "Z_ERROR", "PAULI_CHANNEL_1", "PAULI_CHANNEL_2",
+            "TICK",
+            "DETECTOR",
+            "QUBIT_COORDS",
+            "OBSERVABLE_INCLUDE",
+            "DEPOLARIZE1",
+            "DEPOLARIZE2",
+            "X_ERROR",
+            "Y_ERROR",
+            "Z_ERROR",
+            "PAULI_CHANNEL_1",
+            "PAULI_CHANNEL_2",
             "SHIFT_COORDS",
         }
         current_line_index = 0
@@ -695,7 +707,11 @@ class CliffordCircuit:
             "Z": oneQGateindices["Z"],
         }
         _1Q_NOISE_KEYWORDS = {
-            "DEPOLARIZE1", "X_ERROR", "Y_ERROR", "Z_ERROR", "PAULI_CHANNEL_1",
+            "DEPOLARIZE1",
+            "X_ERROR",
+            "Y_ERROR",
+            "Z_ERROR",
+            "PAULI_CHANNEL_1",
         }
         _2Q_NOISE_KEYWORDS = {"DEPOLARIZE2", "PAULI_CHANNEL_2"}
 
@@ -706,7 +722,10 @@ class CliffordCircuit:
                 continue
             keyword = stripped.split()[0].split("(")[0]
             if keyword in (
-                "TICK", "DETECTOR", "QUBIT_COORDS", "OBSERVABLE_INCLUDE",
+                "TICK",
+                "DETECTOR",
+                "QUBIT_COORDS",
+                "OBSERVABLE_INCLUDE",
                 "SHIFT_COORDS",
             ):
                 continue
@@ -725,9 +744,7 @@ class CliffordCircuit:
             elif gate in _1Q_GATE_INDEX:
                 qubit = int(tokens[1])
                 maxum_q_index = max(maxum_q_index, qubit)
-                self._gatelists.append(
-                    SingleQGate(_1Q_GATE_INDEX[gate], qubit)
-                )
+                self._gatelists.append(SingleQGate(_1Q_GATE_INDEX[gate], qubit))
 
             elif gate == "M":
                 qubit = int(tokens[1])

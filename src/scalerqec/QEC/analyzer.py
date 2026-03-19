@@ -171,8 +171,7 @@ class IRAnalyzer:
             for s in stabs:
                 if not commute(lz, s):
                     return False, (
-                        f"Logical Z[{idx}] = {lz} does not commute with "
-                        f"stabilizer {s}."
+                        f"Logical Z[{idx}] = {lz} does not commute with stabilizer {s}."
                     )
             if loa._is_in_stabilizer_group(lz):
                 return False, (

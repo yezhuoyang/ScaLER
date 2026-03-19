@@ -257,6 +257,7 @@ class SymbolicLERcalc:
         """
         # Configure a decoder using the noisy circuit.
         from ..QEC.noisemodel import SIDNoiseModel
+
         noisy_stim = SIDNoiseModel(self._error_rate).inject_noise(
             self._cliffordcircuit.stimcircuit
         )
