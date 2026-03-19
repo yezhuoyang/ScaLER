@@ -459,10 +459,10 @@ void cliffordcircuit::compile_from_rewrited_stim_string(std::string stim_str){
            */
            paritygroup measuregroup;
            for(int index: intlist){
-                // TODO: [Review-P1] C-style cast of size_t to int can overflow for
-           // circuits with >2B measurements. Use proper range-checked arithmetic.
-           measuregroup.indexlist.push_back((size_t)((int)num_meas_+index));
-                measure_to_parity_index_[(int)num_meas_+index].indexlist.emplace_back(num_detectors_);
+               // index is a negative offset from num_meas_
+               size_t meas_idx = static_cast<size_t>(static_cast<ptrdiff_t>(num_meas_) + index);
+               measuregroup.indexlist.push_back(meas_idx);
+               measure_to_parity_index_[meas_idx].indexlist.emplace_back(num_detectors_);
            }
            detectors_.push_back(measuregroup);
            num_detectors_++;
@@ -470,8 +470,10 @@ void cliffordcircuit::compile_from_rewrited_stim_string(std::string stim_str){
         else if(op.substr(0,10)=="OBSERVABLE"){
             std::vector<int> intlist= parse_detector_recs(rest);
             paritygroup measuregroup;
-            for(int index: intlist)
-                 measuregroup.indexlist.push_back((size_t)((int)num_meas_+index));
+            for(int index: intlist){
+                 size_t meas_idx = static_cast<size_t>(static_cast<ptrdiff_t>(num_meas_) + index);
+                 measuregroup.indexlist.push_back(meas_idx);
+            }
             observable_=measuregroup;
         }
     });
