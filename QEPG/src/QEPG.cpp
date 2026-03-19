@@ -160,11 +160,9 @@ void QEPG::backward_graph_construction(){
 
     const clifford::paritygroup& observable=circuit_.get_observable_parity_group();
 
-    // TODO: [Review-P0-Bug] Using signed int for t — if gate_size==0, gate_size-1
-    // wraps to SIZE_MAX, which cast to int is UB. Use: for(size_t t=gate_size; t-->0;)
-    // TODO: [Review-P1-Perf] std::string copy + 7 string comparisons per gate in the
-    // hottest loop. Replace Gate::name with enum GateKind and use switch for ~5-10x speedup.
-    for(int t=gate_size-1;t>=0;t--){
+    // NOTE: String comparison per gate is a known performance bottleneck for large
+    // circuits. A future optimization would replace Gate::name with enum GateKind + switch.
+    for(size_t t = gate_size; t-- > 0;){
 
         const auto& gate=circuit_.get_gate(t);
         std::string name=gate.name;
