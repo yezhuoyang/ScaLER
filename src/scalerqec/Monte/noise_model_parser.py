@@ -320,6 +320,11 @@ def extract_noise_model(original_circuit_str: str) -> NonuniformNoiseModel:
     )
 
 
+def _compose_prob(p1: float, p2: float) -> float:
+    """Compose two independent error probabilities: p1 + p2 - 2*p1*p2."""
+    return p1 + p2 - 2.0 * p1 * p2
+
+
 def _accumulate_noise(
     pending: dict[int, tuple[float, float, float]],
     qubit: int,
@@ -327,17 +332,15 @@ def _accumulate_noise(
 ) -> None:
     """Accumulate noise probabilities for a qubit.
 
-    Multiple noise channels on the same qubit between gates compose.
-    We approximate this as addition (valid for small probabilities).
-
-    .. note::
-        TODO: [Review-P1-Correctness] Addition is only valid for small p.
-        The exact formula for independent channels is p_combined = p1 + p2 - 2*p1*p2.
-        At p=0.05 the error from addition is ~0.5% per accumulation. Consider using
-        the exact formula for better accuracy at higher error rates.
+    Multiple noise channels on the same qubit between gates compose
+    independently per Pauli axis using p_combined = p1 + p2 - 2*p1*p2.
     """
     if qubit in pending:
         old = pending[qubit]
-        pending[qubit] = (old[0] + px, old[1] + py, old[2] + pz)
+        pending[qubit] = (
+            _compose_prob(old[0], px),
+            _compose_prob(old[1], py),
+            _compose_prob(old[2], pz),
+        )
     else:
         pending[qubit] = (px, py, pz)
