@@ -41,11 +41,8 @@ void cliffordcircuit::add_XError(size_t qindex) {
 }
 
 /// @brief Append a Z_ERROR noise channel (does not increment noise counter).
-// TODO: [Review-P0-Bug] TYPO: "X_ZRROR" should be "Z_ERROR". This gate name
-// won't match any case in backward propagation, causing Z errors to be silently
-// ignored. Fix the string literal.
 void cliffordcircuit::add_ZError(size_t qindex) {
-    circuit_.push_back({"X_ZRROR", {qindex}});
+    circuit_.push_back({"Z_ERROR", {qindex}});
     num_qubit_=std::max(num_qubit_,qindex+1);
 }
 
