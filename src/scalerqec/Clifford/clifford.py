@@ -512,6 +512,14 @@ class CliffordCircuit:
         """
         Insert gates
         """
+        _1Q_GATE_MAP = {
+            "H": self.add_hadamard,
+            "S": self.add_phase,
+            "X": self.add_paulix,
+            "Y": self.add_pauliy,
+            "Z": self.add_pauliz,
+            "M": self.add_measurement,
+        }
         for line in lines:
             stripped_line = line.strip()
             if not stripped_line:
@@ -530,18 +538,6 @@ class CliffordCircuit:
 
             tokens = stripped_line.split()
             gate = tokens[0]
-
-            # --- Table-driven gate dispatch ---
-            # TODO: [Review-P2-Perf] _1Q_GATE_MAP dict is rebuilt on every iteration
-            # of the for-line loop. Move outside the loop or make a class constant.
-            _1Q_GATE_MAP = {
-                "H": self.add_hadamard,
-                "S": self.add_phase,
-                "X": self.add_paulix,
-                "Y": self.add_pauliy,
-                "Z": self.add_pauliz,
-                "M": self.add_measurement,
-            }
 
             if gate == "CX":
                 control = int(tokens[1])
