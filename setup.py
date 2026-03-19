@@ -21,16 +21,25 @@ if sys.platform == "win32":
     extra_link_args = ["/DEBUG"]
 
 elif sys.platform == "darwin":
-    # --- macOS flags (Apple Clang does not support -fopenmp directly) ---
+    # --- macOS flags ---
+    # Check if OpenMP should be enabled (requires libomp from Homebrew).
+    # Disabled by default in wheel builds (SCALERQEC_NO_OPENMP=1) to avoid
+    # bundling libomp which causes delocate version-target conflicts.
+    # Users building from source can enable it: brew install libomp && pip install .
+    use_openmp = os.environ.get("SCALERQEC_NO_OPENMP", "") != "1"
     homebrew_prefix = os.environ.get("HOMEBREW_PREFIX", "/opt/homebrew")
     omp_inc = os.path.join(homebrew_prefix, "opt", "libomp", "include")
     omp_lib = os.path.join(homebrew_prefix, "opt", "libomp", "lib")
-    extra_compile_args = ["-std=c++20", "-O3", "-Xpreprocessor", "-fopenmp"]
-    extra_link_args = ["-lomp"]
-    if os.path.isdir(omp_inc):
+
+    if use_openmp and os.path.isdir(omp_inc):
+        extra_compile_args = ["-std=c++20", "-O3", "-Xpreprocessor", "-fopenmp"]
+        extra_link_args = ["-lomp"]
         extra_compile_args.append(f"-I{omp_inc}")
-    if os.path.isdir(omp_lib):
-        extra_link_args.append(f"-L{omp_lib}")
+        if os.path.isdir(omp_lib):
+            extra_link_args.append(f"-L{omp_lib}")
+    else:
+        extra_compile_args = ["-std=c++20", "-O3"]
+        extra_link_args = []
 
 else:
     # --- Linux flags ---
