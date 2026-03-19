@@ -44,6 +44,13 @@ else:
     extra_link_args = ["-fopenmp"]
 
 
+# Debug: print build configuration (visible in CI logs)
+print(f"[setup.py] platform={sys.platform}")
+print(f"[setup.py] extra_compile_args={extra_compile_args}")
+print(f"[setup.py] extra_link_args={extra_link_args}")
+print(f"[setup.py] CIBUILDWHEEL={os.environ.get('CIBUILDWHEEL', 'NOT SET')}")
+print(f"[setup.py] SCALERQEC_OPENMP={os.environ.get('SCALERQEC_OPENMP', 'NOT SET')}")
+
 ext_modules = [
     Pybind11Extension(
         "scalerqec.qepg",
