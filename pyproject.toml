@@ -1,7 +1,7 @@
 [build-system]
 
 requires = [
-    "setuptools", 
+    "setuptools>=64",
     "wheel",
     "pybind11>=2.11"
 ]
@@ -20,8 +20,19 @@ authors = [
 ]
 requires-python = ">=3.10"
 readme = "README.md"
-
-
+license = {text = "MIT"}
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: C++",
+    "Operating System :: OS Independent",
+]
 
 dependencies = [
     "stim",
@@ -31,9 +42,26 @@ dependencies = [
     "numpy",
     "scipy",
     "sympy",
-    "tqdm"
+    "tqdm",
 ]
 
+[project.optional-dependencies]
+ldpc = ["stimbposd"]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "ruff",
+    "stimbposd",
+]
 
 [project.urls]
 Homepage = "https://github.com/yezhuoyang/ScaLERQEC"
+Repository = "https://github.com/yezhuoyang/ScaLERQEC"
+Documentation = "https://yezhuoyang.github.io/ScaLERQEC/"
+Issues = "https://github.com/yezhuoyang/ScaLERQEC/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+scalerqec = ["py.typed", "qepg.pyi"]
