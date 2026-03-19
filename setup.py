@@ -22,11 +22,12 @@ if sys.platform == "win32":
 
 elif sys.platform == "darwin":
     # --- macOS flags ---
-    # Check if OpenMP should be enabled (requires libomp from Homebrew).
-    # Disabled by default in wheel builds (SCALERQEC_NO_OPENMP=1) to avoid
-    # bundling libomp which causes delocate version-target conflicts.
-    # Users building from source can enable it: brew install libomp && pip install .
-    use_openmp = os.environ.get("SCALERQEC_NO_OPENMP", "") != "1"
+    # Disable OpenMP when building wheels (cibuildwheel sets CIBUILDWHEEL=1).
+    # Bundling libomp causes delocate version-target conflicts on macOS.
+    # Users building from source get OpenMP automatically: brew install libomp && pip install .
+    in_cibuildwheel = os.environ.get("CIBUILDWHEEL", "") == "1"
+    no_openmp = os.environ.get("SCALERQEC_NO_OPENMP", "") == "1"
+    use_openmp = not in_cibuildwheel and not no_openmp
     homebrew_prefix = os.environ.get("HOMEBREW_PREFIX", "/opt/homebrew")
     omp_inc = os.path.join(homebrew_prefix, "opt", "libomp", "include")
     omp_lib = os.path.join(homebrew_prefix, "opt", "libomp", "lib")
