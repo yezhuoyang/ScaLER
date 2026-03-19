@@ -395,7 +395,7 @@ class CliffordCircuit:
                         raise ValueError(f"Unknown gate type: {gate_type}")
 
     def compile_from_stim_circuit_str(self, stim_str: str) -> None:
-        """Parse a normalized STIM circuit string and build the internal circuit.
+        """Parse a STIM circuit string and build a **noiseless** internal circuit.
 
         This method expects a STIM string that has already been preprocessed by
         :func:`~scalerqec.Clifford.stimparser.rewrite_stim_code` so that each
@@ -407,9 +407,10 @@ class CliffordCircuit:
            ``OBSERVABLE_INCLUDE`` record references into measurement indices,
            building :attr:`parityMatchGroup` and :attr:`observable`.
         3. **Insert gates** -- adds each gate to the internal gate list,
-           injecting a single-qubit depolarizing noise channel before every
-           gate and measurement (except resets, where pre-reset noise is
-           irrelevant).
+           registering noise locations (for QEPG) before every gate and
+           measurement (except resets).  The internal ``stim.Circuit`` is
+           built **noiseless**; noise must be injected afterwards via a
+           :class:`~scalerqec.QEC.noisemodel.NoiseModel`.
 
         After all gates are inserted, :meth:`compile_detector_and_observable`
         is called to append detector and observable instructions to the
@@ -423,7 +424,6 @@ class CliffordCircuit:
             ``_totalMeas``, ``_parityMatchGroup``, ``_observable``,
             ``_qubit_num``, and the internal ``stim.Circuit``.
         """
-        # self._totalnoise=0
         self._totalnoise = 0
         self._totalMeas = 0
         self._totalgates = 0
@@ -441,20 +441,17 @@ class CliffordCircuit:
         measure_line_to_measure_index = {}
         current_line_index = 0
         current_measure_index = 0
+        _SKIP_KEYWORDS_PASS1 = {
+            "TICK", "DETECTOR", "QUBIT_COORDS", "OBSERVABLE_INCLUDE",
+        }
         for line in lines:
             stripped_line = line.strip()
             if not stripped_line:
-                # Skip empty lines (optional: you could also preserve them)
                 current_line_index += 1
                 continue
 
-            # Keep lines that we do NOT want to split
-            if (
-                stripped_line.startswith("TICK")
-                or stripped_line.startswith("DETECTOR(")
-                or stripped_line.startswith("QUBIT_COORDS(")
-                or stripped_line.startswith("OBSERVABLE_INCLUDE(")
-            ):
+            keyword = stripped_line.split()[0].split("(")[0]
+            if keyword in _SKIP_KEYWORDS_PASS1:
                 current_line_index += 1
                 continue
 
@@ -474,7 +471,10 @@ class CliffordCircuit:
         measure_stack: list[int] = []
         for line in lines:
             stripped_line = line.strip()
-            if stripped_line.startswith("DETECTOR("):
+            keyword = (
+                stripped_line.split()[0].split("(")[0] if stripped_line else ""
+            )
+            if keyword == "DETECTOR":
                 meas_index_str = [
                     token.strip()
                     for token in stripped_line.split()
@@ -489,7 +489,7 @@ class CliffordCircuit:
                 )
                 current_line_index += 1
                 continue
-            elif stripped_line.startswith("OBSERVABLE_INCLUDE("):
+            elif keyword == "OBSERVABLE_INCLUDE":
                 meas_index_str = [
                     token.strip()
                     for token in stripped_line.split()
@@ -503,14 +503,13 @@ class CliffordCircuit:
                 current_line_index += 1
                 continue
 
-            tokens = stripped_line.split()
-            gate = tokens[0]
+            gate = keyword
             if gate == "M":
                 measure_stack.append(current_line_index)
             current_line_index += 1
 
         """
-        Insert gates
+        Insert gates (noiseless stim circuit, noise locations tracked for QEPG)
         """
         _1Q_GATE_MAP = {
             "H": self.add_hadamard,
@@ -520,19 +519,16 @@ class CliffordCircuit:
             "Z": self.add_pauliz,
             "M": self.add_measurement,
         }
+        _SKIP_KEYWORDS_PASS3 = {
+            "TICK", "DETECTOR", "QUBIT_COORDS", "OBSERVABLE_INCLUDE",
+        }
         for line in lines:
             stripped_line = line.strip()
             if not stripped_line:
-                # Skip empty lines (optional: you could also preserve them)
                 continue
 
-            # Keep lines that we do NOT want to split
-            if (
-                stripped_line.startswith("TICK")
-                or stripped_line.startswith("DETECTOR(")
-                or stripped_line.startswith("QUBIT_COORDS(")
-                or stripped_line.startswith("OBSERVABLE_INCLUDE(")
-            ):
+            keyword = stripped_line.split()[0].split("(")[0]
+            if keyword in _SKIP_KEYWORDS_PASS3:
                 output_lines.append(stripped_line)
                 continue
 
@@ -543,29 +539,234 @@ class CliffordCircuit:
                 control = int(tokens[1])
                 target = int(tokens[2])
                 maxum_q_index = max(maxum_q_index, control, target)
-                self.add_depolarize(control)
-                self.add_depolarize(target)
+                # Track noise locations for QEPG (no noise in stim circuit)
+                self._track_noise_location(control)
+                self._track_noise_location(target)
                 self.add_cnot(control, target)
 
             elif gate in _1Q_GATE_MAP:
                 qubit = int(tokens[1])
                 maxum_q_index = max(maxum_q_index, qubit)
-                self.add_depolarize(qubit)
+                self._track_noise_location(qubit)
                 _1Q_GATE_MAP[gate](qubit)
 
             elif gate == "R":
                 qubit = int(tokens[1])
                 maxum_q_index = max(maxum_q_index, qubit)
-                # No depolarize before reset - noise before reset is irrelevant
+                # No noise location before reset
                 self.add_reset(qubit)
 
         """
-        Finally, compiler detector and observable
+        Finally, compile detector and observable
         """
         self._parityMatchGroup = parityMatchGroup
         self._observable = observable
         self._qubit_num = maxum_q_index + 1
         self.compile_detector_and_observable()
+
+    def compile_from_noisy_stim_circuit_str(self, stim_str: str) -> None:
+        """Parse a **noisy** STIM circuit string, preserving its noise as-is.
+
+        Unlike :meth:`compile_from_stim_circuit_str` which strips noise and
+        produces a noiseless circuit, this method keeps the noise instructions
+        already present in the STIM string. The internal ``stim.Circuit`` is
+        set to the full noisy circuit parsed directly from *stim_str*.
+
+        The gate list is built for QEPG compatibility: noise instructions in
+        the STIM string are registered as noise locations in the order they
+        appear.
+
+        This is **approach 1**: the user provides a noisy STIM circuit (e.g.
+        from ``stim.Circuit.generated(...)`` or hand-written) and the system
+        uses it directly without further noise injection.
+
+        Args:
+            stim_str: A STIM circuit string that already contains noise
+                instructions (DEPOLARIZE1, DEPOLARIZE2, X_ERROR, etc.)
+                as well as DETECTOR and OBSERVABLE_INCLUDE definitions.
+
+        Side Effects:
+            Resets and repopulates ``_gatelists``, ``_totalnoise``,
+            ``_totalMeas``, ``_parityMatchGroup``, ``_observable``,
+            ``_qubit_num``, and the internal ``stim.Circuit``.
+        """
+        from .stimparser import rewrite_stim_code
+
+        self._totalnoise = 0
+        self._totalMeas = 0
+        self._totalgates = 0
+        self._gatelists = []
+        self._index_to_noise = {}
+        self._index_to_measurement = {}
+        self._measIdx_to_parityIdx = {}
+        self._stim_str = stim_str
+
+        # --- Build stim circuit directly from the noisy string ---
+        self._stimcircuit = stim.Circuit(stim_str)
+
+        # --- Normalize with noise preserved for gate-list iteration ---
+        normalized = rewrite_stim_code(stim_str, keep_noise=True)
+        lines = normalized.splitlines()
+
+        # ------------------------------------------------------------------
+        # Pass 1: index measurements (assign sequential measurement indices)
+        # ------------------------------------------------------------------
+        measure_index_to_line: dict[int, int] = {}
+        measure_line_to_measure_index: dict[int, int] = {}
+        _SKIP_KEYWORDS = {
+            "TICK", "DETECTOR", "QUBIT_COORDS", "OBSERVABLE_INCLUDE",
+            "DEPOLARIZE1", "DEPOLARIZE2", "X_ERROR", "Y_ERROR",
+            "Z_ERROR", "PAULI_CHANNEL_1", "PAULI_CHANNEL_2",
+            "SHIFT_COORDS",
+        }
+        current_line_index = 0
+        current_measure_index = 0
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                current_line_index += 1
+                continue
+            keyword = stripped.split()[0].split("(")[0]
+            if keyword in _SKIP_KEYWORDS:
+                current_line_index += 1
+                continue
+            tokens = stripped.split()
+            gate = tokens[0]
+            if gate == "M":
+                measure_index_to_line[current_measure_index] = current_line_index
+                measure_line_to_measure_index[current_line_index] = (
+                    current_measure_index
+                )
+                current_measure_index += 1
+            current_line_index += 1
+
+        # ------------------------------------------------------------------
+        # Pass 2: extract detectors and observable
+        # ------------------------------------------------------------------
+        parityMatchGroup: list[list[int]] = []
+        observable: list[int] = []
+        current_line_index = 0
+        measure_stack: list[int] = []
+        for line in lines:
+            stripped = line.strip()
+            keyword = stripped.split()[0].split("(")[0] if stripped else ""
+            if keyword == "DETECTOR":
+                meas_index_str = [
+                    token.strip()
+                    for token in stripped.split()
+                    if token.strip().startswith("rec")
+                ]
+                meas_index = [int(x[4:-1]) for x in meas_index_str]
+                parityMatchGroup.append(
+                    [
+                        measure_line_to_measure_index[measure_stack[idx]]
+                        for idx in meas_index
+                    ]
+                )
+                current_line_index += 1
+                continue
+            elif keyword == "OBSERVABLE_INCLUDE":
+                meas_index_str = [
+                    token.strip()
+                    for token in stripped.split()
+                    if token.strip().startswith("rec")
+                ]
+                meas_index = [int(x[4:-1]) for x in meas_index_str]
+                observable = [
+                    measure_line_to_measure_index[measure_stack[idx]]
+                    for idx in meas_index
+                ]
+                current_line_index += 1
+                continue
+
+            gate = keyword
+            if gate == "M":
+                measure_stack.append(current_line_index)
+            current_line_index += 1
+
+        # ------------------------------------------------------------------
+        # Pass 3: build gate list (no stim circuit writes)
+        # ------------------------------------------------------------------
+        _1Q_GATE_INDEX = {
+            "H": oneQGateindices["H"],
+            "S": oneQGateindices["P"],
+            "X": oneQGateindices["X"],
+            "Y": oneQGateindices["Y"],
+            "Z": oneQGateindices["Z"],
+        }
+        _1Q_NOISE_KEYWORDS = {
+            "DEPOLARIZE1", "X_ERROR", "Y_ERROR", "Z_ERROR", "PAULI_CHANNEL_1",
+        }
+        _2Q_NOISE_KEYWORDS = {"DEPOLARIZE2", "PAULI_CHANNEL_2"}
+
+        maxum_q_index = 0
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            keyword = stripped.split()[0].split("(")[0]
+            if keyword in (
+                "TICK", "DETECTOR", "QUBIT_COORDS", "OBSERVABLE_INCLUDE",
+                "SHIFT_COORDS",
+            ):
+                continue
+
+            tokens = stripped.split()
+            gate = keyword
+
+            if gate == "CX":
+                control = int(tokens[1])
+                target = int(tokens[2])
+                maxum_q_index = max(maxum_q_index, control, target)
+                self._gatelists.append(
+                    TwoQGate(twoQGateindices["CNOT"], control, target)
+                )
+
+            elif gate in _1Q_GATE_INDEX:
+                qubit = int(tokens[1])
+                maxum_q_index = max(maxum_q_index, qubit)
+                self._gatelists.append(
+                    SingleQGate(_1Q_GATE_INDEX[gate], qubit)
+                )
+
+            elif gate == "M":
+                qubit = int(tokens[1])
+                maxum_q_index = max(maxum_q_index, qubit)
+                meas = Measurement(self._totalMeas, qubit)
+                self._gatelists.append(meas)
+                self._index_to_measurement[self._totalMeas] = meas
+                self._measIdx_to_parityIdx[self._totalMeas] = []
+                self._totalMeas += 1
+
+            elif gate == "R":
+                qubit = int(tokens[1])
+                maxum_q_index = max(maxum_q_index, qubit)
+                self._gatelists.append(Reset(qubit))
+
+            elif gate in _1Q_NOISE_KEYWORDS:
+                qubit = int(tokens[1])
+                maxum_q_index = max(maxum_q_index, qubit)
+                # Track noise location for QEPG (no stim circuit write)
+                self._track_noise_location(qubit)
+
+            elif gate in _2Q_NOISE_KEYWORDS:
+                q1 = int(tokens[1])
+                q2 = int(tokens[2])
+                maxum_q_index = max(maxum_q_index, q1, q2)
+                self._track_noise_location(q1)
+                self._track_noise_location(q2)
+
+        # ------------------------------------------------------------------
+        # Finalize: set parity groups and observable
+        # ------------------------------------------------------------------
+        self._parityMatchGroup = parityMatchGroup
+        self._observable = observable
+        self._qubit_num = maxum_q_index + 1
+
+        # Build the measIdx → parityIdx reverse mapping
+        for det_idx, paritygroup in enumerate(self._parityMatchGroup):
+            for k in paritygroup:
+                self._measIdx_to_parityIdx[k].append(det_idx)
 
     def save_circuit_to_file(self, filename):
         pass
@@ -604,12 +805,34 @@ class CliffordCircuit:
         self._index_to_noise[self._totalnoise] = noise
         self._totalnoise += 1
 
+    def _track_noise_location(self, qubit: int) -> None:
+        """Register a noise location without emitting to the stim circuit.
+
+        Records a :class:`pauliNoise` entry in the gate list so that
+        QEPG and weight-stratified sampling know about this noise site,
+        but does **not** append any noise instruction to the internal
+        ``stim.Circuit``.  The stim circuit remains noiseless; noise
+        must be injected separately via a :class:`NoiseModel`.
+
+        Args:
+            qubit: The qubit where a noise channel could act.
+        """
+        noise = pauliNoise(self._totalnoise, qubit)
+        self._gatelists.append(noise)
+        self._index_to_noise[self._totalnoise] = noise
+        self._totalnoise += 1
+
     def add_depolarize(self, qubit: int) -> None:
         """Add a single-qubit depolarizing noise channel.
 
         Appends a ``DEPOLARIZE1`` instruction to the STIM circuit and a
         :class:`pauliNoise` entry to the gate list. The depolarizing
         probability is taken from :attr:`error_rate`.
+
+        .. deprecated::
+            This method bakes noise into the circuit during compilation.
+            Prefer compiling a noiseless circuit and injecting noise
+            afterwards via :class:`~scalerqec.QEC.noisemodel.SIDNoiseModel`.
 
         Args:
             qubit: The qubit to apply the depolarizing channel to.

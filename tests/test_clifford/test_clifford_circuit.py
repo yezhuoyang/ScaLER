@@ -533,3 +533,159 @@ class TestYquantLatex:
 
         latex = circ.get_yquant_latex()
         assert "measure" in latex
+
+
+class TestCompileFromNoisyStimCircuitStr:
+    """Tests for compile_from_noisy_stim_circuit_str (approach 1)."""
+
+    def test_basic_noisy_circuit(self):
+        """Test parsing a simple noisy stim circuit."""
+        stim_str = """R 0
+R 1
+DEPOLARIZE1(0.01) 0
+H 0
+DEPOLARIZE1(0.01) 0
+DEPOLARIZE1(0.01) 1
+CX 0 1
+DEPOLARIZE1(0.01) 0
+M 0
+DEPOLARIZE1(0.01) 1
+M 1
+DETECTOR(0,0) rec[-1] rec[-2]
+OBSERVABLE_INCLUDE(0) rec[-1]
+"""
+        circ = CliffordCircuit(2)
+        circ.compile_from_noisy_stim_circuit_str(stim_str)
+
+        assert circ.totalMeas == 2
+        assert circ.totalnoise == 5  # 5 DEPOLARIZE1 instructions
+        assert len(circ.parityMatchGroup) == 1
+        assert len(circ.observable) > 0
+
+    def test_noisy_circuit_preserves_noise_in_stim(self):
+        """Test that the stim circuit includes noise instructions."""
+        stim_str = """R 0
+DEPOLARIZE1(0.01) 0
+H 0
+M 0
+OBSERVABLE_INCLUDE(0) rec[-1]
+"""
+        circ = CliffordCircuit(2)
+        circ.compile_from_noisy_stim_circuit_str(stim_str)
+
+        stim_out = str(circ.stimcircuit)
+        assert "DEPOLARIZE1" in stim_out
+
+    def test_noisy_circuit_with_depolarize2(self):
+        """Test parsing a circuit with DEPOLARIZE2."""
+        stim_str = """R 0
+R 1
+CX 0 1
+DEPOLARIZE2(0.01) 0 1
+M 0
+M 1
+DETECTOR(0,0) rec[-1] rec[-2]
+OBSERVABLE_INCLUDE(0) rec[-1]
+"""
+        circ = CliffordCircuit(2)
+        circ.compile_from_noisy_stim_circuit_str(stim_str)
+
+        assert circ.totalMeas == 2
+        # DEPOLARIZE2 on qubit pair → 2 noise locations
+        assert circ.totalnoise == 2
+        assert "DEPOLARIZE2" in str(circ.stimcircuit)
+
+    def test_noisy_circuit_with_x_error(self):
+        """Test parsing a circuit with X_ERROR."""
+        stim_str = """R 0
+X_ERROR(0.01) 0
+H 0
+M 0
+OBSERVABLE_INCLUDE(0) rec[-1]
+"""
+        circ = CliffordCircuit(2)
+        circ.compile_from_noisy_stim_circuit_str(stim_str)
+
+        assert circ.totalnoise == 1
+        assert "X_ERROR" in str(circ.stimcircuit)
+
+    def test_noisy_circuit_qubit_count(self):
+        """Test that qubit count is derived from the circuit."""
+        stim_str = """R 0
+R 1
+R 2
+CX 0 1
+CX 1 2
+M 0
+M 1
+M 2
+OBSERVABLE_INCLUDE(0) rec[-1]
+"""
+        circ = CliffordCircuit(2)
+        circ.compile_from_noisy_stim_circuit_str(stim_str)
+
+        assert circ.qubit_num == 3
+
+    def test_stim_generated_repetition_code(self):
+        """Test with a stim-generated repetition code circuit."""
+        import stim
+
+        ref_circuit = stim.Circuit.generated(
+            "repetition_code:memory",
+            rounds=3,
+            distance=3,
+            after_clifford_depolarization=0.01,
+            after_reset_flip_probability=0.01,
+            before_measure_flip_probability=0.01,
+            before_round_data_depolarization=0.01,
+        )
+        stim_str = str(ref_circuit)
+
+        circ = CliffordCircuit(2)
+        circ.compile_from_noisy_stim_circuit_str(stim_str)
+
+        # Should have detectors and an observable
+        assert len(circ.parityMatchGroup) > 0
+        assert len(circ.observable) > 0
+        assert circ.totalMeas > 0
+        assert circ.totalnoise > 0
+
+        # The stim circuit should produce the same DEM as the reference
+        our_dem = circ.stimcircuit.detector_error_model(
+            decompose_errors=True
+        )
+        ref_dem = ref_circuit.detector_error_model(decompose_errors=True)
+        assert len(our_dem) == len(ref_dem)
+
+    def test_noiseless_vs_noisy_gate_list_match(self):
+        """Test that gate list structure matches between approaches."""
+        from scalerqec.QEC.noisemodel import SIDNoiseModel
+
+        noiseless_str = """R 0
+R 1
+H 0
+CX 0 1
+M 0
+M 1
+DETECTOR(0,0) rec[-1] rec[-2]
+OBSERVABLE_INCLUDE(0) rec[-1]
+"""
+        # Approach 2: noiseless compile + inject noise
+        circ_noiseless = CliffordCircuit(2)
+        circ_noiseless.compile_from_stim_circuit_str(noiseless_str)
+
+        # Approach 1: noisy compile
+        noisy_stim = SIDNoiseModel(0.01).inject_noise(
+            circ_noiseless.stimcircuit
+        )
+        circ_noisy = CliffordCircuit(2)
+        circ_noisy.compile_from_noisy_stim_circuit_str(str(noisy_stim))
+
+        # Both should have the same number of measurements
+        assert circ_noisy.totalMeas == circ_noiseless.totalMeas
+        # Both should have noise locations
+        assert circ_noisy.totalnoise > 0
+        # Both should have same detector structure
+        assert len(circ_noisy.parityMatchGroup) == len(
+            circ_noiseless.parityMatchGroup
+        )

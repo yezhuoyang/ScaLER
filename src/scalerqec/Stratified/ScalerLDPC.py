@@ -103,7 +103,6 @@ class ScalerLDPC(Scaler):
             stim_str = f.read()
 
         print("[ScalerLDPC] Compiling circuit...")
-        self._cliffordcircuit.error_rate = self._error_rate
         self._cliffordcircuit.compile_from_stim_circuit_str(stim_str)
         self._num_noise = self._cliffordcircuit.totalnoise
         self._num_detector = len(self._cliffordcircuit.parityMatchGroup)
@@ -113,12 +112,16 @@ class ScalerLDPC(Scaler):
         print(f"  - Number of noise locations: {self._num_noise}")
         print(f"  - Number of detectors: {self._num_detector}")
 
-        # Configure BPOSD decoder using the detector error model
+        # Inject noise for decoder (DEM needs noisy circuit)
+        from scalerqec.QEC.noisemodel import SIDNoiseModel
+        noisy_stim = SIDNoiseModel(self._error_rate).inject_noise(
+            self._cliffordcircuit.stimcircuit
+        )
+
+        # Configure BPOSD decoder using the noisy detector error model
         print("[ScalerLDPC] Building detector error model...")
-        self._detector_error_model = (
-            self._cliffordcircuit.stimcircuit.detector_error_model(
-                decompose_errors=False
-            )
+        self._detector_error_model = noisy_stim.detector_error_model(
+            decompose_errors=False
         )
 
         # Initialize BPOSD decoder

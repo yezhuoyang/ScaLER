@@ -61,22 +61,30 @@ _NOISE_KEYWORDS = {
     "SHIFT_COORDS",
 }
 
+# Single-qubit noise instructions (one qubit per line when splitting)
+_1Q_NOISE = {"X_ERROR", "Y_ERROR", "Z_ERROR", "DEPOLARIZE1", "PAULI_CHANNEL_1"}
+
+# Two-qubit noise instructions (qubit pair per line when splitting)
+_2Q_NOISE = {"DEPOLARIZE2", "PAULI_CHANNEL_2"}
+
 
 # ---------------------------------------------------------------------------
 # Core rewrite logic
 # ---------------------------------------------------------------------------
 
 
-def _rewrite(code: str) -> str:
+def _rewrite(code: str, *, keep_noise: bool = False) -> str:
     """Normalize a STIM program so each line has at most one gate operation.
 
     Transformations:
     1. Splits multi-target instructions (one op per qubit or qubit pair).
     2. Decomposes composite gates to primitives via the tables above.
-    3. Strips noise directives (noise is injected separately by the compiler).
+    3. Strips noise directives unless *keep_noise* is ``True``.
 
     Args:
         code: The raw STIM circuit program as a multi-line string.
+        keep_noise: If ``True``, noise directives are preserved and split
+            per qubit (or qubit pair) instead of being stripped.
 
     Returns:
         A normalized STIM program string with one operation per line.
@@ -98,8 +106,23 @@ def _rewrite(code: str) -> str:
             output_lines.append(stripped_line)
             continue
 
-        # Strip noise directives
+        # Handle noise directives
         if keyword in _NOISE_KEYWORDS:
+            if not keep_noise:
+                continue
+            # Preserve noise: split per qubit or qubit pair
+            gate_with_args = tokens[0]  # e.g. "DEPOLARIZE1(0.001)"
+            qubits = tokens[1:]
+            if keyword in _1Q_NOISE:
+                for q in qubits:
+                    output_lines.append(f"{gate_with_args} {q}")
+            elif keyword in _2Q_NOISE:
+                for i in range(0, len(qubits), 2):
+                    q1, q2 = qubits[i], qubits[i + 1]
+                    output_lines.append(f"{gate_with_args} {q1} {q2}")
+            else:
+                # SHIFT_COORDS or other metadata — preserve as-is
+                output_lines.append(stripped_line)
             continue
 
         gate = tokens[0]
@@ -160,21 +183,25 @@ class stimparser:
     def __init__(self):
         pass
 
-    def rewrite_stim_code(self, code: str) -> str:
+    def rewrite_stim_code(
+        self, code: str, *, keep_noise: bool = False
+    ) -> str:
         """Normalize a STIM program so each line has at most one gate operation.
 
         See :func:`rewrite_stim_code` for full details.
 
         Args:
             code: The raw STIM circuit program as a multi-line string.
+            keep_noise: If ``True``, noise directives are preserved and
+                split per qubit instead of being stripped.
 
         Returns:
             A normalized STIM program string with one operation per line.
         """
-        return _rewrite(code)
+        return _rewrite(code, keep_noise=keep_noise)
 
 
-def rewrite_stim_code(code: str) -> str:
+def rewrite_stim_code(code: str, *, keep_noise: bool = False) -> str:
     """Normalize a STIM program so each line has at most one gate operation.
 
     This is a module-level convenience function equivalent to
@@ -183,8 +210,10 @@ def rewrite_stim_code(code: str) -> str:
 
     Args:
         code: The raw STIM circuit program as a multi-line string.
+        keep_noise: If ``True``, noise directives are preserved and split
+            per qubit instead of being stripped.
 
     Returns:
         A normalized STIM program string with one operation per line.
     """
-    return _rewrite(code)
+    return _rewrite(code, keep_noise=keep_noise)

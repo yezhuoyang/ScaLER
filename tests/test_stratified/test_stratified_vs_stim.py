@@ -158,7 +158,12 @@ class TestStratifiedVsStim:
         print(f"  Total samples: {stim_samples:,}")
 
         # Use STIM directly instead of MonteLERcalc to ensure we use all samples
-        sampler = stratified_calc._cliffordcircuit.stimcircuit.compile_detector_sampler()
+        # Build noisy circuit for stim sampling
+        from scalerqec.QEC.noisemodel import SIDNoiseModel
+        noisy_stim = SIDNoiseModel(error_rate).inject_noise(
+            stratified_calc._cliffordcircuit.stimcircuit
+        )
+        sampler = noisy_stim.compile_detector_sampler()
         detection_stim, observable_stim = sampler.sample(
             stim_samples, separate_observables=True
         )

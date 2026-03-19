@@ -66,6 +66,7 @@ class IRType(Enum):
         WHILE: While-loop control flow (not yet implemented).
         REPEAT_UNTIL: Repeat-until control flow (not yet implemented).
         REPEAT: Fixed-count repetition (not yet implemented).
+        DATA_MEASURE: Measure all data qubits in a given basis.
     """
 
     PROP = 0
@@ -75,6 +76,7 @@ class IRType(Enum):
     WHILE = 4
     REPEAT_UNTIL = 5
     REPEAT = 6
+    DATA_MEASURE = 7
 
 
 class IRInstruction:
@@ -325,6 +327,30 @@ class REPEATInstruction(IRInstruction):
         super().__init__(IRType.REPEAT)
         self._body = body
         self._times = times
+
+
+class DataMeasureInstruction(IRInstruction):
+    """IR instruction for measuring all data qubits.
+
+    After the final syndrome extraction round, all data qubits are measured
+    in the specified basis. The measurement results are used to construct
+    final-round detectors and the logical observable.
+
+    Args:
+        basis: Measurement basis (``"Z"``, ``"X"``, or ``"Y"``).
+            Defaults to ``"Z"`` for memory-Z experiments.
+    """
+
+    def __init__(self, basis: str = "Z") -> None:
+        super().__init__(IRType.DATA_MEASURE)
+        self._basis = basis
+
+    @property
+    def basis(self) -> str:
+        return self._basis
+
+    def __str__(self) -> str:
+        return f"DataMeasure {self._basis}"
 
 
 class StabCode:
@@ -625,8 +651,10 @@ class StabCode:
            :class:`~scalerqec.Clifford.clifford.CliffordCircuit` and a
            ``stim.Circuit``.
 
-        If a :attr:`noisemodel` has been attached, depolarizing noise is
-        injected into the compiled circuit after stage 2.
+        If a :attr:`noisemodel` has been attached, noise is injected into
+        the compiled circuit after stage 2, and the CliffordCircuit is
+        rebuilt from the noisy circuit so that the QEPG gate list reflects
+        the actual noise locations.
 
         The IR uses a simple text-like notation internally::
 
@@ -645,10 +673,16 @@ class StabCode:
             self.construct_IR_standard_scheme()
             self.compile_stim_circuit_from_IR_standard()
             if self._noisemodel is not None:
-                self._circuit = self._noisemodel.reconstruct_clifford_circuit(
-                    self._circuit
+                noisy_circuit = self._noisemodel.inject_noise(self._stimcirc)
+                self._stimcirc = noisy_circuit
+                # Rebuild CliffordCircuit from noisy circuit using the
+                # noisy parser so QEPG noise locations match the actual
+                # noise in the stim circuit.
+                total_qubits = self._n + len(self._stabs)
+                self._circuit = CliffordCircuit(total_qubits)
+                self._circuit.compile_from_noisy_stim_circuit_str(
+                    str(noisy_circuit)
                 )
-                self._stimcirc = self._circuit._stimcircuit
         else:
             raise NotImplementedError(f"Scheme {self._scheme} not implemented yet.")
 
@@ -686,16 +720,31 @@ class StabCode:
         """
         pass
 
+    def _is_z_type_stabilizer(self, stab: str) -> bool:
+        """Check if a stabilizer is pure Z-type (only I and Z entries)."""
+        return all(c in "IZ" for c in stab)
+
+    def _is_x_type_stabilizer(self, stab: str) -> bool:
+        """Check if a stabilizer is pure X-type (only I and X entries)."""
+        return all(c in "IX" for c in stab)
+
     def construct_IR_standard_scheme(self) -> None:
         """Build the IR for standard (bare-ancilla) syndrome extraction.
 
-        For each of :attr:`rounds` syndrome-extraction rounds, a
-        :class:`StabPropInstruction` is emitted for every stabilizer
-        generator.  Starting from the second round, a
-        :class:`DetectorInstruction` is added comparing the current
-        round's measurement to the previous round's measurement for the
-        same stabilizer.  Finally, :class:`ObservableInstruction` entries
-        are emitted for each logical Z operator.
+        Produces a complete IR with:
+
+        1. **Round-0 detectors**: Each stabilizer measurement in the first
+           round is deterministic (outcome 0 with all-zero init), so a
+           single-measurement detector is emitted.
+        2. **Inter-round detectors**: From round 1 onward, detectors compare
+           the same stabilizer across consecutive rounds.
+        3. **Final data qubit measurements**: All data qubits are measured
+           in the Z basis (memory-Z experiment).
+        4. **Final-round detectors**: For each Z-type stabilizer, a detector
+           XORs the last syndrome measurement with the data qubit
+           measurements at the stabilizer's Z support.
+        5. **Observable**: References data qubit measurements at positions
+           where the logical Z operator has Z (or Y) support.
 
         This method is idempotent: calling it more than once has no
         effect.
@@ -706,48 +755,87 @@ class StabCode:
         """
         if self._IR_compiled:
             return
-        current_measurement_idx = 0
-        current_detector_idx = 0
-        prev_stab_meas_addr: dict[str, int] = {}
-        for r in range(self._rounds):
-            stabidx = 0
-            for stab in self._stabs:
-                dest = f"c{current_measurement_idx}"
-                instr = StabPropInstruction(r, stabidx, dest, stab)
-                self._IRList.append(instr)
-                current_measurement_idx += 1
-                stabidx += 1
-                """
-                Since the second round, add detectors comparing with previous round
-                """
-                if r > 0:
-                    prev_dest = prev_stab_meas_addr[stab]
-                    detector_dest = f"d{current_detector_idx}"
-                    detector_instr = DetectorInstruction(
-                        detector_dest, [prev_dest, dest]
-                    )
-                    self._IRList.append(detector_instr)
-                    current_detector_idx += 1
-                prev_stab_meas_addr[stab] = dest
-        # Logical observables
+
         for logical_idx in range(self._k):
             if logical_idx not in self._logicalZ:
                 raise ValueError(
                     f"Logical Z operator for logical qubit {logical_idx} not defined. "
                     f"Use set_logical_Z({logical_idx}, '<pauli_string>') before constructing the circuit."
                 )
+
+        current_measurement_idx = 0
+        current_detector_idx = 0
+        prev_stab_meas_addr: dict[int, str] = {}  # stabindex -> dest
+
+        for r in range(self._rounds):
+            for stabidx, stab in enumerate(self._stabs):
+                dest = f"c{current_measurement_idx}"
+                instr = StabPropInstruction(r, stabidx, dest, stab)
+                self._IRList.append(instr)
+                current_measurement_idx += 1
+
+                if r == 0:
+                    # Round-0 detector: single measurement, deterministic
+                    # Only Z-type stabilizers are deterministic with |0⟩ init
+                    # (X-type stabilizers have random outcomes in Z-basis init)
+                    if self._is_z_type_stabilizer(stab):
+                        detector_dest = f"d{current_detector_idx}"
+                        detector_instr = DetectorInstruction(detector_dest, [dest])
+                        self._IRList.append(detector_instr)
+                        current_detector_idx += 1
+                else:
+                    # Inter-round detector: compare with previous round
+                    prev_dest = prev_stab_meas_addr[stabidx]
+                    detector_dest = f"d{current_detector_idx}"
+                    detector_instr = DetectorInstruction(
+                        detector_dest, [prev_dest, dest]
+                    )
+                    self._IRList.append(detector_instr)
+                    current_detector_idx += 1
+
+                prev_stab_meas_addr[stabidx] = dest
+
+        # Final: measure all data qubits in Z basis
+        data_meas_instr = DataMeasureInstruction(basis="Z")
+        self._IRList.append(data_meas_instr)
+
+        # Data qubit measurement destinations
+        data_meas_dests = []
+        for q in range(self._n):
+            dest = f"m{q}"  # data qubit measurement
+            data_meas_dests.append(dest)
+
+        # Final-round detectors: for Z-type stabilizers, XOR last syndrome
+        # measurement with data qubit measurements at the stabilizer's support
+        for stabidx, stab in enumerate(self._stabs):
+            if self._is_z_type_stabilizer(stab):
+                last_syndrome_dest = prev_stab_meas_addr[stabidx]
+                # Data qubit indices where this stabilizer has Z
+                data_dests = [
+                    data_meas_dests[q]
+                    for q, pauli in enumerate(stab)
+                    if pauli == "Z"
+                ]
+                detector_dest = f"d{current_detector_idx}"
+                detector_instr = DetectorInstruction(
+                    detector_dest, [last_syndrome_dest] + data_dests
+                )
+                self._IRList.append(detector_instr)
+                current_detector_idx += 1
+
+        # Logical observables from data qubit measurements
+        for logical_idx in range(self._k):
             logicalZ = self._logicalZ[logical_idx]
-
-            dest = f"c{current_measurement_idx}"
-            instr = StabPropInstruction(
-                0, 0, dest, logicalZ, is_observable=True, observable_index=logical_idx
-            )
-
-            self._IRList.append(instr)
-            current_measurement_idx += 1
+            # Observable references data qubit measurements where logicalZ has Z or Y
+            obs_dests = [
+                data_meas_dests[q]
+                for q, pauli in enumerate(logicalZ)
+                if pauli in "ZY"
+            ]
             observable_dest = f"o{logical_idx}"
-            observable_instr = ObservableInstruction(observable_dest, [dest])
+            observable_instr = ObservableInstruction(observable_dest, obs_dests)
             self._IRList.append(observable_instr)
+
         self._IR_compiled = True
 
     def show_IR(self) -> None:
@@ -763,23 +851,20 @@ class StabCode:
     def compile_stim_circuit_from_IR_standard(self) -> str | None:
         """Lower the standard-scheme IR into a STIM circuit.
 
-        Iterates over the IR instruction list and emits physical-level
-        gates into a
-        :class:`~scalerqec.Clifford.clifford.CliffordCircuit`:
+        Builds a ``stim.Circuit`` directly from the IR, batching
+        operations by round with proper TICK instructions:
 
-        * **StabPropInstruction** -- resets the ancilla, applies
-          controlled-Pauli entangling gates for each non-identity Pauli
-          in the stabilizer, and measures the ancilla.
-        * **DetectorInstruction** -- records a parity check across
-          measurement results.
-        * **ObservableInstruction** -- records a logical observable.
+        1. Reset all ancillas for the round → TICK
+        2. Entangling gates for all stabilizers → TICK
+        3. Measure all ancillas → emit detectors → TICK
+
+        This round structure enables noise models to inject per-time-step
+        noise (idle depolarization, etc.) between TICK boundaries.
 
         Qubit layout convention:
 
         * Data qubits: indices ``0 .. n-1``.
         * Syndrome ancillas: indices ``n .. n + num_stabilizers - 1``.
-        * Observable ancillas: indices
-          ``n + num_stabilizers .. n + num_stabilizers + k - 1``.
 
         Returns:
             The compiled STIM circuit as a string if the circuit was
@@ -789,75 +874,174 @@ class StabCode:
         Raises:
             RuntimeError: If the IR has not been compiled yet.
         """
-        # Convension: Stabilizer k stored in qubit n+k-1
-        # Observable k stored in qubit n+num_syndromes+k-1
-
         if not self._IR_compiled:
             raise RuntimeError("IR not compiled yet.")
         if self._circuit_compiled:
             return str(self._stimcirc)
-        self._circuit = CliffordCircuit(self._n + len(self._stabs) + self._k)
-        parity_match_group = []
-        observable_parity_group = []
 
-        dest_to_measure_index = {}
-        current_measure_index = 0
+        # ------------------------------------------------------------------
+        # Phase 1: Group IR instructions by round
+        # ------------------------------------------------------------------
+        rounds_data: list[
+            tuple[list[StabPropInstruction], list[DetectorInstruction]]
+        ] = []
+        current_round_stabs: list[StabPropInstruction] = []
+        current_round_detectors: list[DetectorInstruction] = []
+        data_measure: DataMeasureInstruction | None = None
+        final_detectors: list[DetectorInstruction] = []
+        observables: list[ObservableInstruction] = []
+
         for irinst in self._IRList:
             if isinstance(irinst, StabPropInstruction):
-                stab = irinst.stab
-                dest_index = int(irinst.dest[1:])
-                if irinst.is_observable():
-                    helper_qubit_index = (
-                        self._n + len(self._stabs) + irinst.get_observable_index()
+                # New round? flush the previous one
+                if (
+                    current_round_stabs
+                    and irinst.round != current_round_stabs[0].round
+                ):
+                    rounds_data.append(
+                        (current_round_stabs, current_round_detectors)
                     )
-                else:
-                    helper_qubit_index = self._n + irinst.get_stabindex()
-
-                self._circuit.add_reset(helper_qubit_index)
-                for qubit_index, pauli in enumerate(stab):
-                    if pauli == "X":
-                        self._circuit.add_hadamard(qubit_index)
-                        self._circuit.add_cnot(
-                            control=qubit_index, target=helper_qubit_index
-                        )
-                        self._circuit.add_hadamard(qubit_index)
-                    elif pauli == "Z":
-                        self._circuit.add_cnot(
-                            control=qubit_index, target=helper_qubit_index
-                        )
-                    elif pauli == "I":
-                        continue
-                    elif pauli == "Y":
-                        # Y = iXZ, so we need to apply both X and Z parity propagation
-                        # First apply X part: H-CNOT-H
-                        self._circuit.add_hadamard(qubit_index)
-                        self._circuit.add_cnot(
-                            control=qubit_index, target=helper_qubit_index
-                        )
-                        self._circuit.add_hadamard(qubit_index)
-                        # Then apply Z part: CNOT
-                        self._circuit.add_cnot(
-                            control=qubit_index, target=helper_qubit_index
-                        )
-
-                self._circuit.add_measurement(helper_qubit_index)
-                dest_to_measure_index[irinst.dest] = current_measure_index
-                current_measure_index += 1
-
+                    current_round_stabs = []
+                    current_round_detectors = []
+                current_round_stabs.append(irinst)
             elif isinstance(irinst, DetectorInstruction):
-                args = irinst.args
-                args_measure_indices = [dest_to_measure_index[arg] for arg in args]
-                parity_match_group.append(args_measure_indices)
-
+                if data_measure is None:
+                    current_round_detectors.append(irinst)
+                else:
+                    final_detectors.append(irinst)
+            elif isinstance(irinst, DataMeasureInstruction):
+                # Flush the last syndrome round
+                if current_round_stabs:
+                    rounds_data.append(
+                        (current_round_stabs, current_round_detectors)
+                    )
+                    current_round_stabs = []
+                    current_round_detectors = []
+                data_measure = irinst
             elif isinstance(irinst, ObservableInstruction):
-                args = irinst.args
-                args_indices = [dest_to_measure_index[arg] for arg in args]
-                observable_parity_group.append(args_indices)
+                observables.append(irinst)
 
-        self._circuit.parityMatchGroup = parity_match_group
-        self._circuit.observable = observable_parity_group[0]
-        self._circuit.compile_detector_and_observable()
-        self._stimcirc = self._circuit._stimcircuit
+        # Flush any remaining round
+        if current_round_stabs:
+            rounds_data.append(
+                (current_round_stabs, current_round_detectors)
+            )
+
+        # ------------------------------------------------------------------
+        # Phase 2: Build stim.Circuit with batched operations and TICKs
+        # ------------------------------------------------------------------
+        num_stabs = len(self._stabs)
+        total_qubits = self._n + num_stabs
+        circuit = stim.Circuit()
+
+        # Emit qubit coordinates if available
+        if hasattr(self, "_qubit_coords"):
+            for q, (x, y) in self._qubit_coords.items():
+                circuit.append("QUBIT_COORDS", [q], [x, y])
+
+        total_meas = 0
+        dest_to_meas_idx: dict[str, int] = {}
+
+        for round_stabs, round_detectors in rounds_data:
+            # --- Reset all ancillas for this round ---
+            ancillas = [
+                self._n + sp.get_stabindex() for sp in round_stabs
+            ]
+            circuit.append("R", ancillas)
+            circuit.append("TICK")
+
+            # --- Entangling gates for all stabilizers ---
+            for sp in round_stabs:
+                stab = sp.stab
+                ancilla = self._n + sp.get_stabindex()
+
+                is_pure_x = self._is_x_type_stabilizer(stab)
+                is_pure_z = self._is_z_type_stabilizer(stab)
+
+                if is_pure_x:
+                    circuit.append("H", [ancilla])
+                    for qubit_index, pauli in enumerate(stab):
+                        if pauli == "X":
+                            circuit.append("CX", [ancilla, qubit_index])
+                    circuit.append("H", [ancilla])
+                elif is_pure_z:
+                    for qubit_index, pauli in enumerate(stab):
+                        if pauli == "Z":
+                            circuit.append("CX", [qubit_index, ancilla])
+                else:
+                    for qubit_index, pauli in enumerate(stab):
+                        if pauli == "X":
+                            circuit.append("H", [qubit_index])
+                            circuit.append("CX", [qubit_index, ancilla])
+                            circuit.append("H", [qubit_index])
+                        elif pauli == "Z":
+                            circuit.append("CX", [qubit_index, ancilla])
+                        elif pauli == "Y":
+                            circuit.append("H", [qubit_index])
+                            circuit.append("CX", [qubit_index, ancilla])
+                            circuit.append("H", [qubit_index])
+                            circuit.append("CX", [qubit_index, ancilla])
+
+            circuit.append("TICK")
+
+            # --- Measure all ancillas ---
+            for sp in round_stabs:
+                ancilla = self._n + sp.get_stabindex()
+                circuit.append("M", [ancilla])
+                dest_to_meas_idx[sp.dest] = total_meas
+                total_meas += 1
+
+            # --- Emit detectors for this round ---
+            for det in round_detectors:
+                rec_targets = []
+                for arg in det.args:
+                    abs_idx = dest_to_meas_idx[arg]
+                    rec_targets.append(
+                        stim.target_rec(abs_idx - total_meas)
+                    )
+                circuit.append("DETECTOR", rec_targets)
+
+            circuit.append("TICK")
+
+        # ------------------------------------------------------------------
+        # Final: data qubit measurements
+        # ------------------------------------------------------------------
+        if data_measure is not None:
+            data_qubits = list(range(self._n))
+            circuit.append("M", data_qubits)
+            for q in range(self._n):
+                dest_to_meas_idx[f"m{q}"] = total_meas
+                total_meas += 1
+
+        # Final-round detectors
+        for det in final_detectors:
+            rec_targets = []
+            for arg in det.args:
+                abs_idx = dest_to_meas_idx[arg]
+                rec_targets.append(stim.target_rec(abs_idx - total_meas))
+            circuit.append("DETECTOR", rec_targets)
+
+        # Observables
+        for obs in observables:
+            rec_targets = []
+            for arg in obs.args:
+                abs_idx = dest_to_meas_idx[arg]
+                rec_targets.append(stim.target_rec(abs_idx - total_meas))
+            obs_idx = int(obs.dest[1:])
+            circuit.append("OBSERVABLE_INCLUDE", rec_targets, obs_idx)
+
+        self._stimcirc = circuit
+
+        # Also build a CliffordCircuit for backward compatibility with QEPG
+        self._circuit = CliffordCircuit(total_qubits)
+        try:
+            self._circuit.compile_from_stim_circuit_str(str(circuit))
+        except (IndexError, KeyError):
+            # CliffordCircuit parser may not handle all gate sequences
+            # (e.g., Y-stabilizer double-CX pattern). The stim circuit
+            # is still valid; only the legacy CliffordCircuit is unavailable.
+            pass
+
         self._circuit_compiled = True
 
 

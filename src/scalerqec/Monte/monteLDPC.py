@@ -12,6 +12,7 @@ import time
 
 from ..Clifford.clifford import CliffordCircuit
 from ..Clifford.stimparser import rewrite_stim_code
+from ..QEC.noisemodel import SIDNoiseModel
 
 try:
     from stimbposd import BPOSD
@@ -103,7 +104,6 @@ class MonteLDPC:
             Estimated logical error rate
         """
         circuit = CliffordCircuit(2)
-        circuit.error_rate = pvalue
         self._samplebudget = samplebudget
 
         # Read and compile circuit
@@ -111,13 +111,12 @@ class MonteLDPC:
             stim_str = f.read()
 
         stim_circuit = rewrite_stim_code(stim_str)
-        circuit.stimcircuit = stim_circuit
         circuit.compile_from_stim_circuit_str(stim_circuit)
-        new_stim_circuit = circuit.stimcircuit
+        noisy_stim = SIDNoiseModel(pvalue).inject_noise(circuit.stimcircuit)
 
         # Create sampler and BPOSD decoder
-        sampler = new_stim_circuit.compile_detector_sampler()
-        detector_error_model = new_stim_circuit.detector_error_model(
+        sampler = noisy_stim.compile_detector_sampler()
+        detector_error_model = noisy_stim.detector_error_model(
             decompose_errors=False
         )
 
@@ -222,18 +221,16 @@ class MonteLDPC:
             Dictionary with ler, le_count, samples_used, time_elapsed, budget_exhausted
         """
         circuit = CliffordCircuit(2)
-        circuit.error_rate = pvalue
 
         with open(filepath, "r", encoding="utf-8") as f:
             stim_str = f.read()
 
         stim_circuit = rewrite_stim_code(stim_str)
-        circuit.stimcircuit = stim_circuit
         circuit.compile_from_stim_circuit_str(stim_circuit)
-        new_stim_circuit = circuit.stimcircuit
+        noisy_stim = SIDNoiseModel(pvalue).inject_noise(circuit.stimcircuit)
 
-        sampler = new_stim_circuit.compile_detector_sampler()
-        detector_error_model = new_stim_circuit.detector_error_model(
+        sampler = noisy_stim.compile_detector_sampler()
+        detector_error_model = noisy_stim.detector_error_model(
             decompose_errors=False
         )
 
