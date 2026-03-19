@@ -132,13 +132,10 @@ class QEPGpython:
                 current_z_prop[gate._qubitindex, :] = 0
                 continue
 
-            # TODO: [Review-P2] CNOT Y-propagation correctness depends on the fact
-            # that target.X and control.Z are NOT modified before being used in the
-            # Y updates. This is extremely subtle — add a comment explaining WHY
-            # the order is safe, or use temporaries to make it order-independent.
-            """
-            Deal with propagation by CNOT gate, we need to consider the propagation of X and Z
-            """
+            # CNOT backward propagation: X spreads from target→control, Z from control→target.
+            # Y_control uses target.X (updated above) and Y_target uses control.Z (updated above).
+            # This order is correct because Y = iXZ, so Y_ctrl depends on the NEW X of target
+            # and Y_tgt depends on the NEW Z of control (post-CNOT Heisenberg picture).
             if gate._name == "CNOT":
                 control = gate._control
                 target = gate._target
