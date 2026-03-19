@@ -22,25 +22,21 @@ if sys.platform == "win32":
 
 elif sys.platform == "darwin":
     # --- macOS flags ---
-    # Disable OpenMP when building wheels (cibuildwheel sets CIBUILDWHEEL=1).
-    # Bundling libomp causes delocate version-target conflicts on macOS.
-    # Users building from source get OpenMP automatically: brew install libomp && pip install .
-    in_cibuildwheel = os.environ.get("CIBUILDWHEEL", "") == "1"
-    no_openmp = os.environ.get("SCALERQEC_NO_OPENMP", "") == "1"
-    use_openmp = not in_cibuildwheel and not no_openmp
-    homebrew_prefix = os.environ.get("HOMEBREW_PREFIX", "/opt/homebrew")
-    omp_inc = os.path.join(homebrew_prefix, "opt", "libomp", "include")
-    omp_lib = os.path.join(homebrew_prefix, "opt", "libomp", "lib")
+    # OpenMP is opt-in on macOS to avoid libomp/delocate conflicts in wheels.
+    # To enable: SCALERQEC_OPENMP=1 pip install .  (requires: brew install libomp)
+    extra_compile_args = ["-std=c++20", "-O3"]
+    extra_link_args = []
 
-    if use_openmp and os.path.isdir(omp_inc):
-        extra_compile_args = ["-std=c++20", "-O3", "-Xpreprocessor", "-fopenmp"]
-        extra_link_args = ["-lomp"]
-        extra_compile_args.append(f"-I{omp_inc}")
+    if os.environ.get("SCALERQEC_OPENMP") == "1":
+        homebrew_prefix = os.environ.get("HOMEBREW_PREFIX", "/opt/homebrew")
+        omp_inc = os.path.join(homebrew_prefix, "opt", "libomp", "include")
+        omp_lib = os.path.join(homebrew_prefix, "opt", "libomp", "lib")
+        extra_compile_args += ["-Xpreprocessor", "-fopenmp"]
+        extra_link_args += ["-lomp"]
+        if os.path.isdir(omp_inc):
+            extra_compile_args.append(f"-I{omp_inc}")
         if os.path.isdir(omp_lib):
             extra_link_args.append(f"-L{omp_lib}")
-    else:
-        extra_compile_args = ["-std=c++20", "-O3"]
-        extra_link_args = []
 
 else:
     # --- Linux flags ---
