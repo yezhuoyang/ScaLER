@@ -9,6 +9,7 @@
 
 #include "sampler.hpp"
 #include "chrono"
+#include <atomic>
 #include <bit>
 #include <thread>
 #include <cmath>
@@ -202,11 +203,9 @@ inline std::size_t sampler::generate_sample_Monte(double error_prob, size_t Erro
 void sampler::generate_many_output_samples(const QEPG::QEPG& graph,std::vector<QEPG::Row>& samplecontainer, size_t pauliweight, size_t samplenumber){
     samplecontainer.resize(samplenumber);
 
-    // TODO: [Review-P0-Bug] static seed is evaluated ONCE per program lifetime.
-    // Combined with thread-ID hash (also constant), repeated calls from the same
-    // thread produce the SAME RNG sequence, causing correlated Monte Carlo samples.
-    // Fix: use std::atomic<uint64_t> call_counter and XOR it into the per-thread seed.
     static const std::uint64_t global_seed = std::random_device{}();
+    static std::atomic<uint64_t> call_counter{0};
+    const uint64_t call_id = call_counter.fetch_add(1, std::memory_order_relaxed);
     const size_t n_err = num_total_pauliError_;
     const auto& flat = graph.get_parityPropMatrixTransFlat();
     const std::size_t n_noise = flat.n_rows() / 3;
@@ -216,7 +215,7 @@ void sampler::generate_many_output_samples(const QEPG::QEPG& graph,std::vector<Q
     #pragma omp parallel
     {
         sampler local_sampler(n_err);
-        Xoshiro256pp rng(global_seed ^ std::hash<std::thread::id>{}(std::this_thread::get_id()));
+        Xoshiro256pp rng(global_seed ^ std::hash<std::thread::id>{}(std::this_thread::get_id()) ^ (call_id * 0x9E3779B97F4A7C15ULL));
 
         // Per-thread aligned result buffer
         std::uint64_t* result_buf = simd::aligned_alloc_u64(flat.stride_words());
@@ -248,6 +247,8 @@ void sampler::generate_many_output_samples_Monte(const QEPG::QEPG& graph,std::ve
     samplecontainer.resize(samplenumber);
     size_t total_error=graph.get_total_noise();
     static const std::uint64_t global_seed = std::random_device{}();
+    static std::atomic<uint64_t> call_counter{0};
+    const uint64_t call_id = call_counter.fetch_add(1, std::memory_order_relaxed);
     const size_t n_err = num_total_pauliError_;
     const auto& flat = graph.get_parityPropMatrixTransFlat();
     const std::size_t n_noise = flat.n_rows() / 3;
@@ -257,7 +258,7 @@ void sampler::generate_many_output_samples_Monte(const QEPG::QEPG& graph,std::ve
     #pragma omp parallel
     {
         sampler local_sampler(n_err);
-        Xoshiro256pp rng(global_seed ^ std::hash<std::thread::id>{}(std::this_thread::get_id()));
+        Xoshiro256pp rng(global_seed ^ std::hash<std::thread::id>{}(std::this_thread::get_id()) ^ (call_id * 0x9E3779B97F4A7C15ULL));
         std::uint64_t* result_buf = simd::aligned_alloc_u64(flat.stride_words());
 
         #pragma omp for schedule(static)
@@ -344,6 +345,8 @@ void sampler::generate_many_output_samples_to_numpy(
     std::size_t n_det, size_t pauliweight, size_t samplenumber)
 {
     static const std::uint64_t global_seed = std::random_device{}();
+    static std::atomic<uint64_t> call_counter{0};
+    const uint64_t call_id = call_counter.fetch_add(1, std::memory_order_relaxed);
     const size_t n_err = num_total_pauliError_;
     const auto& flat = graph.get_parityPropMatrixTransFlat();
     const std::size_t n_noise = flat.n_rows() / 3;
@@ -352,7 +355,7 @@ void sampler::generate_many_output_samples_to_numpy(
     #pragma omp parallel
     {
         sampler local_sampler(n_err);
-        Xoshiro256pp rng(global_seed ^ std::hash<std::thread::id>{}(std::this_thread::get_id()));
+        Xoshiro256pp rng(global_seed ^ std::hash<std::thread::id>{}(std::this_thread::get_id()) ^ (call_id * 0x9E3779B97F4A7C15ULL));
         std::uint64_t* result_buf = simd::aligned_alloc_u64(flat.stride_words());
 
         #pragma omp for schedule(static)
@@ -378,6 +381,8 @@ void sampler::generate_many_output_samples_Monte_to_numpy(
     std::size_t n_det, double error_prob, size_t samplenumber)
 {
     static const std::uint64_t global_seed = std::random_device{}();
+    static std::atomic<uint64_t> call_counter{0};
+    const uint64_t call_id = call_counter.fetch_add(1, std::memory_order_relaxed);
     const size_t n_err = num_total_pauliError_;
     const size_t total_error = graph.get_total_noise();
     const auto& flat = graph.get_parityPropMatrixTransFlat();
@@ -387,7 +392,7 @@ void sampler::generate_many_output_samples_Monte_to_numpy(
     #pragma omp parallel
     {
         sampler local_sampler(n_err);
-        Xoshiro256pp rng(global_seed ^ std::hash<std::thread::id>{}(std::this_thread::get_id()));
+        Xoshiro256pp rng(global_seed ^ std::hash<std::thread::id>{}(std::this_thread::get_id()) ^ (call_id * 0x9E3779B97F4A7C15ULL));
         std::uint64_t* result_buf = simd::aligned_alloc_u64(flat.stride_words());
 
         #pragma omp for schedule(static)
@@ -510,10 +515,12 @@ void sampler::generate_many_output_samples_nonuniform_to_numpy(
     }
 
     static const std::uint64_t global_seed = std::random_device{}();
+    static std::atomic<uint64_t> call_counter{0};
+    const uint64_t call_id = call_counter.fetch_add(1, std::memory_order_relaxed);
 
     #pragma omp parallel
     {
-        Xoshiro256pp rng(global_seed ^ std::hash<std::thread::id>{}(std::this_thread::get_id()));
+        Xoshiro256pp rng(global_seed ^ std::hash<std::thread::id>{}(std::this_thread::get_id()) ^ (call_id * 0x9E3779B97F4A7C15ULL));
         std::uint64_t* result_buf = simd::aligned_alloc_u64(flat.stride_words());
 
         #pragma omp for schedule(static)
