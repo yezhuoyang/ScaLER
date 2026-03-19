@@ -175,9 +175,13 @@ o0 = Parity c4
 ```
 
 
-### 2. ScaLER -- Stratified S-curve LER estimation (main method)
+### 2. ScaLER -- Time-budgeted S-curve LER estimation (main method)
 
-ScaLERQEC estimates the LER by stratified fault sampling and curve fitting:
+ScaLERQEC estimates the LER by stratified fault sampling and S-curve fitting. The `Scaler` class runs a three-phase adaptive algorithm within a wall-clock time budget:
+
+1. **Phase 1 (Initialization):** Binary search for error-onset and saturation weights, fit an initial S-curve.
+2. **Phase 2 (Sweet-spot exploration):** Uniformly sample weights near the theoretical sweet spot.
+3. **Phase 3 (Adaptive refinement):** Iteratively add samples at weights needing more logical error events.
 
 <p align="center">
   <img src="Figures/diagra.png" alt="diag" width="550"/>
@@ -186,40 +190,37 @@ ScaLERQEC estimates the LER by stratified fault sampling and curve fitting:
   <em>Figure 2: Diagram for the main method in ScaLERQEC.</em>
 </p>
 
-**From a StabCode object:**
+**From a Stim circuit file (recommended):**
 
 ```python
-from scalerqec.Stratified import StratifiedScurveLERcalc
+from scalerqec.Stratified import Scaler, ModelType
 
-calculator = StratifiedScurveLERcalc(
+scaler = Scaler(
     error_rate=0.001,
-    sampleBudget=10000,
-    num_subspace=5,
+    time_budget=120,               # wall-clock seconds
+    model_type=ModelType.OUR_MODEL,
+    gamma=1,
+    num_subspaces_phase2=12,
 )
-calculator.calculate_LER_from_StabCode(
-    qeccirc, noise_model,
-    figname="Surface7", titlename="Surface Code d=7",
-    savefigure=True
-)
-```
 
-**From a Stim circuit file:**
-
-```python
-calculator = StratifiedScurveLERcalc(error_rate=0.001, sampleBudget=10000)
-calculator.calculate_LER_from_file(
+ler = scaler.calculate_LER_from_file(
     filepath="stimprograms/surface/surface7",
     pvalue=0.001,
     codedistance=7,
-    figname="Surface7",
-    titlename="Surface Code d=7"
+    figname="Figures/Surface7_ScaLER",
+    titlename="Surface Code d=7",
 )
+
+print(f"LER: {ler:.6e}")
+print(f"R²: {scaler._R_square_score:.4f}")
+print(f"Sweet spot: {scaler._sweet_spot}")
+print(f"Total samples: {sum(scaler._subspace_sample_used.values()):,}")
 ```
 
 Output:
-| <img src="Figures/Surface7-R0Final.png" alt="Curve in the Log Space" width="300"/> | <img src="Figures/Surface7.png" alt="Curve in the original space" width="300"/> |
+| <img src="Figures/Surface7_ScaLERfinal.png" alt="Log-logit diagnostic plot" width="300"/> | <img src="Figures/Surface7_ScaLERfinal_Scurve.png" alt="S-curve in probability space" width="300"/> |
 |:---------------------------------------------------------------------:|:----------------------------------------------------------------------------:|
-| *Figure 3: Subspace error rate in the log space* | *Figure 4: Same, but plot in original space* |
+| *Figure 3: Subspace error rate in log-logit space* | *Figure 4: Fitted S-curve in probability space* |
 
 
 ### 3. ScaLER for LDPC codes
@@ -235,7 +236,13 @@ calculator = ScalerLDPC(
     max_bp_iters=20,
     osd_order=0,
 )
-calculator.calculate_LER_from_file(filepath="stimprograms/ldpc/bbcode_72_12_6_rounds18")
+calculator.calculate_LER_from_file(
+    filepath="stimprograms/ldpc/bbcode_72_12_6_rounds18",
+    pvalue=0.001,
+    codedistance=6,
+    figname="BBCode",
+    titlename="BB Code [[72,12,6]]",
+)
 ```
 
 
@@ -332,13 +339,13 @@ graph = qepg.compile_QEPG(stim_str)
 # Sample at fixed error weight (stratified sampling)
 det_outcomes, obs_outcomes = qepg.return_samples_many_weights_separate_obs_with_QEPG(
     graph,
-    weights=[3, 5, 7],
+    weight=[3, 5, 7],
     shots=[10000, 10000, 10000],
 )
 
 # Monte Carlo sampling at a given error rate
 det, obs = qepg.return_samples_Monte_separate_obs_with_QEPG(
-    graph, error_rate=0.001, shots=100000
+    graph, error_rate=0.001, shot=100000
 )
 
 # Non-uniform noise sampling (per-source probabilities)
@@ -348,11 +355,11 @@ from scalerqec.Monte.noise_model_parser import extract_noise_model
 noise_model = extract_noise_model(stim_str)
 det, obs = qepg.return_samples_nonuniform_to_numpy(
     graph,
-    noise_model.noise_probs.ravel(),
+    noise_model.noise_probs,
     np.array([p.source_a for p in noise_model.correlated_pairs], dtype=np.int64),
     np.array([p.source_b for p in noise_model.correlated_pairs], dtype=np.int64),
     np.array([p.prob for p in noise_model.correlated_pairs], dtype=np.float64),
-    shots=100000,
+    shot=100000,
 )
 ```
 
