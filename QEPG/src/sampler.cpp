@@ -13,6 +13,7 @@
 #include <bit>
 #include <thread>
 #include <cmath>
+#include <numbers>
 #include <algorithm>
 
 
@@ -44,10 +45,8 @@ sampler::~sampler()=default;
  *       close to num_total_pauliError_ (avoids collision overhead).
  */
 inline std::size_t sampler::generate_sample_removal(size_t weight, std::mt19937& gen){
-    // Mark all positions as active using bitmap
-    // TODO: [Review-P2] memset with value 1 on uint8_t works but is fragile —
-    // if type changes, memset(1) sets bytes to 0x01010101. Use std::fill instead.
-    std::memset(collision_bitmap_.data(), 1, num_total_pauliError_);
+    // Mark all positions as active
+    std::fill(collision_bitmap_.begin(), collision_bitmap_.begin() + num_total_pauliError_, 1);
     size_t remaining = num_total_pauliError_;
 
     // Remove random positions until only `weight` remain
@@ -419,12 +418,9 @@ static inline double to_double_01(std::uint64_t v) noexcept {
 
 /// Sample from Poisson(lambda) using Knuth's algorithm for small lambda,
 /// normal approximation for large lambda.
-// TODO: [Review-P2] (1) Knuth's algorithm is O(lambda) — consider inverse-CDF
-// for lambda < 30. (2) Box-Muller can return negative, floor clamp biases mean
-// slightly low. (3) Use std::numbers::pi instead of hardcoded constant.
 static inline std::size_t sample_poisson(Xoshiro256pp& rng, double lambda) noexcept {
     if (lambda < 30.0) {
-        // Knuth's algorithm: exact for small lambda
+        // Knuth's algorithm: exact for small lambda, O(lambda) per sample
         double L = std::exp(-lambda);
         std::size_t k = 0;
         double p = 1.0;
@@ -434,12 +430,12 @@ static inline std::size_t sample_poisson(Xoshiro256pp& rng, double lambda) noexc
         } while (p > L);
         return k - 1;
     } else {
-        // Normal approximation: N(lambda, sqrt(lambda))
-        // Box-Muller transform
+        // Normal approximation: N(lambda, sqrt(lambda)) via Box-Muller
         double u1 = to_double_01(rng());
         double u2 = to_double_01(rng());
         if (u1 < 1e-300) u1 = 1e-300;  // avoid log(0)
-        double z = std::sqrt(-2.0 * std::log(u1)) * std::cos(2.0 * 3.14159265358979323846 * u2);
+        constexpr double two_pi = 2.0 * std::numbers::pi;
+        double z = std::sqrt(-2.0 * std::log(u1)) * std::cos(two_pi * u2);
         double x = lambda + std::sqrt(lambda) * z;
         return x > 0.0 ? static_cast<std::size_t>(x + 0.5) : 0;
     }
@@ -490,8 +486,9 @@ void sampler::generate_many_output_samples_nonuniform_to_numpy(
     for (std::size_t i = 0; i < num_noise; ++i) {
         if (ptotal[i] > p_max) p_max = ptotal[i];
     }
-    // TODO: [Review-P2] Magic numbers 0.01 and 0.06 need justification comment.
-    // The 0.06 condition seems redundant: if p_max < 0.01 then P_all < 0.01*N < 0.06*N.
+    // Sparse path (Poisson+CDF) is faster when few errors fire per shot.
+    // Threshold: p_max < 1% ensures CDF binary search has few lookups,
+    // and P_all < 6% of num_noise ensures expected error count is small.
     const bool use_sparse = (p_max < 0.01) && (P_all < 0.06 * num_noise);
 
     // Dense path: precompute uint32 thresholds
@@ -529,10 +526,9 @@ void sampler::generate_many_output_samples_nonuniform_to_numpy(
 
             if (use_sparse) {
                 // --- SPARSE PATH: Poisson + CDF binary search ---
-                // TODO: [Review-P1-Correctness] Two errors can land on the same source,
-                // causing double-XOR cancellation (error vanishes). This creates O(p^2)
-                // bias per source. Acceptable for small p but should be documented.
-                // Consider deduplicating sampled sources for better accuracy.
+                // Note: Two errors can land on the same source, causing double-XOR
+                // cancellation. This creates O(p^2) bias per source, which is
+                // negligible in the sparse regime (p_max < 0.01).
                 std::size_t num_errors = sample_poisson(rng, P_all);
 
                 for (std::size_t e = 0; e < num_errors; ++e) {
