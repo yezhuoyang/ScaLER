@@ -11,7 +11,8 @@
 #include "QEPG.hpp"
 #include <iostream>
 #include <chrono>
-#include <algorithm>      // <algorithm> also works but <ranges> is canonical
+#include <algorithm>
+#include <unordered_set>
 
 namespace QEPG{
 
@@ -21,7 +22,7 @@ QEPG::QEPG(){
 
 }
 
-QEPG::QEPG(clifford::cliffordcircuit othercircuit, size_t total_detectors, size_t total_noise):
+QEPG::QEPG(const clifford::cliffordcircuit& othercircuit, size_t total_detectors, size_t total_noise):
                     circuit_(othercircuit),
                     total_detectors_(total_detectors),
                     total_noise_(total_noise),
@@ -156,8 +157,11 @@ void QEPG::backward_graph_construction(){
     size_t current_noise_index=total_noise_-1;
 
     const clifford::paritygroup& observable=circuit_.get_observable_parity_group();
+    const std::unordered_set<size_t> observable_set(observable.indexlist.begin(), observable.indexlist.end());
 
-    for(int t=gate_size-1;t>=0;t--){
+    // NOTE: String comparison per gate is a known performance bottleneck for large
+    // circuits. A future optimization would replace Gate::name with enum GateKind + switch.
+    for(size_t t = gate_size; t-- > 0;){
 
         const auto& gate=circuit_.get_gate(t);
         std::string name=gate.name;
@@ -194,7 +198,7 @@ void QEPG::backward_graph_construction(){
             /*
             This measurement will flip the observable
             */
-            if(std::find(observable.indexlist.begin(), observable.indexlist.end(), current_meas_index) != observable.indexlist.end()){
+            if(observable_set.count(current_meas_index)){
                     current_x_parity_prop[qindex].set(num_detectors);
                     current_y_parity_prop[qindex].set(num_detectors);
             }
@@ -210,7 +214,7 @@ void QEPG::backward_graph_construction(){
             current_x_parity_prop[qindex].reset();
             current_y_parity_prop[qindex].reset();
             current_z_parity_prop[qindex].reset();
-
+            continue;
         }
         /*
         *   When the gate is a CNOT
@@ -228,8 +232,29 @@ void QEPG::backward_graph_construction(){
         if(name=="h"){
             size_t qindex=gate.qubits[0];
             current_x_parity_prop[qindex].swap(current_z_parity_prop[qindex]);
+            continue;
+        }
+        /*
+        *   Phase (S) gate: S†XS = Y, S†YS = -X, S†ZS = Z
+        *   In GF(2) (signs ignored): swap X and Y propagation, Z unchanged.
+        */
+        if(name=="p"){
+            size_t qindex=gate.qubits[0];
+            current_x_parity_prop[qindex].swap(current_y_parity_prop[qindex]);
+            continue;
+        }
+        /*
+        *   Pauli X/Y/Z gates are self-inverse Cliffords.
+        *   Their conjugation only introduces signs (e.g., X†ZX = -Z),
+        *   which vanish in GF(2). Propagation is identity (no-op).
+        */
+        if(name=="x" || name=="y" || name=="z"){
+            continue;
         }
     }
+
+    // Build contiguous SIMD-aligned copy for fast sampling
+    build_flat_parity_table();
 }
 
 
@@ -250,6 +275,25 @@ const std::vector<Row>& QEPG::get_parityPropMatrix() const noexcept{
 
 const std::vector<Row>& QEPG::get_parityPropMatrixTrans() const noexcept{
     return parityPropMatrixTranspose_;
+}
+
+const qepg_bits::FlatBitTable& QEPG::get_parityPropMatrixTransFlat() const noexcept{
+    return parityPropMatrixTransFlat_;
+}
+
+void QEPG::build_flat_parity_table(){
+    if(parityPropMatrixTranspose_.empty()) return;
+    const std::size_t n_rows = parityPropMatrixTranspose_.size();
+    const std::size_t n_cols = parityPropMatrixTranspose_[0].size();
+
+    parityPropMatrixTransFlat_ = qepg_bits::FlatBitTable(n_rows, n_cols);
+
+    for(std::size_t r = 0; r < n_rows; ++r){
+        const Row& src = parityPropMatrixTranspose_[r];
+        std::uint64_t* dst = parityPropMatrixTransFlat_.row_ptr(r);
+        // Copy block data directly
+        src.to_block_range(dst);
+    }
 }
 
 /**

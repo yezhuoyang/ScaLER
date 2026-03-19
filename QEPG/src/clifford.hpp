@@ -25,6 +25,8 @@ namespace clifford{
  * Each Gate stores a string name identifying the operation (e.g. "h", "cnot",
  * "DEPOLARIZE1", "M", "R") and a list of qubit indices it acts on.
  */
+// Future optimization: replace string name + vector with enum GateKind + fixed array
+// to eliminate heap allocations and enable switch-based dispatch.
 struct Gate{
     std::string name;              ///< Operation name (e.g. "h", "cnot", "DEPOLARIZE1", "M", "R").
     std::vector<size_t> qubits;    ///< Qubit indices this gate operates on.

@@ -512,6 +512,14 @@ class CliffordCircuit:
         """
         Insert gates
         """
+        _1Q_GATE_MAP = {
+            "H": self.add_hadamard,
+            "S": self.add_phase,
+            "X": self.add_paulix,
+            "Y": self.add_pauliy,
+            "Z": self.add_pauliz,
+            "M": self.add_measurement,
+        }
         for line in lines:
             stripped_line = line.strip()
             if not stripped_line:
@@ -533,36 +541,23 @@ class CliffordCircuit:
 
             if gate == "CX":
                 control = int(tokens[1])
-                maxum_q_index = maxum_q_index if maxum_q_index > control else control
                 target = int(tokens[2])
-                maxum_q_index = maxum_q_index if maxum_q_index > target else target
+                maxum_q_index = max(maxum_q_index, control, target)
                 self.add_depolarize(control)
                 self.add_depolarize(target)
                 self.add_cnot(control, target)
 
-            elif gate == "M":
+            elif gate in _1Q_GATE_MAP:
                 qubit = int(tokens[1])
-                maxum_q_index = maxum_q_index if maxum_q_index > qubit else qubit
+                maxum_q_index = max(maxum_q_index, qubit)
                 self.add_depolarize(qubit)
-                self.add_measurement(qubit)
-
-            elif gate == "H":
-                qubit = int(tokens[1])
-                maxum_q_index = maxum_q_index if maxum_q_index > qubit else qubit
-                self.add_depolarize(qubit)
-                self.add_hadamard(qubit)
-
-            elif gate == "S":
-                qubit = int(tokens[1])
-                maxum_q_index = maxum_q_index if maxum_q_index > qubit else qubit
-                self.add_depolarize(qubit)
-                self.add_phase(qubit)
+                _1Q_GATE_MAP[gate](qubit)
 
             elif gate == "R":
-                qubits = int(tokens[1])
-                maxum_q_index = maxum_q_index if maxum_q_index > qubits else qubits
+                qubit = int(tokens[1])
+                maxum_q_index = max(maxum_q_index, qubit)
                 # No depolarize before reset - noise before reset is irrelevant
-                self.add_reset(qubits)
+                self.add_reset(qubit)
 
         """
         Finally, compiler detector and observable

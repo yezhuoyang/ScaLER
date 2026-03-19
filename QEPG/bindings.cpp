@@ -16,12 +16,12 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <pybind11/operators.h>
+#include <pybind11/numpy.h>
 
 #include "src/clifford.hpp"
 #include "src/QEPG.hpp"
 #include "src/sampler.hpp"
 #include "src/LERcalculator.hpp"
-#include <boost/dynamic_bitset.hpp>
 
 namespace py = pybind11;
 
@@ -50,6 +50,14 @@ namespace LERcalculator{
     std::pair<py::array_t<bool>,py::array_t<bool>> return_samples_many_weights_separate_obs_with_QEPG(const QEPG::QEPG& graph,const std::vector<size_t>& weight, const std::vector<size_t>& shots);
     std::vector<std::vector<bool>> return_samples_with_fixed_QEPG(const QEPG::QEPG& graph,size_t weight, size_t shots);
     std::pair<py::array_t<bool>,py::array_t<bool>> return_samples_Monte_separate_obs_with_QEPG(const QEPG::QEPG& graph,const double& error_rate, const size_t& shot);
+    std::pair<py::array_t<std::uint8_t>, py::array_t<std::uint8_t>>
+    return_samples_nonuniform_to_numpy(
+        const QEPG::QEPG& graph,
+        py::array_t<double> noise_probs,
+        py::array_t<std::size_t> corr_sources_a,
+        py::array_t<std::size_t> corr_sources_b,
+        py::array_t<double> corr_probs,
+        std::size_t shot);
 }
 
 
@@ -61,32 +69,33 @@ PYBIND11_MODULE(qepg, m) {
         A C++ backend for ScaLERQEC that compiles STIM-style quantum error
         correction circuits, builds backward error propagation graphs over
         GF(2), and generates weighted random Pauli error samples with their
-        detector/observable outcomes. Uses Boost dynamic_bitset for efficient
-        bit-level operations and OpenMP for parallel sampling.
+        detector/observable outcomes. Uses a custom DynamicBitset (uint64_t
+        backed) for efficient bit-level operations and OpenMP for parallel
+        sampling.
     )pbdoc";
 
     /**
-     * @brief Python binding for boost::dynamic_bitset<>.
+     * @brief Python binding for qepg_bits::DynamicBitset.
      *
      * Exposes size(), test(), equality comparison, list conversion,
      * and a truncated string representation for large bitsets.
      */
-    py::class_<boost::dynamic_bitset<>>(m, "DynamicBitset",
-        "A dynamic-length bitset for GF(2) row vectors. Wraps boost::dynamic_bitset.")
+    py::class_<QEPG::Row>(m, "DynamicBitset",
+        "A dynamic-length bitset for GF(2) row vectors.")
 
-        .def("size", &boost::dynamic_bitset<>::size,
+        .def("size", &QEPG::Row::size,
              "Return the number of bits in the bitset.")
-        .def("test", &boost::dynamic_bitset<>::test, py::arg("pos"),
+        .def("test", &QEPG::Row::test, py::arg("pos"),
              "Return True if the bit at the given position is set.")
         .def(py::self == py::self)
 
-        .def("to_list", [](const boost::dynamic_bitset<>& self) {
+        .def("to_list", [](const QEPG::Row& self) {
              std::vector<bool> list(self.size());
              for(size_t i=0; i<self.size(); ++i) list[i] = self[i];
              return list;
          }, "Convert the bitset to a Python list of booleans.")
 
-        .def("__repr__", [](const boost::dynamic_bitset<>& self) {
+        .def("__repr__", [](const QEPG::Row& self) {
             std::string s = "<DynamicBitset ";
             if (self.size() > 40) { // Truncate long outputs
                  for(size_t i=0; i<20; ++i) s += (i < self.size() ? (self[i] ? '1' : '0') : '-');
@@ -330,6 +339,34 @@ PYBIND11_MODULE(qepg, m) {
 
             Returns:
                 Tuple of (detector_outcomes, observable_outcomes) as NumPy bool arrays.
+        )pbdoc");
+
+
+    m.def("return_samples_nonuniform_to_numpy",
+        &LERcalculator::return_samples_nonuniform_to_numpy,
+        py::arg("graph"),
+        py::arg("noise_probs"),
+        py::arg("corr_sources_a"),
+        py::arg("corr_sources_b"),
+        py::arg("corr_probs"),
+        py::arg("shot"),
+        py::return_value_policy::move,
+        R"pbdoc(
+            Generate non-uniform noise samples with per-source (px, py, pz) probabilities.
+
+            Supports DEPOLARIZE2 correlated pairs. Uses SIMD XOR accumulation,
+            OpenMP parallelism, and Xoshiro256pp RNG.
+
+            Args:
+                graph: Pre-compiled QEPGGraph object.
+                noise_probs: NumPy float64 array of shape (N, 3) with [px, py, pz] per source.
+                corr_sources_a: NumPy array of source_a indices for correlated pairs.
+                corr_sources_b: NumPy array of source_b indices for correlated pairs.
+                corr_probs: NumPy array of probabilities for correlated pairs.
+                shot: Number of samples to generate.
+
+            Returns:
+                Tuple of (detector_outcomes, observable_outcomes) as NumPy uint8 arrays.
         )pbdoc");
 
 }

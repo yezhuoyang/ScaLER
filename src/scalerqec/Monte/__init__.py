@@ -18,9 +18,17 @@ of logical error events has been reached or a sample/time budget is exhausted.
 
 from .monteLER import MonteLERcalc
 from .monteLDPC import MonteLDPC
+from .noise_model_parser import (
+    extract_noise_model,
+    NonuniformNoiseModel,
+    CorrelatedNoisePair,
+)
 
 
 __all__ = [
     "MonteLERcalc",
     "MonteLDPC",
+    "extract_noise_model",
+    "NonuniformNoiseModel",
+    "CorrelatedNoisePair",
 ]

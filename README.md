@@ -6,11 +6,12 @@
 </p>
 <p align="center">
   <em>Figure 1: Our logo.</em>
-</p> 
+</p>
 
 ScaLERQEC is a scalable framework for estimating logical error rates (LER) of quantum error-correcting (QEC) circuits at scale.
-It combines optimized C++ backends (QEPG) with high-level Python interfaces for QEC experimentation, benchmarking, symbolic analysis, and Monte-Carlo fault injection.
-ScaLER is compatible with STIM, but use completely different approach to test logical error rate.
+It combines an optimized C++ backend (QEPG with SIMD acceleration and OpenMP parallelism) with high-level Python interfaces for QEC experimentation, benchmarking, symbolic analysis, and Monte Carlo fault injection.
+
+ScaLERQEC is compatible with [Stim](https://github.com/quantumlib/Stim) circuits, but uses a completely different approach -- **stratified fault sampling with S-curve fitting** -- to estimate logical error rates orders of magnitude faster than brute-force Monte Carlo.
 
 ## Citation
 ---
@@ -32,22 +33,22 @@ If you use ScaLERQEC in your research, please cite our paper:
 ## Documentation
 ---
 
-We use Sphinx to automatically generate the documents: 
+We use Sphinx to automatically generate the documents:
 
 ```bash
-py -m sphinx.cmd.build -b html docs/source docs
+python -m sphinx.cmd.build -b html docs/source docs
 ```
 
 You may visit the current documentation through the following link:
 
-📖 **Documentation website:**  
+**Documentation website:**
 https://yezhuoyang.github.io/ScaLERQEC/
 
 
-## 🚀 Installation
+## Installation
 ---
 
-**🔧 Option 1 — Install via pip (recommended)**
+### Option 1 -- Install via pip (recommended)
 
 ```bash
 pip install scalerqec
@@ -55,10 +56,8 @@ pip install scalerqec
 
 This installs:
 
-* The Python package `scalerqec`,
-
-* The compiled C++ backend `scalerqec.qepg`, and
-
+* The Python package `scalerqec`
+* The compiled C++ QEPG backend (`scalerqec.qepg`) with SIMD and OpenMP support
 * All Python modules for LER calculation, sampling, symbolic analysis, etc.
 
 You can then immediately import all modules in Python:
@@ -68,7 +67,7 @@ import scalerqec
 import scalerqec.qepg
 ```
 
-**🔧 Option 2 — Install from source**
+### Option 2 -- Install from source
 
 1. Clone the repository:
 
@@ -80,69 +79,91 @@ cd ScaLERQEC
 2. Build and install:
 
 ```bash
-pip install .
+pip install -e .
 ```
 
-This compiles the C++ backend using pybind11 and places the compiled extension under `scalerqec/qepg.*.so` or `.pyd`
+This compiles the C++ backend using pybind11 and installs the package in development mode.
+
+### Prerequisites
+
+**All platforms:**
+- Python >= 3.10
+- A C++20-compatible compiler
+
+**No external C++ libraries required.** The C++ backend is self-contained -- Boost has been removed. All dependencies (pybind11, stim, pymatching, etc.) are handled automatically by pip.
+
+**Platform-specific notes:**
+
+| Platform | Compiler | OpenMP |
+|----------|----------|--------|
+| **Windows** | MSVC (Visual Studio Build Tools) | Built-in (`/openmp:llvm`) |
+| **macOS** | Xcode command-line tools | `brew install libomp` |
+| **Linux** | GCC or Clang | Built-in (`-fopenmp`) |
 
 
-## 📚 Project Structure
+## Project Structure
 ---
 
-After installation, the main package structure is:
-```bash
+```
 scalerqec/
-├── qepg               # Compiled QEPG graph and samping method from a C++ backend (by pybind11)
-├── Clifford/          # Clifford circuit
-├── Monte/             # Monte Carlo sampling method
-├── QEC/               # High-level description of quantum error correction circuit 
-├── Stratified/        # Stratified fault injection
-├── Symbolic/          # Symbolic method
-    ...
+├── qepg                # C++ QEPG backend with SIMD acceleration (via pybind11)
+├── Clifford/           # Clifford circuit representation, STIM parser, Python QEPG
+├── Monte/              # Monte Carlo LER estimation (standard + LDPC codes)
+├── QEC/                # High-level QEC circuit construction from stabilizers
+├── Stratified/         # ScaLER: stratified sampling with S-curve fitting
+├── Symbolic/           # Exact symbolic LER computation (ground truth)
+└── util/               # Binomial utilities, Pauli helpers, output formatting
 ```
 
-## Construct QEC circuit by Stabilizer
+**Bundled Stim circuits** (under `stimprograms/`):
+
+| Code family | Distances available |
+|-------------|-------------------|
+| Surface code | d = 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 30 |
+| Repetition code | d = 3, 5, 7, ..., 29 |
+| Color code | d = 3, 5, 7, 9, 11, 13, 15 |
+| Toric code | d = 3, 5, 7, 9, 11, 13, 15, 17 |
+| Hexagonal code | d = 3, 5, 7, ..., 25 |
+| BB LDPC codes | [[72,12,6]], [[90,8,10]], [[108,8,8]], [[144,12,12]], [[288,16,18]] |
+
+
+## Quick Start
 ---
 
-A detailed tutorial on using ScaLER to estimate the logical error rate of the surface code is in the notebook `Tutorial.ipynb`. Below is a smaller example of how we construct a code using the stabilizer formalism on the [[ 3, 1, 3 ]] $Z$-repetition code.
+### 1. Construct a QEC circuit from stabilizers
 
+A detailed tutorial is available in `Tutorial.ipynb`. Below is a smaller example using the [[3, 1, 3]] Z-repetition code.
 
 ```python
 from scalerqec.QEC.qeccircuit import StabCode
 from scalerqec.QEC.noisemodel import NoiseModel
 
-qeccirc= StabCode(n=3,k=1,d=3)
+qeccirc = StabCode(n=3, k=1, d=3)
 
 # Stabilizer generators
 qeccirc.add_stab("ZZI")
 qeccirc.add_stab("IZZ")
 
-# Set the first (and only) logical Z
+# Set the logical Z operator
 qeccirc.set_logical_Z(0, "ZZZ")
 
-# Set the noise model with physical error rate
+# Configure noise and measurement scheme
 noise_model = NoiseModel(0.001)
+qeccirc.scheme = "Standard"   # Also supports: Shor, Knill, Flag
+qeccirc.rounds = 2
 
-# Set stabilizer parity measurement scheme
-# We support the Standard, Shor, Knill, and Flag schemes
-qeccirc.scheme="Standard"
-
-# Rounds of stabilizer measurements
-qeccirc.rounds=2
-
-# Construct IR of the code's circuit
+# Build the circuit
 qeccirc.construct_circuit()
 ```
 
-The last line will convert our stabilizer code to an intermediate representation (IR) that is much easier to debug. One can see the IR by calling the following:
+You can inspect the intermediate representation:
 
 ```python
 qeccirc.show_IR()
 ```
 
-Which outputs (for the above circuit):
-
-```bash
+Output:
+```
 c0 = Prop[r=0, s=0] ZZI
 c1 = Prop[r=0, s=1] IZZ
 c2 = Prop[r=1, s=0] ZZI
@@ -153,17 +174,196 @@ c4 = Prop ZZZ
 o0 = Parity c4
 ```
 
-* `cX = Prop[r, s] str`: The `X`th stabilizer check during syndrome extraction round `r` corresponding to stabilizer `s`, with string representation `str`.
-* `dX = Parity cY cZ`: The `X`th detector is the parity of checks `Y` and `Z`
-* `oX = Parity cY`: The `X`th detector is the exact same result as check `Y`.
 
-# LogiQ - A high-level, fault-tolerant quantum programming language
+### 2. ScaLER -- Stratified S-curve LER estimation (main method)
+
+ScaLERQEC estimates the LER by stratified fault sampling and curve fitting:
+
+<p align="center">
+  <img src="Figures/diagra.png" alt="diag" width="550"/>
+</p>
+<p align="center">
+  <em>Figure 2: Diagram for the main method in ScaLERQEC.</em>
+</p>
+
+**From a StabCode object:**
+
+```python
+from scalerqec.Stratified import StratifiedScurveLERcalc
+
+calculator = StratifiedScurveLERcalc(
+    error_rate=0.001,
+    sampleBudget=10000,
+    num_subspace=5,
+)
+calculator.calculate_LER_from_StabCode(
+    qeccirc, noise_model,
+    figname="Surface7", titlename="Surface Code d=7",
+    savefigure=True
+)
+```
+
+**From a Stim circuit file:**
+
+```python
+calculator = StratifiedScurveLERcalc(error_rate=0.001, sampleBudget=10000)
+calculator.calculate_LER_from_file(
+    filepath="stimprograms/surface/surface7",
+    pvalue=0.001,
+    codedistance=7,
+    figname="Surface7",
+    titlename="Surface Code d=7"
+)
+```
+
+Output:
+| <img src="Figures/Surface7-R0Final.png" alt="Curve in the Log Space" width="300"/> | <img src="Figures/Surface7.png" alt="Curve in the original space" width="300"/> |
+|:---------------------------------------------------------------------:|:----------------------------------------------------------------------------:|
+| *Figure 3: Subspace error rate in the log space* | *Figure 4: Same, but plot in original space* |
+
+
+### 3. ScaLER for LDPC codes
+
+For LDPC codes (e.g., BB codes), use `ScalerLDPC` which integrates a belief-propagation + OSD decoder:
+
+```python
+from scalerqec.Stratified.ScalerLDPC import ScalerLDPC
+
+calculator = ScalerLDPC(
+    error_rate=0.001,
+    time_budget=60,          # seconds
+    max_bp_iters=20,
+    osd_order=0,
+)
+calculator.calculate_LER_from_file(filepath="stimprograms/ldpc/bbcode_72_12_6_rounds18")
+```
+
+
+### 4. Monte Carlo LER estimation
+
+Standard Monte Carlo fault injection with adaptive batching:
+
+**From a StabCode object:**
+
+```python
+from scalerqec.Monte import MonteLERcalc
+
+mc = MonteLERcalc(time_budget=30, samplebudget=500000, MIN_NUM_LE_EVENT=50)
+mc.calculate_LER_from_StabCode(qeccirc, noise_model)
+print(f"LER = {mc._estimated_LER:.2e} +/- {mc._uncertainty:.2e}")
+```
+
+**From a Stim circuit file (uniform noise):**
+
+```python
+mc = MonteLERcalc(time_budget=30, samplebudget=500000)
+ler = mc.calculate_LER_from_file(
+    samplebudget=500000,
+    filepath="stimprograms/surface/surface7",
+    pvalue=0.001,
+)
+print(f"LER = {ler:.2e}")
+```
+
+**From a Stim circuit string (non-uniform noise):**
+
+ScaLERQEC supports circuits with mixed noise types (DEPOLARIZE1 at varying rates, X_ERROR, Y_ERROR, Z_ERROR, DEPOLARIZE2):
+
+```python
+mc = MonteLERcalc(time_budget=30, samplebudget=500000)
+stim_str = open("my_noisy_circuit.stim").read()
+ler = mc.calculate_LER_from_stim_circuit(stim_str)
+print(f"LER = {ler:.2e}")
+```
+
+**Monte Carlo for LDPC codes:**
+
+```python
+from scalerqec.Monte import MonteLDPC
+
+mc_ldpc = MonteLDPC(time_budget=60, samplebudget=100000, max_bp_iters=20)
+ler = mc_ldpc.calculate_LER_from_file(
+    samplebudget=100000,
+    filepath="stimprograms/ldpc/bbcode_72_12_6_rounds18",
+    pvalue=0.001,
+)
+```
+
+
+### 5. Symbolic LER analysis (exact ground truth)
+
+ScaLERQEC can compute the **exact symbolic polynomial** representation of the logical error rate:
+
+```python
+from scalerqec.Symbolic import SymbolicLERcalc
+
+sym = SymbolicLERcalc()
+exact_ler = sym.calculate_LER_from_StabCode(qeccirc, noise_model)
+print(f"Exact LER = {exact_ler:.6e}")
+
+# Or from a Stim file
+exact_ler = sym.calculate_LER_from_file(
+    filepath="stimprograms/surface/surface3",
+    pvalue=0.001,
+)
+```
+
+This is useful for validating Monte Carlo and ScaLER estimates on small circuits.
+
+
+### 6. Using the C++ QEPG backend directly
+
+The QEPG (Quantum Error Propagation Graph) is a binary model of how errors propagate to flip detector outcomes.
+
+<p align="center">
+  <img src="Figures/prop.png" alt="QEPG" width="350"/>
+</p>
+<p align="center">
+  <em>Figure 5: Illustration of how we compile a QEPG graph in ScaLERQEC.</em>
+</p>
+
+```python
+import scalerqec.qepg as qepg
+
+# Compile a Stim circuit into a reusable QEPG graph
+stim_str = open("stimprograms/surface/surface7").read()
+graph = qepg.compile_QEPG(stim_str)
+
+# Sample at fixed error weight (stratified sampling)
+det_outcomes, obs_outcomes = qepg.return_samples_many_weights_separate_obs_with_QEPG(
+    graph,
+    weights=[3, 5, 7],
+    shots=[10000, 10000, 10000],
+)
+
+# Monte Carlo sampling at a given error rate
+det, obs = qepg.return_samples_Monte_separate_obs_with_QEPG(
+    graph, error_rate=0.001, shots=100000
+)
+
+# Non-uniform noise sampling (per-source probabilities)
+import numpy as np
+from scalerqec.Monte.noise_model_parser import extract_noise_model
+
+noise_model = extract_noise_model(stim_str)
+det, obs = qepg.return_samples_nonuniform_to_numpy(
+    graph,
+    noise_model.noise_probs.ravel(),
+    np.array([p.source_a for p in noise_model.correlated_pairs], dtype=np.int64),
+    np.array([p.source_b for p in noise_model.correlated_pairs], dtype=np.int64),
+    np.array([p.prob for p in noise_model.correlated_pairs], dtype=np.float64),
+    shots=100000,
+)
+```
+
+
+# LogiQ -- A high-level, fault-tolerant quantum programming language
 ---
 
 We introduce LogiQ -- which supports users to define their own logical QEC block and implement logical Clifford+T operations.
 
 ```python
-# 1) Define a family of surface codes (sugar → CSSCode core)
+# 1) Define a family of surface codes (sugar -> CSSCode core)
 code surface(d: Int) as CellComplex over Z2 {
 
   cells {
@@ -223,7 +423,7 @@ c1 = LogicMeasure q1[0]
 c2 = LogicMeasure q2[1]
 ```
 
-# MagicQ - A high level fault-tolerant quantum programming for dynamic protocol with Post-selection
+# MagicQ -- A high level fault-tolerant quantum programming for dynamic protocol with Post-selection
 ---
 
 We introduce MagicQ -- which allows the user to construct a magic state factory. MagicQ also has the full power to express all code-switching protocols.
@@ -266,214 +466,123 @@ protocol Distill15to1_T(surface f, int d):
 
 ScaLERQEC estimates the LER by stratified fault-sampling and curve fitting:
 
-<p align="center">
-  <img src="Figures/diagra.png" alt="diag" width="550"/>
-</p>
-<p align="center">
-  <em>Figure 2: Diagram for the main method in ScaLERQEC.</em>
-</p> 
-
-
 We propose a novel method which tests the logical error rate by stratified sampling and curve fitting. See the tutorial for a detailed explanation. With a fixed QEC circuit and the noise model, we provide a simple interface for this method.
 
-```python
-from scalerqec.Stratified import StratifiedScurveLERcalc
-calculator = StratifiedScurveLERcalc()
-figname = "Repetition"  
-titlename = "Repetition" 
-stratifiedcalculator.calculate_LER_from_StabCode(qeccirc, noise_model, figname , titlename, repeat=3)
-```
 
-which outputs:
-| <img src="Figures/Surface7-R0Final.png" alt="Curve in the Log Space" width="300"/> | <img src="Figures/Surface7.png" alt="Curve in the original space" width="300"/> |
-|:---------------------------------------------------------------------:|:----------------------------------------------------------------------------:|
-| *Figure 1: Subspace error rate in the log space* | *Figure 2: Same, but plot in original space* |
-
-**Using the C++ QEPG Backend from Python**
-
-The QEPG is a model of how errors in certain locations can propagate to flip STIM detector outcomes.
-
-<p align="center">
-  <img src="Figures/prop.png" alt="QEPG" width="350"/>
-</p>
-<p align="center">
-  <em>Figure 2: Illustration of how we compile a QEPG graph in ScaLERQEC.</em>
-</p> 
-
-To do the above curve-fitting, ScaLERQEC compiles any STIM circuit to QEPG graph.
-
-```python
-import scalerqec.qepg as qepg
-graph = qepg.compile_QEPG(open("circuit.stim").read())
-samples = qepg.return_samples_with_fixed_QEPG(graph, weight=3, shots=10_000)
-print(samples)
-```
-
-**Running Monte-Carlo Fault-Injection**
-
-We support the standard Monte-Carlo testing through the following interface:
-
-```python
-from scalerqec.Monte.monteLER import MonteLERcalc
-montecalculator = MonteLERcalc()
-symbcalculator.calculate_LER_from_StabCode(qeccirc, noise_model)
-```
-
-**Running Symbolic LER Analysis (Ground Truth)**
-
-ScaLERQEC has an additional novel method which calculates the exact symbolic polynomial representation of the logical error rate of a given QEC circuit under a uniform noise model.
-
-```python
-from scalerqec.Symbolic.symbolicLER import SymbolicLERcalc
-symbcalculator = SymbolicLERcalc()
-symbcalculator.calculate_LER_from_StabCode(qeccirc, noise_model)
-```
-
-# 📌 TODO (Roadmap)
+## Roadmap
 ---
+
+### Completed
 
 - [x] Support installation via `pip install`
-- [x] Higher-level, easier interface to generate QEC program
-- [x] Add cross-platform installation support (including macOS)
-- [x] Python interface to construct QEC circuit
-- [x] Write full documentation
-- [ ] Support LDPC codes and LDPC code decoders
-- [ ] Get rid of Boost package, use binary representation
-- [ ] Add CUDA backend support and compare with STIM
-- [ ] SIMD support and compare with STIM
-- [ ] Constructing and testing magic state distillation/Cultivation
-- [ ] Compatible with Qiskit
-- [ ] Visualize results better and visualize QEPG graph
-- [ ] HotSpot analysis (What is the reason for logical error?)
-- [ ] Implement dynamic-circuit support (Compatible with IBM)
-- [ ] Support testing code switching such as lattice surgery, LDPC code switching protocol
-- [ ] Add more realistic noise models (Decoherence noise, Correlated noise)
-- [ ] Support injecting quantum errors by type (Hook Error, Gate error, Propagated error, etc)
-- [ ] Static analysis pass of circuit (Learn symmetric structure)
-- [ ] Test Pauli measurement based fault-tolerant circuit 
+- [x] Higher-level, easier interface to generate QEC programs
+- [x] Add cross-platform installation support (Windows, macOS, Linux)
+- [x] Python interface to construct QEC circuits from stabilizers
+- [x] Write full documentation (Sphinx)
+- [x] Support LDPC codes and LDPC code decoders (ScalerLDPC with BP+OSD)
+- [x] Remove Boost dependency -- use custom DynamicBitset with SIMD acceleration
+- [x] SIMD support (AVX2/SSE2/NEON) with cache-line aligned FlatBitTable
+- [x] Non-uniform noise model support (DEPOLARIZE1/2, X/Y/Z_ERROR, PAULI_CHANNEL_1/2)
+- [x] OpenMP parallel sampling across threads
+- [x] CI/CD pipeline with GitHub Actions (lint, build, test on Linux/macOS/Windows)
+- [x] Support toric codes, color codes, and BB LDPC codes
 
-# 🧰 Development Notes (for contributors)
+### In Progress
+
+- [ ] **CUDA backend support**
+  - [ ] Port `FlatBitTable::xor_row_into` to CUDA kernel for GPU-accelerated GF(2) matmul
+  - [ ] Implement GPU-side Poisson+CDF sparse sampler
+  - [ ] Benchmark against Stim's SIMD sampler on large circuits (d >= 21)
+
+- [ ] **Enum-based gate dispatch for C++ backend**
+  - [ ] Replace `Gate::name` (std::string) with `enum class GateKind` in clifford.hpp
+  - [ ] Convert string comparisons in `backward_graph_construction()` to switch statement
+  - [ ] Expected 5-10x speedup on the backward traversal hot loop
+
+- [ ] **Refactor adaptive batching in monteLER.py**
+  - [ ] Extract the 5x copy-pasted adaptive loop into `_adaptive_monte_carlo(sample_fn, decode_fn)`
+  - [ ] Reduces ~400 lines of duplication across `calculate_LER_from_*` methods
+
+### Planned
+
+- [ ] **Magic state distillation / cultivation**
+  - [ ] Implement 15-to-1 and 20-to-4 distillation protocols as Stim circuits
+  - [ ] ScaLER estimation of magic state factory output error rate
+  - [ ] Support post-selection in LER estimation
+
+- [ ] **Qiskit compatibility**
+  - [ ] Convert Qiskit `QuantumCircuit` to ScaLER `StabCode` or Stim circuit
+  - [ ] Import noise models from Qiskit `NoiseModel` objects
+
+- [ ] **Advanced noise models**
+  - [ ] Decoherence noise (T1/T2 relaxation as Pauli channels)
+  - [ ] Spatially correlated noise (crosstalk between neighboring qubits)
+  - [ ] Leakage errors and leakage reduction units
+
+- [ ] **Lattice surgery and code switching**
+  - [ ] Support split/merge operations between surface code patches
+  - [ ] LDPC code switching protocols
+  - [ ] Estimate LER of multi-patch logical operations
+
+- [ ] **HotSpot analysis**
+  - [ ] Identify which noise sources contribute most to logical failures
+  - [ ] Classify errors by type (hook error, gate error, propagated error)
+  - [ ] Visualize error flow through the QEPG graph
+
+- [ ] **Visualization**
+  - [ ] Interactive QEPG graph visualization (networkx or D3.js)
+  - [ ] Stim circuit diagram rendering
+
+- [ ] **Dynamic circuits**
+  - [ ] Support mid-circuit measurement and classical feedback
+  - [ ] Compatible with IBM dynamic circuit model
+
+- [ ] **Static analysis pass**
+  - [ ] Detect symmetries in the circuit structure
+  - [ ] Exploit symmetry to reduce sampling cost
+
+- [ ] **Pauli-measurement-based fault tolerance**
+  - [ ] Support circuits using Pauli measurements instead of CNOT+measure
+  - [ ] Compile Pauli-based schemes to QEPG
+
+
+## Development Notes (for contributors)
 ---
 
-## 1. Installation (Development Only)
-
-At the moment, ScaLERQEC is installed **from source**. 
-
-### 1.1. Prerequisites
-
-Common to all platforms:
-
-- Python ≥ 3.9 (3.11+ recommended)
-- A C++20-compatible compiler
-- `pip` and a virtual environment (`venv`, `conda`, etc.)
-
-Additional dependencies:
-
-- **Boost** (for `boost::dynamic_bitset`)
-- **pybind11** (handled automatically as a build dependency, but the C++ compiler must be able to see its headers)
-
-
-#### Windows (MSVC)
-
-1. Install [Visual Studio Build Tools] or full Visual Studio with C++ toolchain.
-2. Install Boost (MSVC flavor), e.g. via Chocolatey:
+### Building from source
 
 ```bash
-choco install boost-msvc-14.3 -y
-``` 
-
-The boost header file will be stored under the path "C:\local\boost_1_87_0\boost". Add this path into VScode cpp include path in your development process. 
-
-We use pybind11 to convert the samples from C++ objects to python objects. To install using vcpkg, run the following command:
-
-```bash
-vcpkg install pybind11
+git clone https://github.com/yezhuoyang/ScaLERQEC.git
+cd ScaLERQEC
+pip install -e .
 ```
 
+This compiles the C++ QEPG backend via pybind11. No external C++ libraries are needed -- the build system handles everything automatically.
 
-#### macOS (Apple Silicon / Intel)
-
-Install Xcode command-line tools:
+### Running tests
 
 ```bash
-xcode-select --install
+# Full test suite
+pytest tests/ -v
+
+# Quick smoke test
+python -c "import scalerqec; import scalerqec.qepg; print('OK')"
 ```
 
-Install Homebrew (if you don’t have it):
+### Code formatting
+
+We use [ruff](https://docs.astral.sh/ruff/) for Python formatting:
 
 ```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-``` 
-
-Install pybind11 via Homebrew:
-
-```bash
-brew install pybind11 boost
-``` 
-
-This provides headers in:
-
-/opt/homebrew/include (ARM)
-/usr/local/include (Intel)
-
-
-#### Linux (Ubuntu / Debian-like)
-
-Roughly:
-
-```bash
-sudo apt install libboost-dev
-pip install pybind11
+pip install ruff
+ruff format src/scalerqec/
+ruff check src/scalerqec/
 ```
 
-Boost headers go into /usr/include/boost.
+### Rebuilding the C++ backend
 
-
-## Locating Python headers
-
-
-Also need to add the path of the python header file
+After modifying C++ source files under `QEPG/src/`:
 
 ```bash
-py -c "from sysconfig import get_paths as gp; print(gp()['include'])"
+pip install -e . --no-build-isolation
 ```
-
-## Building the C++ QEPG backend
-
-
-Run the following command to build the QEPG package with pybinding:
-
-```bash
-py setup.py build_ext --inplace
-```
-
-Run the following command to clear the previously compiled output:
-
-```bash
-py setup.py clean --all    
-```
-
-
-We also need to convert C++ object to python object directly. So "Python.h" needs to be added to the search path. Typically, it is under:
-
-
-```bash
-C:\Users\username\miniconda3\include
-```
-
-
-# How to compile and run python scripts
-
-
-To compile QEPG python package by pybind11:
-
-```bash
-(Under QEPG folder)./compilepybind.ps1
-```
-
-The python code is divided into different modules. For example, to run the test_by_stim.py file under test module, stay at the root folder and execute:
-
-```bash
-(Under Sampling folder)py -m test.test_by_stim   
-```
-

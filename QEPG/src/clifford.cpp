@@ -42,7 +42,7 @@ void cliffordcircuit::add_XError(size_t qindex) {
 
 /// @brief Append a Z_ERROR noise channel (does not increment noise counter).
 void cliffordcircuit::add_ZError(size_t qindex) {
-    circuit_.push_back({"X_ZRROR", {qindex}});
+    circuit_.push_back({"Z_ERROR", {qindex}});
     num_qubit_=std::max(num_qubit_,qindex+1);
 }
 
@@ -429,6 +429,22 @@ void cliffordcircuit::compile_from_rewrited_stim_string(std::string stim_str){
             size_t qindex=to_size_t(next_token(rest));
             add_hadamard(qindex);
         }
+        else if(op=="S"){
+            size_t qindex=to_size_t(next_token(rest));
+            add_phase(qindex);
+        }
+        else if(op=="X"){
+            size_t qindex=to_size_t(next_token(rest));
+            add_pauliX(qindex);
+        }
+        else if(op=="Y"){
+            size_t qindex=to_size_t(next_token(rest));
+            add_pauliy(qindex);
+        }
+        else if(op=="Z"){
+            size_t qindex=to_size_t(next_token(rest));
+            add_pauliz(qindex);
+        }
         else if(op=="CX"){
             size_t qcontrol=to_size_t(next_token(rest));
             size_t qtarget=to_size_t(next_token(rest));
@@ -443,8 +459,10 @@ void cliffordcircuit::compile_from_rewrited_stim_string(std::string stim_str){
            */
            paritygroup measuregroup;
            for(int index: intlist){
-                measuregroup.indexlist.push_back((size_t)((int)num_meas_+index));
-                measure_to_parity_index_[(int)num_meas_+index].indexlist.emplace_back(num_detectors_);
+               // index is a negative offset from num_meas_
+               size_t meas_idx = static_cast<size_t>(static_cast<ptrdiff_t>(num_meas_) + index);
+               measuregroup.indexlist.push_back(meas_idx);
+               measure_to_parity_index_[meas_idx].indexlist.emplace_back(num_detectors_);
            }
            detectors_.push_back(measuregroup);
            num_detectors_++;
@@ -452,8 +470,10 @@ void cliffordcircuit::compile_from_rewrited_stim_string(std::string stim_str){
         else if(op.substr(0,10)=="OBSERVABLE"){
             std::vector<int> intlist= parse_detector_recs(rest);
             paritygroup measuregroup;
-            for(int index: intlist)
-                 measuregroup.indexlist.push_back((size_t)((int)num_meas_+index));
+            for(int index: intlist){
+                 size_t meas_idx = static_cast<size_t>(static_cast<ptrdiff_t>(num_meas_) + index);
+                 measuregroup.indexlist.push_back(meas_idx);
+            }
             observable_=measuregroup;
         }
     });

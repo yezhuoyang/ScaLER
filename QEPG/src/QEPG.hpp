@@ -7,6 +7,9 @@
  * affect detector and observable outcomes. The result is a binary matrix
  * (the parity propagation matrix) stored using Boost dynamic_bitset for
  * efficient GF(2) arithmetic.
+ *
+ * Uses a custom DynamicBitset class (backed by uint64_t words) instead of
+ * Boost, eliminating all non-standard C++ dependencies.
  */
 
 #ifndef QEPG_HPP
@@ -16,7 +19,8 @@
 #include <ostream>
 #include <string>
 #include <bitset>
-#include <boost/dynamic_bitset.hpp>
+#include "dynamic_bitset.hpp"
+#include "flat_bit_table.hpp"
 #include "clifford.hpp"
 #include <iostream>
 
@@ -24,7 +28,7 @@
 namespace QEPG{
 
 /// @brief A single row in a GF(2) matrix, represented as a dynamic bitset.
-using Row=boost::dynamic_bitset<>;
+using Row=qepg_bits::DynamicBitset;
 
 /**
  * @brief Multiply two GF(2) matrices represented as vectors of Row bitsets.
@@ -166,10 +170,16 @@ class QEPG{
          * @param total_detectors Number of detectors in the circuit.
          * @param total_noise     Number of depolarizing noise locations.
          */
-        QEPG(clifford::cliffordcircuit othercircuit, size_t total_detectors, size_t total_noise);
+        QEPG(const clifford::cliffordcircuit& othercircuit, size_t total_detectors, size_t total_noise);
 
         /// @brief Destructor.
         ~QEPG();
+
+        /// Move operations (needed because FlatBitTable is non-copyable).
+        QEPG(QEPG&&) = default;
+        QEPG& operator=(QEPG&&) = default;
+        QEPG(const QEPG&) = delete;
+        QEPG& operator=(const QEPG&) = delete;
 
         /**
          * @brief Build the error propagation graph by backward traversal of the circuit.
@@ -239,6 +249,9 @@ class QEPG{
         /// @return Reference to the detector count.
         const size_t& get_total_detector() const noexcept;
 
+        /// @brief Get the flat (contiguous, SIMD-aligned) parity propagation matrix transpose.
+        const qepg_bits::FlatBitTable& get_parityPropMatrixTransFlat() const noexcept;
+
 
     private:
 
@@ -246,15 +259,16 @@ class QEPG{
         std::size_t total_detectors_ = 0;          ///< Number of detectors.
         std::size_t total_noise_=0;                ///< Number of noise locations.
 
-        std::size_t COLS = 3*total_noise_;         ///< Total columns in the transposed matrix (3 Pauli types * noise count).
-
         std::vector<Row> parityPropMatrix_;        ///< Parity propagation matrix: (num_detectors+1) x (3*num_noise).
 
         std::vector<Row> parityPropMatrixTranspose_;  ///< Transposed parity propagation matrix: (3*num_noise) x (num_detectors+1).
 
-        std::vector<Row> detectorMatrix_;          ///< Detector matrix (legacy, used in compute_parityPropMatrix path).
+        // Legacy fields used only by compute_parityPropMatrix() path.
+        std::vector<Row> detectorMatrix_;
+        std::vector<Row> detectorMatrixTranspose_;
 
-        std::vector<Row> detectorMatrixTranspose_; ///< Transpose of detectorMatrix_.
+        /// Contiguous, SIMD-aligned version of parityPropMatrixTranspose_.
+        qepg_bits::FlatBitTable parityPropMatrixTransFlat_;
 
         /**
          * @brief Compute the parity propagation matrix via explicit matrix multiplication.
@@ -264,6 +278,9 @@ class QEPG{
          * backward_graph_construction() achieves the same result more efficiently.
          */
         void compute_parityPropMatrix();
+
+        /// Build the FlatBitTable from the vector<Row> parity propagation matrix transpose.
+        void build_flat_parity_table();
 };
 }
 

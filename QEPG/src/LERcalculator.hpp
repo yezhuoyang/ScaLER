@@ -199,6 +199,31 @@ namespace py = pybind11;
  QEPG::QEPG compile_QEPG(const std::string& prog_str);
 
 
+ /**
+  * @brief Generate non-uniform noise samples with separate detector and observable outputs.
+  *
+  * Each noise source has independent (px, py, pz) probabilities. Supports
+  * DEPOLARIZE2 correlated pairs. Uses SIMD XOR, OpenMP parallelism, and
+  * Xoshiro256pp RNG for maximum throughput.
+  *
+  * @param graph           Pre-compiled QEPG graph.
+  * @param noise_probs     NumPy array of shape (N, 3) with per-source [px, py, pz].
+  * @param corr_sources_a  Source A indices for correlated pairs.
+  * @param corr_sources_b  Source B indices for correlated pairs.
+  * @param corr_probs      Probabilities for correlated pairs.
+  * @param shot            Number of samples to generate.
+  * @return A pair of NumPy uint8 arrays: (detector_outcomes, observable_outcomes).
+  */
+ std::pair<py::array_t<std::uint8_t>, py::array_t<std::uint8_t>>
+ return_samples_nonuniform_to_numpy(
+     const QEPG::QEPG& graph,
+     py::array_t<double> noise_probs,
+     py::array_t<std::size_t> corr_sources_a,
+     py::array_t<std::size_t> corr_sources_b,
+     py::array_t<double> corr_probs,
+     std::size_t shot);
+
+
 }
 
 
