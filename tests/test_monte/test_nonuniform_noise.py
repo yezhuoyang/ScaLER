@@ -204,7 +204,7 @@ class TestLERNonuniformVsStim:
     must agree within TOLERANCE relative difference.
     """
 
-    MIN_ERRORS = 200
+    MIN_ERRORS = 500
     TOLERANCE = 0.05  # 5% relative difference
     BATCH_SIZE = 100000
     MAX_SHOTS = 10_000_000
