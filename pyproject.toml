@@ -13,7 +13,7 @@ build-backend = "setuptools.build_meta"
 [project]
 
 name = "scalerqec"
-version = "0.0.1"
+version = "1.0.0"
 description = "ScaLER: Scalable testing of logical error rate for quantum error correction circuits"
 authors = [
     {name = "John Ye", email = "yezhuoyang@cs.ucla.edu"}
