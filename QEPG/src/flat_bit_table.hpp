@@ -37,6 +37,8 @@ public:
         stride_words_ = (words_per_row_ + 7) & ~std::size_t{7};
 
         data_ = simd::aligned_alloc_u64(stride_words_ * n_rows);
+        // TODO: [Review-P1] Missing null check — aligned_alloc can return nullptr on
+        // OOM. memset on nullptr is UB. Add: if (!data_) throw std::bad_alloc();
         std::memset(data_, 0, stride_words_ * n_rows * sizeof(std::uint64_t));
     }
 

@@ -259,12 +259,16 @@ class QEPG{
         std::size_t total_detectors_ = 0;          ///< Number of detectors.
         std::size_t total_noise_=0;                ///< Number of noise locations.
 
+        // TODO: [Review-P2] COLS is never used anywhere — dead member variable. Remove it.
         std::size_t COLS = 3*total_noise_;         ///< Total columns in the transposed matrix (3 Pauli types * noise count).
 
         std::vector<Row> parityPropMatrix_;        ///< Parity propagation matrix: (num_detectors+1) x (3*num_noise).
 
         std::vector<Row> parityPropMatrixTranspose_;  ///< Transposed parity propagation matrix: (3*num_noise) x (num_detectors+1).
 
+        // TODO: [Review-P2] detectorMatrix_ and detectorMatrixTranspose_ are never
+        // populated by backward_graph_construction() — dead legacy fields from the old
+        // compute_parityPropMatrix() path. Remove along with their getters.
         std::vector<Row> detectorMatrix_;          ///< Detector matrix (legacy, used in compute_parityPropMatrix path).
 
         std::vector<Row> detectorMatrixTranspose_; ///< Transpose of detectorMatrix_.

@@ -19,6 +19,10 @@ sample/time budget is exhausted.
 
 from __future__ import annotations
 from typing import Optional
+# TODO: [Review-P2-Maintainability] Wildcard imports pollute namespace and make
+# it impossible to know which names come from where. Use explicit imports:
+# from ..Clifford.clifford import CliffordCircuit
+# from ..Clifford.stimparser import rewrite_stim_code
 from ..Clifford.clifford import *
 import pymatching
 from ..Clifford.stimparser import *
@@ -106,6 +110,11 @@ MAX_SAMPLE_GAP: int = 500000
 """Maximum batch size that adaptive batching is allowed to grow to."""
 
 
+# TODO: [Review-P2-Maintainability] The adaptive batching loop is copy-pasted 5 times
+# across calculate_LER_from_StabCode, calculate_LER_from_stim_circuit,
+# calculate_LER_from_my_random_sampler, calculate_LER_from_file_sinter, and
+# calculate_LER_from_file. Extract into a single private method
+# _adaptive_monte_carlo(sample_fn, decode_fn) to reduce ~400 lines of duplication.
 class MonteLERcalc:
     """Adaptive Monte Carlo estimator for logical error rates.
 
@@ -319,6 +328,10 @@ class MonteLERcalc:
 
         # 3. Compile QEPG from normalized circuit (Python + C++ backend)
         circuit = CliffordCircuit(2)
+        # TODO: [Review-P1] Placeholder error rate gets baked into the intermediate
+        # STIM circuit's DEPOLARIZE1 instructions. The actual sampling uses noise_model
+        # probabilities, but this creates a confusing intermediate state. Consider
+        # compiling the QEPG without injecting any noise into the stim.Circuit.
         circuit.error_rate = 0.001  # placeholder; actual rates from noise_model
         circuit.compile_from_stim_circuit_str(normalized)
 
@@ -332,7 +345,9 @@ class MonteLERcalc:
         except Exception:
             graph._cpp_graph = None
 
-        # Verify noise source counts match
+        # TODO: [Review-P1] Silent truncation/padding of noise model hides bugs.
+        # A mismatch between parser and QEPG compiler likely indicates a bug in
+        # _GATE_NOISE_COUNT. Should log a warning or raise in debug mode.
         qepg_noise = circuit.totalnoise
         if noise_model.num_noise != qepg_noise:
             # Resize noise_probs to match QEPG if needed

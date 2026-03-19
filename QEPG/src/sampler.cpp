@@ -44,6 +44,8 @@ sampler::~sampler()=default;
  */
 inline std::size_t sampler::generate_sample_removal(size_t weight, std::mt19937& gen){
     // Mark all positions as active using bitmap
+    // TODO: [Review-P2] memset with value 1 on uint8_t works but is fragile —
+    // if type changes, memset(1) sets bytes to 0x01010101. Use std::fill instead.
     std::memset(collision_bitmap_.data(), 1, num_total_pauliError_);
     size_t remaining = num_total_pauliError_;
 
@@ -200,6 +202,10 @@ inline std::size_t sampler::generate_sample_Monte(double error_prob, size_t Erro
 void sampler::generate_many_output_samples(const QEPG::QEPG& graph,std::vector<QEPG::Row>& samplecontainer, size_t pauliweight, size_t samplenumber){
     samplecontainer.resize(samplenumber);
 
+    // TODO: [Review-P0-Bug] static seed is evaluated ONCE per program lifetime.
+    // Combined with thread-ID hash (also constant), repeated calls from the same
+    // thread produce the SAME RNG sequence, causing correlated Monte Carlo samples.
+    // Fix: use std::atomic<uint64_t> call_counter and XOR it into the per-thread seed.
     static const std::uint64_t global_seed = std::random_device{}();
     const size_t n_err = num_total_pauliError_;
     const auto& flat = graph.get_parityPropMatrixTransFlat();
@@ -408,6 +414,9 @@ static inline double to_double_01(std::uint64_t v) noexcept {
 
 /// Sample from Poisson(lambda) using Knuth's algorithm for small lambda,
 /// normal approximation for large lambda.
+// TODO: [Review-P2] (1) Knuth's algorithm is O(lambda) — consider inverse-CDF
+// for lambda < 30. (2) Box-Muller can return negative, floor clamp biases mean
+// slightly low. (3) Use std::numbers::pi instead of hardcoded constant.
 static inline std::size_t sample_poisson(Xoshiro256pp& rng, double lambda) noexcept {
     if (lambda < 30.0) {
         // Knuth's algorithm: exact for small lambda
@@ -476,6 +485,8 @@ void sampler::generate_many_output_samples_nonuniform_to_numpy(
     for (std::size_t i = 0; i < num_noise; ++i) {
         if (ptotal[i] > p_max) p_max = ptotal[i];
     }
+    // TODO: [Review-P2] Magic numbers 0.01 and 0.06 need justification comment.
+    // The 0.06 condition seems redundant: if p_max < 0.01 then P_all < 0.01*N < 0.06*N.
     const bool use_sparse = (p_max < 0.01) && (P_all < 0.06 * num_noise);
 
     // Dense path: precompute uint32 thresholds
@@ -511,8 +522,10 @@ void sampler::generate_many_output_samples_nonuniform_to_numpy(
 
             if (use_sparse) {
                 // --- SPARSE PATH: Poisson + CDF binary search ---
-                // Sample total number of independent errors (Poisson approximation).
-                // At low p, Poisson(sum(p_i)) closely approximates sum of Bernoulli(p_i).
+                // TODO: [Review-P1-Correctness] Two errors can land on the same source,
+                // causing double-XOR cancellation (error vanishes). This creates O(p^2)
+                // bias per source. Acceptable for small p but should be documented.
+                // Consider deduplicating sampled sources for better accuracy.
                 std::size_t num_errors = sample_poisson(rng, P_all);
 
                 for (std::size_t e = 0; e < num_errors; ++e) {

@@ -21,6 +21,9 @@ QEPG::QEPG(){
 
 }
 
+// TODO: [Review-P1-Perf] Constructor takes cliffordcircuit BY VALUE, copying the
+// entire gate vector, parity groups, and measurement mappings. Change to
+// const reference or move semantics to avoid O(N) copy.
 QEPG::QEPG(clifford::cliffordcircuit othercircuit, size_t total_detectors, size_t total_noise):
                     circuit_(othercircuit),
                     total_detectors_(total_detectors),
@@ -157,6 +160,10 @@ void QEPG::backward_graph_construction(){
 
     const clifford::paritygroup& observable=circuit_.get_observable_parity_group();
 
+    // TODO: [Review-P0-Bug] Using signed int for t — if gate_size==0, gate_size-1
+    // wraps to SIZE_MAX, which cast to int is UB. Use: for(size_t t=gate_size; t-->0;)
+    // TODO: [Review-P1-Perf] std::string copy + 7 string comparisons per gate in the
+    // hottest loop. Replace Gate::name with enum GateKind and use switch for ~5-10x speedup.
     for(int t=gate_size-1;t>=0;t--){
 
         const auto& gate=circuit_.get_gate(t);
@@ -194,6 +201,8 @@ void QEPG::backward_graph_construction(){
             /*
             This measurement will flip the observable
             */
+            // TODO: [Review-P1-Perf] Linear search in observable list for every measurement.
+            // Pre-convert to std::unordered_set before the loop for O(1) lookup.
             if(std::find(observable.indexlist.begin(), observable.indexlist.end(), current_meas_index) != observable.indexlist.end()){
                     current_x_parity_prop[qindex].set(num_detectors);
                     current_y_parity_prop[qindex].set(num_detectors);
@@ -210,7 +219,11 @@ void QEPG::backward_graph_construction(){
             current_x_parity_prop[qindex].reset();
             current_y_parity_prop[qindex].reset();
             current_z_parity_prop[qindex].reset();
-
+            // TODO: [Review-P0-Bug] Missing 'continue' here. Execution falls through
+            // to the cnot/h/p checks below, wasting comparisons. Currently correct by
+            // accident ("R"!="cnot") but fragile — adding a gate type above cnot would
+            // break silently.
+            continue;
         }
         /*
         *   When the gate is a CNOT

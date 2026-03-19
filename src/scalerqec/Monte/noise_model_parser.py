@@ -65,6 +65,10 @@ class NonuniformNoiseModel:
 # Number of QEPG noise sources created by each gate after normalization.
 # This must match the decompositions in stimparser.py and the noise
 # injection convention in clifford.py (1 depolarize per non-Reset primitive).
+# TODO: [Review-P2-Maintainability] This table duplicates information from
+# stimparser._1Q_DECOMPOSITIONS and _2Q_DECOMPOSITIONS. A mismatch is a
+# silent correctness bug. Derive _GATE_NOISE_COUNT from the decomposition
+# tables automatically (count = sum(1 for prim in seq if prim != "R")).
 _GATE_NOISE_COUNT: dict[str, int] = {
     "H": 1, "S": 1, "X": 1, "Y": 1, "Z": 1, "M": 1,
     "R": 0,
@@ -325,6 +329,12 @@ def _accumulate_noise(
 
     Multiple noise channels on the same qubit between gates compose.
     We approximate this as addition (valid for small probabilities).
+
+    .. note::
+        TODO: [Review-P1-Correctness] Addition is only valid for small p.
+        The exact formula for independent channels is p_combined = p1 + p2 - 2*p1*p2.
+        At p=0.05 the error from addition is ~0.5% per accumulation. Consider using
+        the exact formula for better accuracy at higher error rates.
     """
     if qubit in pending:
         old = pending[qubit]

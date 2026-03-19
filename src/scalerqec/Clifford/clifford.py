@@ -532,7 +532,8 @@ class CliffordCircuit:
             gate = tokens[0]
 
             # --- Table-driven gate dispatch ---
-            # Single-qubit gates with depolarization noise
+            # TODO: [Review-P2-Perf] _1Q_GATE_MAP dict is rebuilt on every iteration
+            # of the for-line loop. Move outside the loop or make a class constant.
             _1Q_GATE_MAP = {
                 "H": self.add_hadamard,
                 "S": self.add_phase,

@@ -45,10 +45,14 @@ _2Q_DECOMPOSITIONS = {
     "CZ": [("H", "t"), ("CX", "ct"), ("H", "t")],
 }
 
-# Annotations preserved as-is
+# TODO: [Review-P1] Prefix matching with "DETECTOR(" fails if there is a space
+# between DETECTOR and the opening paren (e.g. "DETECTOR (0,1,2) rec[-1]").
+# Stim allows optional spaces. Split on first token instead of prefix matching.
 _ANNOTATION_PREFIXES = ("TICK", "DETECTOR(", "QUBIT_COORDS(", "OBSERVABLE_INCLUDE(")
 
 # Noise/metadata directives stripped by the normalizer
+# TODO: [Review-P1] Missing PAULI_CHANNEL_1 and PAULI_CHANNEL_2. These Stim
+# directives would pass through as unknown gates and crash the C++ parser.
 _NOISE_PREFIXES = ("X_ERROR", "Y_ERROR", "Z_ERROR", "DEPOLARIZE1", "DEPOLARIZE2", "SHIFT_COORDS")
 
 

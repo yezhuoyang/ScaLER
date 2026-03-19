@@ -41,6 +41,9 @@ void cliffordcircuit::add_XError(size_t qindex) {
 }
 
 /// @brief Append a Z_ERROR noise channel (does not increment noise counter).
+// TODO: [Review-P0-Bug] TYPO: "X_ZRROR" should be "Z_ERROR". This gate name
+// won't match any case in backward propagation, causing Z errors to be silently
+// ignored. Fix the string literal.
 void cliffordcircuit::add_ZError(size_t qindex) {
     circuit_.push_back({"X_ZRROR", {qindex}});
     num_qubit_=std::max(num_qubit_,qindex+1);
@@ -459,7 +462,9 @@ void cliffordcircuit::compile_from_rewrited_stim_string(std::string stim_str){
            */
            paritygroup measuregroup;
            for(int index: intlist){
-                measuregroup.indexlist.push_back((size_t)((int)num_meas_+index));
+                // TODO: [Review-P1] C-style cast of size_t to int can overflow for
+           // circuits with >2B measurements. Use proper range-checked arithmetic.
+           measuregroup.indexlist.push_back((size_t)((int)num_meas_+index));
                 measure_to_parity_index_[(int)num_meas_+index].indexlist.emplace_back(num_detectors_);
            }
            detectors_.push_back(measuregroup);

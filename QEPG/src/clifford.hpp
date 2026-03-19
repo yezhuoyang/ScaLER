@@ -25,6 +25,13 @@ namespace clifford{
  * Each Gate stores a string name identifying the operation (e.g. "h", "cnot",
  * "DEPOLARIZE1", "M", "R") and a list of qubit indices it acts on.
  */
+// TODO: [Review-P1-Perf] Gate uses heap-allocated std::string + std::vector for
+// every gate instance. For large circuits (millions of gates), this causes massive
+// overhead (2 heap allocs per gate, ~80 bytes each). Replace with:
+//   enum class GateKind : uint8_t { Depolarize1, M, R, CNOT, H, P, X, Y, Z, ... };
+//   struct Gate { GateKind kind; size_t qubits[2]; uint8_t num_qubits; };
+// This reduces Gate from ~80 bytes + 2 heap allocs to ~24 bytes with zero allocs,
+// and enables switch-based dispatch in backward_graph_construction().
 struct Gate{
     std::string name;              ///< Operation name (e.g. "h", "cnot", "DEPOLARIZE1", "M", "R").
     std::vector<size_t> qubits;    ///< Qubit indices this gate operates on.

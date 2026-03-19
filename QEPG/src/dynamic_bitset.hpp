@@ -140,6 +140,8 @@ class DynamicBitset {
     // Bitwise operations
     // ---------------------------------------------------------------
 
+    // TODO: [Review-P1-Correctness] No size check — if rhs has fewer blocks, this
+    // reads out of bounds (UB). Add: assert(blocks_.size() == rhs.blocks_.size());
     DynamicBitset& operator^=(const DynamicBitset& rhs) noexcept {
         for (std::size_t i = 0; i < blocks_.size(); ++i)
             blocks_[i] ^= rhs.blocks_[i];
