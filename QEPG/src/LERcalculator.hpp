@@ -156,7 +156,7 @@ namespace py = pybind11;
   * @return A pair of NumPy arrays: (detector_outcomes of shape (shot, num_detectors),
   *         observable_outcomes of shape (shot,)).
   */
- std::pair<py::array_t<bool>,py::array_t<bool>> return_samples_Monte_separate_obs_with_QEPG(const QEPG::QEPG& graph,const double& error_rate, const size_t& shot);
+ std::pair<py::array_t<std::uint8_t>,py::array_t<std::uint8_t>> return_samples_Monte_separate_obs_with_QEPG(const QEPG::QEPG& graph,const double& error_rate, const size_t& shot);
 
 
  /**
