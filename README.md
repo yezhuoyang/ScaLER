@@ -130,30 +130,30 @@ scalerqec/
 ## Quick Start
 ---
 
-### 1. Construct a QEC circuit from stabilizers
+### 1. Define a QEC code with StabIR
+
+StabIR is our stabilizer-level intermediate representation. You define the **code structure** (stabilizers, logical operators, measurement scheme, rounds) independently of any noise model. The IR is then compiled into a noiseless Stim circuit.
 
 A detailed tutorial is available in `Tutorial.ipynb`. Below is a smaller example using the [[3, 1, 3]] Z-repetition code.
 
 ```python
 from scalerqec.QEC.qeccircuit import StabCode
-from scalerqec.QEC.noisemodel import NoiseModel
 
+# Step 1: Define the code structure
 qeccirc = StabCode(n=3, k=1, d=3)
-
-# Stabilizer generators
-qeccirc.add_stab("ZZI")
+qeccirc.add_stab("ZZI")          # stabilizer generators
 qeccirc.add_stab("IZZ")
+qeccirc.set_logical_Z(0, "ZZZ")  # logical Z operator
 
-# Set the logical Z operator
-qeccirc.set_logical_Z(0, "ZZZ")
-
-# Configure noise and measurement scheme
-noise_model = NoiseModel(0.001)
-qeccirc.scheme = "Standard"   # Also supports: Shor, Knill, Flag
+# Step 2: Configure the measurement scheme
+qeccirc.scheme = "Standard"       # also supports: Shor, Knill, Flag
 qeccirc.rounds = 2
 
-# Build the circuit
+# Step 3: Compile to a noiseless Stim circuit
 qeccirc.construct_circuit()
+
+# The compiled circuit is available as a stim.Circuit object
+print(qeccirc.stimcirc)
 ```
 
 You can inspect the intermediate representation:
@@ -173,6 +173,30 @@ d1 = Parity c1 c3
 c4 = Prop ZZZ
 o0 = Parity c4
 ```
+
+Once compiled, you can combine the code with any noise model to estimate the logical error rate. The noise model is applied **separately** -- it is not part of the code definition:
+
+```python
+from scalerqec.QEC.noisemodel import NoiseModel, SD6NoiseModel, SI1000NoiseModel
+
+# Option A: Simple depolarizing noise
+noise_model = NoiseModel(0.001)
+
+# Option B: Standard depolarizing (6 noise locations per round)
+noise_model = SD6NoiseModel(0.001)
+
+# Option C: Superconducting-inspired noise
+noise_model = SI1000NoiseModel(0.001)
+
+# Estimate LER with Monte Carlo
+from scalerqec.Monte import MonteLERcalc
+
+mc = MonteLERcalc(time_budget=30, samplebudget=500000, MIN_NUM_LE_EVENT=50)
+mc.calculate_LER_from_StabCode(qeccirc, noise_model)
+print(f"LER = {mc._estimated_LER:.2e}")
+```
+
+All LER calculators (ScaLER, Monte Carlo, Symbolic) accept a StabCode + NoiseModel pair. You can also pass a custom decoder via `decoder=my_decoder` -- any object with a `decode_batch()` method works.
 
 
 ### 2. ScaLER -- Time-budgeted S-curve LER estimation (main method)
@@ -248,22 +272,7 @@ calculator.calculate_LER_from_file(
 
 ### 4. Monte Carlo LER estimation
 
-Standard Monte Carlo fault injection with adaptive batching. All calculators accept an optional `decoder` parameter -- any object with a `decode_batch()` method (pymatching, BPOSD, or your own). If omitted, pymatching is used by default.
-
-**From a StabCode object:**
-
-```python
-from scalerqec.Monte import MonteLERcalc
-
-# Default decoder (pymatching)
-mc = MonteLERcalc(time_budget=30, samplebudget=500000, MIN_NUM_LE_EVENT=50)
-mc.calculate_LER_from_StabCode(qeccirc, noise_model)
-print(f"LER = {mc._estimated_LER:.2e} +/- {mc._uncertainty:.2e}")
-
-# Custom decoder
-mc = MonteLERcalc(time_budget=30, decoder=my_custom_decoder)
-mc.calculate_LER_from_StabCode(qeccirc, noise_model)
-```
+Standard Monte Carlo fault injection with adaptive batching. All calculators accept an optional `decoder` parameter -- any object with a `decode_batch()` method (pymatching, BPOSD, or your own). If omitted, pymatching is used by default. See Section 1 above for how to use `calculate_LER_from_StabCode` with a StabCode + NoiseModel pair.
 
 **From a Stim circuit file (uniform noise):**
 
