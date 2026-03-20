@@ -19,7 +19,14 @@
 #include <vector>
 #include <random>
 #include <cstring>
+#include <algorithm>
 #include "QEPG.hpp"
+
+#if defined(_MSC_VER)
+    #include <intrin.h>
+#elif defined(__GNUC__) || defined(__clang__)
+    #include <x86intrin.h>
+#endif
 #ifdef _OPENMP
 #include <omp.h>
 #endif
@@ -184,6 +191,7 @@ class sampler{
 
         inline std::size_t generate_sample_Monte(double error_prob ,size_t ErrorSize,std::mt19937& gen);
         inline std::size_t generate_sample_Monte(double error_prob, size_t ErrorSize, Xoshiro256pp& gen);
+        inline std::size_t generate_sample_Monte_sparse(double error_prob, size_t ErrorSize, Xoshiro256pp& gen);
 
         /**
          * @brief Compute detector and observable outcomes for a single error sample.
@@ -252,18 +260,54 @@ class sampler{
          *
          * Uses contiguous memory layout and SIMD-accelerated XOR for
          * maximum throughput. Result is written into a pre-allocated
-         * aligned buffer, then copied to QEPG::Row for output.
+         * aligned buffer. Sorts errors by row index for sequential
+         * cache access and prefetches the next row during XOR.
          */
         inline void calculate_parity_output_flat(
             const qepg_bits::FlatBitTable& flat,
             std::size_t n_noise,
             const singlePauli* sample,
             std::size_t sample_size,
-            std::uint64_t* result_buf) const noexcept
+            std::uint64_t* result_buf) noexcept
         {
-            for(std::size_t s = 0; s < sample_size; ++s){
-                std::size_t row_idx = sample[s].qindex + (sample[s].type - 1) * n_noise;
-                flat.xor_row_into(row_idx, result_buf);
+            // Fast path for small k: skip sort/prefetch overhead
+            if (sample_size <= 4) {
+                for (std::size_t s = 0; s < sample_size; ++s) {
+                    std::size_t row_idx = sample[s].qindex + (sample[s].type - 1) * n_noise;
+                    flat.xor_row_into(row_idx, result_buf);
+                }
+                return;
+            }
+
+            // Compute row indices
+            if (sample_size > row_idx_scratch_.size())
+                row_idx_scratch_.resize(sample_size);
+
+            for (std::size_t s = 0; s < sample_size; ++s)
+                row_idx_scratch_[s] = sample[s].qindex + (sample[s].type - 1) * n_noise;
+
+            // Check if already sorted (geometric-skip produces sorted qindex,
+            // but type offset can break ordering). Sort only if needed.
+            bool sorted = true;
+            for (std::size_t s = 1; s < sample_size; ++s) {
+                if (row_idx_scratch_[s] < row_idx_scratch_[s - 1]) {
+                    sorted = false;
+                    break;
+                }
+            }
+            if (!sorted) {
+                std::sort(row_idx_scratch_.begin(),
+                          row_idx_scratch_.begin() + sample_size);
+            }
+
+            // XOR with software prefetching
+            for (std::size_t s = 0; s < sample_size; ++s) {
+                if (s + 1 < sample_size) {
+                    _mm_prefetch(
+                        reinterpret_cast<const char*>(flat.row_ptr(row_idx_scratch_[s + 1])),
+                        _MM_HINT_T0);
+                }
+                flat.xor_row_into(row_idx_scratch_[s], result_buf);
             }
         }
 
@@ -324,6 +368,60 @@ class sampler{
         const singlePauli* scratch_data() const noexcept { return scratch_sample_.data(); }
 
         /**
+         * @brief Fused Floyd sampling + XOR propagation.
+         *
+         * Generates k error locations via Floyd's insertion and XORs each
+         * error's propagation row directly into result_buf, skipping the
+         * scratch sample buffer and separate propagation pass.
+         */
+        inline void generate_and_xor_sparse(
+            const qepg_bits::FlatBitTable& flat,
+            std::size_t n_noise,
+            std::size_t error_size,
+            std::size_t k,
+            Xoshiro256pp& gen,
+            std::uint64_t* result_buf) noexcept
+        {
+            if (k <= error_size / 2) {
+                // Floyd's insertion with fused XOR
+                std::size_t placed = 0;
+                // Reuse scratch_sample_ just for bitmap cleanup tracking
+                scratch_sample_.clear();
+                while (placed < k) {
+                    std::size_t pos = gen.bounded(error_size);
+                    if (!collision_bitmap_[pos]) {
+                        collision_bitmap_[pos] = 1;
+                        std::size_t type = 1 + gen.bounded(3);
+                        flat.xor_row_into(pos + (type - 1) * n_noise, result_buf);
+                        scratch_sample_.push_back(singlePauli{pos, type});
+                        ++placed;
+                    }
+                }
+                // Clean bitmap O(k)
+                for (std::size_t j = 0; j < k; ++j)
+                    collision_bitmap_[scratch_sample_[j].qindex] = 0;
+            } else {
+                // Removal path: mark all, remove (N-k)
+                std::memset(collision_bitmap_.data(), 1, error_size);
+                std::size_t remaining = error_size;
+                while (remaining > k) {
+                    std::size_t pos = gen.bounded(error_size);
+                    if (collision_bitmap_[pos]) {
+                        collision_bitmap_[pos] = 0;
+                        --remaining;
+                    }
+                }
+                for (std::size_t pos = 0; pos < error_size; ++pos) {
+                    if (collision_bitmap_[pos]) {
+                        std::size_t type = 1 + gen.bounded(3);
+                        flat.xor_row_into(pos + (type - 1) * n_noise, result_buf);
+                    }
+                }
+                std::memset(collision_bitmap_.data(), 0, error_size);
+            }
+        }
+
+        /**
          * @brief Generate samples and write directly to numpy byte buffers.
          * Avoids all intermediate QEPG::Row allocations.
          */
@@ -375,6 +473,9 @@ class sampler{
 
         /// Pre-allocated scratch buffer for sample generation (replaces per-sample std::vector).
         std::vector<singlePauli> scratch_sample_;
+
+        /// Scratch buffer for sorted row indices (avoids per-shot allocation).
+        std::vector<std::size_t> row_idx_scratch_;
 
 };
 

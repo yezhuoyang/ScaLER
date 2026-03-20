@@ -17,7 +17,7 @@ extra_link_args = []
 
 if sys.platform == "win32":
     # --- Windows flags ---
-    extra_compile_args = ["/std:c++20", "/EHsc", "/O2", "/openmp:llvm"]
+    extra_compile_args = ["/std:c++20", "/EHsc", "/O2", "/openmp:llvm", "/arch:AVX2"]
     extra_link_args = ["/DEBUG"]
 
 elif sys.platform == "darwin":
@@ -27,7 +27,7 @@ elif sys.platform == "darwin":
     # libomp/delocate version-target conflicts. Can also be forced off/on:
     #   SCALERQEC_NO_OPENMP=1 pip install .   (force disable)
     #   SCALERQEC_OPENMP=1 pip install .      (force enable)
-    extra_compile_args = ["-std=c++20", "-O3"]
+    extra_compile_args = ["-std=c++20", "-O3", "-mavx2", "-mbmi2"]
     extra_link_args = []
 
     in_cibuildwheel = os.environ.get("CIBUILDWHEEL", "") == "1"
@@ -52,7 +52,7 @@ elif sys.platform == "darwin":
 
 else:
     # --- Linux flags ---
-    extra_compile_args = ["-std=c++20", "-O3", "-fopenmp"]
+    extra_compile_args = ["-std=c++20", "-O3", "-fopenmp", "-mavx2", "-mbmi2"]
     extra_link_args = ["-fopenmp"]
 
 
