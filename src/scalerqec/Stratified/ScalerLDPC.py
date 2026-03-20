@@ -57,6 +57,7 @@ class ScalerLDPC(Scaler):
         bp_method: str = "product_sum",
         osd_method: str = "osd0",  # Use 'osd0' for order-0 OSD (fast)
         osd_order: int = 0,
+        decoder=None,
     ):
         """
         Initialize the ScalerLDPC.
@@ -72,9 +73,12 @@ class ScalerLDPC(Scaler):
             bp_method: BP method ('product_sum' or 'min_sum')
             osd_method: OSD method ('osd0', 'osd_e', 'osd_cs')
             osd_order: OSD order (only used with osd_e/osd_cs, higher for better accuracy)
+            decoder: Any object with a ``decode_batch`` method. If ``None``,
+                a BPOSD decoder is built automatically.
         """
         super().__init__(
-            error_rate, time_budget, model_type, gamma, num_subspaces_phase2
+            error_rate, time_budget, model_type, gamma, num_subspaces_phase2,
+            decoder=decoder,
         )
 
         # Binary search configuration
@@ -125,20 +129,23 @@ class ScalerLDPC(Scaler):
             decompose_errors=False
         )
 
-        # Initialize BPOSD decoder
-        print(f"[ScalerLDPC] Initializing BPOSD decoder...")
-        print(f"  - max_bp_iters: {self._max_bp_iters}")
-        print(f"  - bp_method: {self._bp_method}")
-        print(f"  - osd_method: {self._osd_method}")
-        print(f"  - osd_order: {self._osd_order}")
-        self._decoder = BPOSD(
-            self._detector_error_model,
-            max_bp_iters=self._max_bp_iters,
-            bp_method=self._bp_method,
-            osd_method=self._osd_method,
-            osd_order=self._osd_order,
-        )
-        print("[ScalerLDPC] BPOSD decoder initialized successfully!")
+        # Initialize decoder
+        if self._decoder is not None:
+            print("[ScalerLDPC] Using user-provided decoder")
+        else:
+            print(f"[ScalerLDPC] Initializing BPOSD decoder...")
+            print(f"  - max_bp_iters: {self._max_bp_iters}")
+            print(f"  - bp_method: {self._bp_method}")
+            print(f"  - osd_method: {self._osd_method}")
+            print(f"  - osd_order: {self._osd_order}")
+            self._decoder = BPOSD(
+                self._detector_error_model,
+                max_bp_iters=self._max_bp_iters,
+                bp_method=self._bp_method,
+                osd_method=self._osd_method,
+                osd_order=self._osd_order,
+            )
+            print("[ScalerLDPC] BPOSD decoder initialized successfully!")
 
         # Compile QEPG graph once
         print("[ScalerLDPC] Compiling QEPG graph...")

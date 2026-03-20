@@ -22,6 +22,8 @@
 #include "src/QEPG.hpp"
 #include "src/sampler.hpp"
 #include "src/LERcalculator.hpp"
+#include "src/noiselabel.hpp"
+#include "src/hotspot.hpp"
 
 namespace py = pybind11;
 
@@ -367,6 +369,273 @@ PYBIND11_MODULE(qepg, m) {
 
             Returns:
                 Tuple of (detector_outcomes, observable_outcomes) as NumPy uint8 arrays.
+        )pbdoc");
+
+
+    // =========================================================================
+    // Noise Label System — positional classifier + hotspot analysis
+    // =========================================================================
+
+    py::enum_<noiselabel::NoiseType>(m, "NoiseType",
+        "QStab IR error types for noise classification.")
+        .value("DATA_QUBIT_ERROR",  noiselabel::NoiseType::DATA_QUBIT_ERROR,
+               "Type 0: data qubit error before/after CX phase")
+        .value("GHOST_ERROR",       noiselabel::NoiseType::GHOST_ERROR,
+               "Type I: data qubit error during CX phase with future CX")
+        .value("HOOK_ERROR",        noiselabel::NoiseType::HOOK_ERROR,
+               "Type II: ancilla error with remaining CX")
+        .value("MEASUREMENT_ERROR", noiselabel::NoiseType::MEASUREMENT_ERROR,
+               "Type III: ancilla error after last CX")
+        ;
+
+    py::class_<noiselabel::NoiseLabel>(m, "NoiseLabel",
+        "Per-noise-source label entry.")
+        .def_readonly("noise_index", &noiselabel::NoiseLabel::noise_index)
+        .def_readonly("qubit",       &noiselabel::NoiseLabel::qubit)
+        .def_readonly("type",        &noiselabel::NoiseLabel::type)
+        .def_readonly("is_data",     &noiselabel::NoiseLabel::is_data)
+        .def("__repr__", [](const noiselabel::NoiseLabel& self) {
+            return std::string("<NoiseLabel idx=") + std::to_string(self.noise_index)
+                + " q=" + std::to_string(self.qubit)
+                + " type=" + noiselabel::noise_type_name(self.type)
+                + (self.is_data ? " data" : " ancilla") + ">";
+        })
+        ;
+
+    py::class_<noiselabel::NoiseLabelMap>(m, "NoiseLabelMap",
+        "Compact noise label map: array of labels indexed by noise source.")
+        .def(py::init<>())
+        .def(py::init<std::size_t>(), py::arg("num_noise"))
+        .def("get_type", &noiselabel::NoiseLabelMap::get_type, py::arg("noise_index"),
+             "Get the NoiseType of a noise source.")
+        .def("get", &noiselabel::NoiseLabelMap::get, py::arg("noise_index"),
+             py::return_value_policy::reference_internal,
+             "Get the full NoiseLabel entry.")
+        .def("size", &noiselabel::NoiseLabelMap::size,
+             "Total number of noise sources.")
+        .def("category_counts", &noiselabel::NoiseLabelMap::category_counts,
+             "Return [type0_count, type1_count, type2_count, type3_count].")
+        .def("get_indices", &noiselabel::NoiseLabelMap::get_indices, py::arg("type"),
+             "Get indices of all sources with a given type.")
+        .def("__len__", &noiselabel::NoiseLabelMap::size)
+        .def("__repr__", [](const noiselabel::NoiseLabelMap& self) {
+            auto counts = self.category_counts();
+            return std::string("<NoiseLabelMap n=") + std::to_string(self.size())
+                + " type0=" + std::to_string(counts[0])
+                + " typeI=" + std::to_string(counts[1])
+                + " typeII=" + std::to_string(counts[2])
+                + " typeIII=" + std::to_string(counts[3]) + ">";
+        })
+        ;
+
+    m.def("auto_label",
+        &noiselabel::auto_label,
+        py::arg("circuit"), py::arg("num_data_qubits"),
+        py::return_value_policy::move,
+        R"pbdoc(
+            Classify all noise sources in a compiled CliffordCircuit.
+
+            Uses positional classification relative to the CX schedule:
+            - Data qubit noise before first CX → Type 0 (data_qubit_error)
+            - Data qubit noise during phase with future CX → Type I (ghost_error)
+            - Data qubit noise during phase without future CX → Type 0
+            - Ancilla noise with future CX → Type II (hook_error)
+            - Ancilla noise without future CX → Type III (measurement_error)
+
+            Args:
+                circuit: A compiled CliffordCircuit.
+                num_data_qubits: Number of data qubits (indices 0..n-1).
+
+            Returns:
+                NoiseLabelMap with per-source labels.
+        )pbdoc");
+
+
+    // --- Hotspot analysis result types ---
+
+    py::class_<hotspot::CategoryReport>(m, "CategoryReport",
+        "Conditional probability report for a single noise category.")
+        .def_readonly("type",                &hotspot::CategoryReport::type)
+        .def_readonly("name",                &hotspot::CategoryReport::name)
+        .def_readonly("count",               &hotspot::CategoryReport::count)
+        .def_readonly("p_fired",             &hotspot::CategoryReport::p_fired)
+        .def_readonly("p_fired_given_error", &hotspot::CategoryReport::p_fired_given_error)
+        .def_readonly("p_error_given_fired", &hotspot::CategoryReport::p_error_given_fired)
+        .def_readonly("lift",                &hotspot::CategoryReport::lift)
+        ;
+
+    py::class_<hotspot::ConfigEntry>(m, "ConfigEntry",
+        "Multi-error configuration entry.")
+        .def_readonly("configuration", &hotspot::ConfigEntry::configuration)
+        .def_readonly("count",         &hotspot::ConfigEntry::count)
+        .def_readonly("fraction",      &hotspot::ConfigEntry::fraction)
+        ;
+
+    py::class_<hotspot::SourceReport>(m, "SourceReport",
+        "Per-source ranking entry.")
+        .def_readonly("noise_index",         &hotspot::SourceReport::noise_index)
+        .def_readonly("qubit",               &hotspot::SourceReport::qubit)
+        .def_readonly("type",                &hotspot::SourceReport::type)
+        .def_readonly("p_fired",             &hotspot::SourceReport::p_fired)
+        .def_readonly("p_fired_given_error", &hotspot::SourceReport::p_fired_given_error)
+        .def_readonly("lift",                &hotspot::SourceReport::lift)
+        ;
+
+    py::class_<hotspot::HotspotResult>(m, "HotspotResult",
+        "Complete hotspot analysis result.")
+        .def_readonly("num_shots",          &hotspot::HotspotResult::num_shots)
+        .def_readonly("num_logical_errors", &hotspot::HotspotResult::num_logical_errors)
+        .def_readonly("num_noise",          &hotspot::HotspotResult::num_noise)
+        .def_readonly("category_reports",   &hotspot::HotspotResult::category_reports)
+        .def_readonly("config_reports",     &hotspot::HotspotResult::config_reports)
+        .def_readonly("source_reports",     &hotspot::HotspotResult::source_reports)
+        ;
+
+
+    // -----------------------------------------------------------------
+    // Phase 1: labeled_sample — sampling with category bitmask tracking
+    // -----------------------------------------------------------------
+    m.def("labeled_sample",
+        [](const QEPG::QEPG& graph,
+           const noiselabel::NoiseLabelMap& label_map,
+           py::array_t<double> noise_probs_arr,
+           py::array_t<std::size_t> corr_sources_a_arr,
+           py::array_t<std::size_t> corr_sources_b_arr,
+           py::array_t<double> corr_probs_arr,
+           std::size_t num_shots)
+        {
+            // Extract noise_probs
+            auto np_info = noise_probs_arr.request();
+            if (np_info.ndim != 2 || np_info.shape[1] != 3)
+                throw std::runtime_error("noise_probs must have shape (N, 3)");
+            const std::size_t num_noise = static_cast<std::size_t>(np_info.shape[0]);
+            const double* noise_probs = static_cast<const double*>(np_info.ptr);
+
+            // Extract correlated pairs
+            auto ca_info = corr_sources_a_arr.request();
+            auto cb_info = corr_sources_b_arr.request();
+            auto cp_info = corr_probs_arr.request();
+            const std::size_t num_corr = static_cast<std::size_t>(ca_info.shape[0]);
+
+            std::vector<SAMPLE::CorrelatedPair> corr_pairs(num_corr);
+            if (num_corr > 0) {
+                const std::size_t* ca = static_cast<const std::size_t*>(ca_info.ptr);
+                const std::size_t* cb = static_cast<const std::size_t*>(cb_info.ptr);
+                const double* cp = static_cast<const double*>(cp_info.ptr);
+                for (std::size_t i = 0; i < num_corr; ++i) {
+                    corr_pairs[i] = {ca[i], cb[i], cp[i]};
+                }
+            }
+
+            // Allocate output arrays
+            const std::size_t n_det = graph.get_total_detector();
+            py::array_t<std::uint8_t> det_result({num_shots, n_det});
+            py::array_t<std::uint8_t> obs_result(num_shots);
+            py::array_t<std::uint8_t> bitmask_result(num_shots);
+
+            auto det_info = det_result.request();
+            auto obs_info = obs_result.request();
+            auto bm_info  = bitmask_result.request();
+
+            {
+                py::gil_scoped_release release;
+                hotspot::labeled_sample(
+                    graph, label_map,
+                    static_cast<std::uint8_t*>(det_info.ptr),
+                    static_cast<std::uint8_t*>(obs_info.ptr),
+                    static_cast<std::uint8_t*>(bm_info.ptr),
+                    n_det, noise_probs, num_noise,
+                    num_corr > 0 ? corr_pairs.data() : nullptr, num_corr,
+                    num_shots);
+            }
+
+            return py::make_tuple(
+                std::move(det_result),
+                std::move(obs_result),
+                std::move(bitmask_result));
+        },
+        py::arg("graph"),
+        py::arg("label_map"),
+        py::arg("noise_probs"),
+        py::arg("corr_sources_a"),
+        py::arg("corr_sources_b"),
+        py::arg("corr_probs"),
+        py::arg("num_shots"),
+        py::return_value_policy::move,
+        R"pbdoc(
+            Phase 1: Sample non-uniform noise with per-shot category bitmask tracking.
+
+            Same sampling as return_samples_nonuniform_to_numpy, but additionally
+            returns a per-shot category bitmask (uint8) where bit i = 1 if any
+            noise source of Type i fired.
+
+            After calling this, decode detector_outcomes with your chosen decoder,
+            then pass bitmasks + logical_error mask to hotspot_aggregate().
+
+            Args:
+                graph: Pre-compiled QEPGGraph object.
+                label_map: NoiseLabelMap classifying each noise source.
+                noise_probs: NumPy float64 array of shape (N, 3) with [px, py, pz].
+                corr_sources_a: Source A indices for correlated pairs.
+                corr_sources_b: Source B indices for correlated pairs.
+                corr_probs: Probabilities for correlated pairs.
+                num_shots: Number of Monte Carlo shots.
+
+            Returns:
+                Tuple of (detector_outcomes, observable_outcomes, category_bitmasks)
+                as NumPy uint8 arrays.
+        )pbdoc");
+
+
+    // -----------------------------------------------------------------
+    // Phase 3: hotspot_aggregate — decoder-agnostic aggregation
+    // -----------------------------------------------------------------
+    m.def("hotspot_aggregate",
+        [](py::array_t<std::uint8_t> bitmask_arr,
+           py::array_t<std::uint8_t> logical_error_arr,
+           const noiselabel::NoiseLabelMap& label_map,
+           std::size_t min_config_count) -> hotspot::HotspotResult
+        {
+            auto bm_info = bitmask_arr.request();
+            auto le_info = logical_error_arr.request();
+            const std::size_t num_shots = static_cast<std::size_t>(bm_info.shape[0]);
+
+            if (le_info.shape[0] != bm_info.shape[0])
+                throw std::runtime_error(
+                    "bitmask and logical_error arrays must have same length");
+
+            hotspot::HotspotResult result;
+            {
+                py::gil_scoped_release release;
+                result = hotspot::hotspot_aggregate(
+                    static_cast<const std::uint8_t*>(bm_info.ptr),
+                    static_cast<const std::uint8_t*>(le_info.ptr),
+                    num_shots, label_map, min_config_count);
+            }
+            return result;
+        },
+        py::arg("bitmasks"),
+        py::arg("logical_errors"),
+        py::arg("label_map"),
+        py::arg("min_config_count") = 5,
+        py::return_value_policy::move,
+        R"pbdoc(
+            Phase 3: Aggregate hotspot statistics from bitmasks + decoded logical errors.
+
+            Pure aggregation — no sampling, no decoding. Takes per-shot category
+            bitmasks (from labeled_sample) and a logical_error mask (from YOUR
+            decoder), and computes conditional probabilities and configuration
+            breakdown.
+
+            Args:
+                bitmasks: Per-shot category bitmasks from labeled_sample, shape (N,).
+                logical_errors: Per-shot logical error flags, shape (N,). uint8.
+                    Compute as: (observable_outcomes != decoder.decode_batch(detectors)).
+                label_map: NoiseLabelMap for category count info.
+                min_config_count: Minimum count for config entries (default 5).
+
+            Returns:
+                HotspotResult with category_reports and config_reports.
         )pbdoc");
 
 }

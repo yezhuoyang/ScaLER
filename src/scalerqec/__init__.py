@@ -47,6 +47,10 @@ from .Symbolic.symbolicLER import SymbolicLERcalc
 from .Monte.monteLER import MonteLERcalc
 from .Clifford.clifford import CliffordCircuit
 from .QEC.qeccircuit import StabCode
+from .Clifford.noiselabel import NoiseLabel, NoiseLabelMap
+from .QEC.autolabel import auto_label_from_circuit, auto_label_from_stabcode
+from .Analysis.hotspot import HotspotAnalyzer, HotspotResult, CategoryReport
+from .Analysis.visualize import labeled_circuit_latex
 
 
 __all__ = [
@@ -57,4 +61,12 @@ __all__ = [
     "CliffordCircuit",
     "qepg",
     "StabCode",
+    "NoiseLabel",
+    "NoiseLabelMap",
+    "auto_label_from_circuit",
+    "auto_label_from_stabcode",
+    "HotspotAnalyzer",
+    "HotspotResult",
+    "CategoryReport",
+    "labeled_circuit_latex",
 ]

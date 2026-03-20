@@ -65,6 +65,7 @@ ext_modules = [
             "QEPG/src/clifford.cpp",
             "QEPG/src/sampler.cpp",
             "QEPG/src/LERcalculator.cpp",
+            "QEPG/src/hotspot.cpp",
         ],
         include_dirs=include_dirs,
         extra_compile_args=extra_compile_args,

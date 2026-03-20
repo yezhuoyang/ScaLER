@@ -24,6 +24,7 @@ The typical workflow is:
 # Re-export high-level components for easy access
 
 from .clifford import CliffordCircuit
+from .noiselabel import NoiseLabel, NoiseLabelMap
 
 
-__all__ = ["CliffordCircuit"]
+__all__ = ["CliffordCircuit", "NoiseLabel", "NoiseLabelMap"]

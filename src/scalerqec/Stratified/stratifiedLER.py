@@ -57,11 +57,13 @@ class StratifiedLERcalc:
     """
 
     def __init__(
-        self, error_rate: float = 0, sampleBudget: int = 10000, num_subspace: int = 30
+        self, error_rate: float = 0, sampleBudget: int = 10000, num_subspace: int = 30,
+        decoder=None,
     ):
         self._num_detector: int = 0
         self._num_noise: int = 0
         self._error_rate: float = error_rate
+        self._decoder = decoder
         self._cliffordcircuit: CliffordCircuit = CliffordCircuit(4)
 
         self._ler: float = 0
@@ -121,9 +123,12 @@ class StratifiedLERcalc:
         self._detector_error_model = noisy_stim.detector_error_model(
             decompose_errors=True
         )
-        self._matcher = pymatching.Matching.from_detector_error_model(
-            self._detector_error_model
-        )
+        if self._decoder is not None:
+            self._matcher = self._decoder
+        else:
+            self._matcher = pymatching.Matching.from_detector_error_model(
+                self._detector_error_model
+            )
 
     def sample_all_subspace(self, shots_each_subspace: int = 1000000):
         """Sample every weight subspace with a fixed number of shots.
@@ -559,9 +564,12 @@ class StratifiedLERcalc:
                 decompose_errors=True
             )
         )
-        self._matcher = pymatching.Matching.from_detector_error_model(
-            self._detector_error_model
-        )
+        if self._decoder is not None:
+            self._matcher = self._decoder
+        else:
+            self._matcher = pymatching.Matching.from_detector_error_model(
+                self._detector_error_model
+            )
         self._QEPG_graph = compile_QEPG(self._stim_str_after_rewrite)
 
         ler_list: list[float] = []

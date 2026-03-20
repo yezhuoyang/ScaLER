@@ -86,6 +86,7 @@ class Scaler:
         model_type: ModelType = ModelType.OUR_MODEL,
         gamma: float = 1,
         num_subspaces_phase2: int = 12,
+        decoder=None,
     ):
         """
         Initialize the Scaler.
@@ -97,6 +98,9 @@ class Scaler:
             gamma: Sweet spot tuning parameter for d²y/dw² = γ * dy/dw
             num_subspaces_phase2: Number of uniform subspaces to sample between
                                   w_sweet and w_err in Phase 2 (default: 12)
+            decoder: Any object with a ``decode_batch`` method. If ``None``,
+                a pymatching decoder is built automatically from the circuit's
+                detector error model.
         """
         self._error_rate: float = error_rate
         self._time_budget: float = float(time_budget)
@@ -124,7 +128,8 @@ class Scaler:
         self._num_detector: int = 0
         self._stim_str_after_rewrite: str = ""
         self._detector_error_model = None
-        self._matcher: Optional[pymatching.Matching] = None
+        self._decoder = decoder
+        self._matcher = None
         self._QEPG_graph: Optional[QEPGGraph] = None
 
         # Subspace statistics
@@ -290,9 +295,12 @@ class Scaler:
         self._detector_error_model = noisy_stim.detector_error_model(
             decompose_errors=False
         )
-        self._matcher = pymatching.Matching.from_detector_error_model(
-            self._detector_error_model
-        )
+        if self._decoder is not None:
+            self._matcher = self._decoder
+        else:
+            self._matcher = pymatching.Matching.from_detector_error_model(
+                self._detector_error_model
+            )
 
         # Compile QEPG graph once.
         self._QEPG_graph = compile_QEPG(stim_str)

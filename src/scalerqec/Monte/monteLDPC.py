@@ -53,6 +53,7 @@ class MonteLDPC:
         bp_method: str = "product_sum",
         osd_method: str = "osd0",
         osd_order: int = 0,
+        decoder=None,
     ) -> None:
         """
         Initialize the MonteLDPC calculator.
@@ -65,6 +66,8 @@ class MonteLDPC:
             bp_method: BP method ('product_sum' or 'min_sum')
             osd_method: OSD method ('osd0', 'osd_e', 'osd_cs')
             osd_order: OSD order (higher for better accuracy)
+            decoder: Any object with a ``decode_batch`` method. If ``None``,
+                a BPOSD decoder is built automatically.
         """
         self._num_LER: int = 0
         self._sample_used: float = 0.0
@@ -81,12 +84,12 @@ class MonteLDPC:
         self._osd_method: str = osd_method
         self._osd_order: int = osd_order
 
-        if BPOSD is None:
+        if decoder is None and BPOSD is None:
             raise ImportError(
                 "stimbposd is required for MonteLDPC. "
                 "Install it with: pip install stimbposd"
             )
-        self._decoder: Optional[BPOSD] = None
+        self._decoder = decoder
 
     def calculate_LER_from_file(
         self, samplebudget: int, filepath: str, pvalue: float, repeat: int = 1
@@ -114,17 +117,18 @@ class MonteLDPC:
         circuit.compile_from_stim_circuit_str(stim_circuit)
         noisy_stim = SIDNoiseModel(pvalue).inject_noise(circuit.stimcircuit)
 
-        # Create sampler and BPOSD decoder
+        # Create sampler and decoder
         sampler = noisy_stim.compile_detector_sampler()
         detector_error_model = noisy_stim.detector_error_model(decompose_errors=False)
 
-        self._decoder = BPOSD(
-            detector_error_model,
-            max_bp_iters=self._max_bp_iters,
-            bp_method=self._bp_method,
-            osd_method=self._osd_method,
-            osd_order=self._osd_order,
-        )
+        if self._decoder is None:
+            self._decoder = BPOSD(
+                detector_error_model,
+                max_bp_iters=self._max_bp_iters,
+                bp_method=self._bp_method,
+                osd_method=self._osd_method,
+                osd_order=self._osd_order,
+            )
 
         Ler_list: list[float] = []
         samples_list: list[float] = []
@@ -230,13 +234,14 @@ class MonteLDPC:
         sampler = noisy_stim.compile_detector_sampler()
         detector_error_model = noisy_stim.detector_error_model(decompose_errors=False)
 
-        self._decoder = BPOSD(
-            detector_error_model,
-            max_bp_iters=self._max_bp_iters,
-            bp_method=self._bp_method,
-            osd_method=self._osd_method,
-            osd_order=self._osd_order,
-        )
+        if self._decoder is None:
+            self._decoder = BPOSD(
+                detector_error_model,
+                max_bp_iters=self._max_bp_iters,
+                bp_method=self._bp_method,
+                osd_method=self._osd_method,
+                osd_order=self._osd_order,
+            )
 
         start_time = time.perf_counter()
         ler_count = 0
