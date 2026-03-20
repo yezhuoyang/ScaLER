@@ -19,6 +19,36 @@
 
 namespace SAMPLE{
 
+/// Convert uint64 to uniform double in [0, 1) with 53-bit precision.
+static inline double to_double_01(std::uint64_t v) noexcept {
+    return (v >> 11) * (1.0 / (std::uint64_t{1} << 53));
+}
+
+/// Sample from Poisson(lambda) using Knuth's algorithm for small lambda,
+/// normal approximation for large lambda.
+static inline std::size_t sample_poisson(Xoshiro256pp& rng, double lambda) noexcept {
+    if (lambda < 30.0) {
+        // Knuth's algorithm: exact for small lambda, O(lambda) per sample
+        double L = std::exp(-lambda);
+        std::size_t k = 0;
+        double p = 1.0;
+        do {
+            ++k;
+            p *= to_double_01(rng());
+        } while (p > L);
+        return k - 1;
+    } else {
+        // Normal approximation: N(lambda, sqrt(lambda)) via Box-Muller
+        double u1 = to_double_01(rng());
+        double u2 = to_double_01(rng());
+        if (u1 < 1e-300) u1 = 1e-300;  // avoid log(0)
+        constexpr double two_pi = 2.0 * std::numbers::pi;
+        double z = std::sqrt(-2.0 * std::log(u1)) * std::cos(two_pi * u2);
+        double x = lambda + std::sqrt(lambda) * z;
+        return x > 0.0 ? static_cast<std::size_t>(x + 0.5) : 0;
+    }
+}
+
 /*---------------------------------------ctor----------*/
 sampler::sampler()=default;
 
@@ -180,9 +210,55 @@ inline std::size_t sampler::generate_sample_Monte(double error_prob, size_t Erro
     for(size_t pos = 0; pos < ErrorSize; ++pos){
         // Use upper 32 bits of random value for threshold test
         if(static_cast<std::uint32_t>(gen() >> 32) < threshold){
-            scratch_sample_.push_back(singlePauli{pos, 1 + (gen() % 3)});
+            scratch_sample_.push_back(singlePauli{pos, 1 + gen.bounded(3)});
         }
     }
+    return scratch_sample_.size();
+}
+
+
+inline std::size_t sampler::generate_sample_Monte_sparse(double error_prob, size_t ErrorSize, Xoshiro256pp& gen){
+    // Sparse O(k) algorithm: sample k ~ Poisson(N*p), then pick k locations via Floyd's.
+    // For small p this is dramatically faster than the O(N) dense Bernoulli scan.
+    scratch_sample_.clear();
+
+    const double lambda = error_prob * static_cast<double>(ErrorSize);
+    const std::size_t k = sample_poisson(gen, lambda);
+
+    if(k == 0) return 0;
+    if(k >= ErrorSize) {
+        for(size_t pos = 0; pos < ErrorSize; ++pos)
+            scratch_sample_.push_back(singlePauli{pos, 1 + gen.bounded(3)});
+        return scratch_sample_.size();
+    }
+
+    if(k <= ErrorSize / 2){
+        while(scratch_sample_.size() < k){
+            size_t newpos = gen.bounded(ErrorSize);
+            if(!collision_bitmap_[newpos]){
+                collision_bitmap_[newpos] = 1;
+                scratch_sample_.push_back(singlePauli{newpos, 1 + gen.bounded(3)});
+            }
+        }
+        for(std::size_t i = 0; i < scratch_sample_.size(); ++i)
+            collision_bitmap_[scratch_sample_[i].qindex] = 0;
+    } else {
+        std::memset(collision_bitmap_.data(), 1, ErrorSize);
+        size_t remaining = ErrorSize;
+        while(remaining > k){
+            size_t pos = gen.bounded(ErrorSize);
+            if(collision_bitmap_[pos]){
+                collision_bitmap_[pos] = 0;
+                --remaining;
+            }
+        }
+        for(size_t i = 0; i < ErrorSize; ++i){
+            if(collision_bitmap_[i])
+                scratch_sample_.push_back(singlePauli{i, 1 + gen.bounded(3)});
+        }
+        std::memset(collision_bitmap_.data(), 0, ErrorSize);
+    }
+
     return scratch_sample_.size();
 }
 
@@ -308,7 +384,9 @@ void sampler::generate_many_output_samples_with_noise_vector(const QEPG::QEPG& g
 }
 
 
-/// Helper: unpack result_buf (uint64_t words) into numpy byte buffers
+/// Helper: unpack result_buf (uint64_t words) into numpy byte buffers.
+/// Extracts individual bits into uint8 bytes (0 or 1).
+/// Uses 8-bit-at-a-time extraction for ~8x fewer loop iterations.
 static inline void unpack_result_to_numpy(
     const std::uint64_t* result_buf,
     std::uint8_t* det_dst,
@@ -316,25 +394,34 @@ static inline void unpack_result_to_numpy(
     std::size_t n_det,
     std::size_t n_words) noexcept
 {
-    constexpr std::size_t WORD_BITS = 64;
-    const std::size_t full_words = n_det / WORD_BITS;
+    // Unpack 8 bits at a time from each byte of each word
+    std::size_t bit_idx = 0;
+    const std::size_t full_bytes = n_det / 8;
+    const auto* byte_ptr = reinterpret_cast<const std::uint8_t*>(result_buf);
 
-    for(std::size_t b = 0; b < full_words; ++b){
-        std::uint64_t word = result_buf[b];
-        for(std::size_t k = 0; k < WORD_BITS; ++k, word >>= 1)
-            det_dst[b * WORD_BITS + k] = static_cast<std::uint8_t>(word & 1);
+    for (std::size_t b = 0; b < full_bytes; ++b) {
+        std::uint8_t byte = byte_ptr[b];
+        det_dst[bit_idx + 0] = (byte     ) & 1;
+        det_dst[bit_idx + 1] = (byte >> 1) & 1;
+        det_dst[bit_idx + 2] = (byte >> 2) & 1;
+        det_dst[bit_idx + 3] = (byte >> 3) & 1;
+        det_dst[bit_idx + 4] = (byte >> 4) & 1;
+        det_dst[bit_idx + 5] = (byte >> 5) & 1;
+        det_dst[bit_idx + 6] = (byte >> 6) & 1;
+        det_dst[bit_idx + 7] = (byte >> 7) & 1;
+        bit_idx += 8;
     }
 
-    const std::size_t rem = n_det % WORD_BITS;
-    if(rem){
-        std::uint64_t word = result_buf[full_words];
-        for(std::size_t k = 0; k < rem; ++k, word >>= 1)
-            det_dst[full_words * WORD_BITS + k] = static_cast<std::uint8_t>(word & 1);
+    // Remaining bits (< 8)
+    if (bit_idx < n_det) {
+        std::uint8_t byte = byte_ptr[full_bytes];
+        for (std::size_t k = 0; bit_idx + k < n_det; ++k)
+            det_dst[bit_idx + k] = (byte >> k) & 1;
     }
 
     // Observable is the last bit (at position n_det)
     obs_dst = static_cast<std::uint8_t>(
-        (result_buf[n_det / WORD_BITS] >> (n_det % WORD_BITS)) & 1);
+        (result_buf[n_det / 64] >> (n_det % 64)) & 1);
 }
 
 
@@ -388,6 +475,9 @@ void sampler::generate_many_output_samples_Monte_to_numpy(
     const std::size_t n_noise = flat.n_rows() / 3;
     const std::size_t n_words = flat.words_per_row();
 
+    // Precompute Poisson lambda
+    const double lambda = error_prob * static_cast<double>(total_error);
+
     #pragma omp parallel
     {
         sampler local_sampler(n_err);
@@ -396,48 +486,27 @@ void sampler::generate_many_output_samples_Monte_to_numpy(
 
         #pragma omp for schedule(static)
         for (long long i = 0; i < static_cast<long long>(samplenumber); ++i) {
-            std::size_t n = local_sampler.generate_sample_Monte(error_prob, total_error, rng);
-
             simd::zero_words(result_buf, n_words);
-            local_sampler.calculate_parity_output_flat(
-                flat, n_noise, local_sampler.scratch_data(), n, result_buf);
+
+            // Fused sample + XOR: sample k ~ Poisson(lambda), generate k
+            // error locations, and XOR each row directly into result_buf.
+            const std::size_t k = sample_poisson(rng, lambda);
+
+            if (k > 0 && k < total_error) {
+                local_sampler.generate_and_xor_sparse(
+                    flat, n_noise, total_error, k, rng, result_buf);
+            } else if (k >= total_error) {
+                for (std::size_t pos = 0; pos < total_error; ++pos) {
+                    std::size_t type = 1 + rng.bounded(3);
+                    flat.xor_row_into(pos + (type - 1) * n_noise, result_buf);
+                }
+            }
 
             unpack_result_to_numpy(result_buf,
                 det_buf + i * n_det, obs_buf[i], n_det, n_words);
         }
 
         simd::aligned_free(result_buf);
-    }
-}
-
-
-/// Convert uint64 to uniform double in [0, 1) with 53-bit precision.
-static inline double to_double_01(std::uint64_t v) noexcept {
-    return (v >> 11) * (1.0 / (std::uint64_t{1} << 53));
-}
-
-/// Sample from Poisson(lambda) using Knuth's algorithm for small lambda,
-/// normal approximation for large lambda.
-static inline std::size_t sample_poisson(Xoshiro256pp& rng, double lambda) noexcept {
-    if (lambda < 30.0) {
-        // Knuth's algorithm: exact for small lambda, O(lambda) per sample
-        double L = std::exp(-lambda);
-        std::size_t k = 0;
-        double p = 1.0;
-        do {
-            ++k;
-            p *= to_double_01(rng());
-        } while (p > L);
-        return k - 1;
-    } else {
-        // Normal approximation: N(lambda, sqrt(lambda)) via Box-Muller
-        double u1 = to_double_01(rng());
-        double u2 = to_double_01(rng());
-        if (u1 < 1e-300) u1 = 1e-300;  // avoid log(0)
-        constexpr double two_pi = 2.0 * std::numbers::pi;
-        double z = std::sqrt(-2.0 * std::log(u1)) * std::cos(two_pi * u2);
-        double x = lambda + std::sqrt(lambda) * z;
-        return x > 0.0 ? static_cast<std::size_t>(x + 0.5) : 0;
     }
 }
 
@@ -456,19 +525,15 @@ void sampler::generate_many_output_samples_nonuniform_to_numpy(
     const std::size_t n_noise_flat = flat.n_rows() / 3;
     const std::size_t n_words = flat.words_per_row();
 
-    // Pre-compute per-source total probability and CDF for sparse sampling.
-    // cdf[i+1] = sum of p_total for sources 0..i.
+    // Pre-compute per-source total probability
     std::vector<double> ptotal(num_noise);
-    std::vector<double> cdf(num_noise + 1, 0.0);
+    double P_all = 0.0;
     for (std::size_t i = 0; i < num_noise; ++i) {
         ptotal[i] = noise_probs[3 * i] + noise_probs[3 * i + 1] + noise_probs[3 * i + 2];
-        cdf[i + 1] = cdf[i] + ptotal[i];
+        P_all += ptotal[i];
     }
-    double P_all = cdf[num_noise];
 
-    // Pre-compute conditional Pauli type thresholds for each source.
-    // cond_x[i] = px / ptotal  (fraction that is X)
-    // cond_xy[i] = (px + py) / ptotal  (fraction that is X or Y)
+    // Pre-compute conditional Pauli type thresholds
     std::vector<double> cond_x(num_noise, 0.0);
     std::vector<double> cond_xy(num_noise, 0.0);
     for (std::size_t i = 0; i < num_noise; ++i) {
@@ -478,18 +543,55 @@ void sampler::generate_many_output_samples_nonuniform_to_numpy(
         }
     }
 
-    // Use sparse (Poisson + CDF) when the max per-source probability is small.
-    // The Poisson approximation has error O(p_i^2) per source, so at p > 0.01
-    // the bias becomes noticeable. Also require P_all < 6% of N to avoid
-    // excessive CDF lookups.
+    // Decide sparse vs dense
     double p_max = 0.0;
-    for (std::size_t i = 0; i < num_noise; ++i) {
+    for (std::size_t i = 0; i < num_noise; ++i)
         if (ptotal[i] > p_max) p_max = ptotal[i];
-    }
-    // Sparse path (Poisson+CDF) is faster when few errors fire per shot.
-    // Threshold: p_max < 1% ensures CDF binary search has few lookups,
-    // and P_all < 6% of num_noise ensures expected error count is small.
     const bool use_sparse = (p_max < 0.01) && (P_all < 0.06 * num_noise);
+
+    // --- ALIAS TABLE for O(1) source selection (sparse path) ---
+    // Vose's alias method: sample from weighted distribution in O(1) per draw
+    // after O(N) preprocessing.
+    std::vector<double> alias_prob;   // acceptance probability per bin
+    std::vector<std::size_t> alias_idx; // alias redirect per bin
+    if (use_sparse && num_noise > 0) {
+        alias_prob.resize(num_noise);
+        alias_idx.resize(num_noise);
+        // Normalized probabilities: q[i] = ptotal[i] / P_all * N
+        std::vector<double> q(num_noise);
+        for (std::size_t i = 0; i < num_noise; ++i)
+            q[i] = ptotal[i] * static_cast<double>(num_noise) / P_all;
+
+        // Small and large worklists
+        std::vector<std::size_t> small_wl, large_wl;
+        small_wl.reserve(num_noise);
+        large_wl.reserve(num_noise);
+        for (std::size_t i = 0; i < num_noise; ++i) {
+            if (q[i] < 1.0) small_wl.push_back(i);
+            else             large_wl.push_back(i);
+        }
+
+        while (!small_wl.empty() && !large_wl.empty()) {
+            std::size_t s = small_wl.back(); small_wl.pop_back();
+            std::size_t l = large_wl.back(); large_wl.pop_back();
+            alias_prob[s] = q[s];
+            alias_idx[s]  = l;
+            q[l] = q[l] + q[s] - 1.0;
+            if (q[l] < 1.0) small_wl.push_back(l);
+            else             large_wl.push_back(l);
+        }
+        // Remaining items get probability 1.0
+        while (!large_wl.empty()) {
+            alias_prob[large_wl.back()] = 1.0;
+            alias_idx[large_wl.back()] = large_wl.back();
+            large_wl.pop_back();
+        }
+        while (!small_wl.empty()) {
+            alias_prob[small_wl.back()] = 1.0;
+            alias_idx[small_wl.back()] = small_wl.back();
+            small_wl.pop_back();
+        }
+    }
 
     // Dense path: precompute uint32 thresholds
     std::vector<std::uint32_t> thresh;
@@ -525,28 +627,22 @@ void sampler::generate_many_output_samples_nonuniform_to_numpy(
             simd::zero_words(result_buf, n_words);
 
             if (use_sparse) {
-                // --- SPARSE PATH: Poisson + CDF binary search ---
-                // Note: Two errors can land on the same source, causing double-XOR
-                // cancellation. This creates O(p^2) bias per source, which is
-                // negligible in the sparse regime (p_max < 0.01).
+                // --- SPARSE PATH: Poisson + Alias table O(1) source selection ---
                 std::size_t num_errors = sample_poisson(rng, P_all);
 
                 for (std::size_t e = 0; e < num_errors; ++e) {
-                    // Which source? Binary search in CDF.
-                    double u = to_double_01(rng()) * P_all;
-                    auto it = std::upper_bound(cdf.begin(), cdf.end(), u);
-                    std::size_t src = static_cast<std::size_t>(it - cdf.begin());
-                    if (src > 0) --src;
-                    if (src >= num_noise) src = num_noise - 1;
+                    // O(1) alias method: pick bin uniformly, coin flip
+                    std::size_t bin = rng.bounded(num_noise);
+                    double u = to_double_01(rng());
+                    std::size_t src = (u < alias_prob[bin]) ? bin : alias_idx[bin];
 
                     // Which Pauli type? Conditional probability within this source.
                     double r = to_double_01(rng());
                     std::size_t type;
-                    if (r < cond_x[src])       type = 1;  // X
-                    else if (r < cond_xy[src]) type = 2;  // Y
-                    else                       type = 3;  // Z
+                    if (r < cond_x[src])       type = 1;
+                    else if (r < cond_xy[src]) type = 2;
+                    else                       type = 3;
 
-                    // XOR propagation row directly into result (GF(2))
                     std::size_t row_idx = src + (type - 1) * n_noise_flat;
                     flat.xor_row_into(row_idx, result_buf);
                 }

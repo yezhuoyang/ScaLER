@@ -22,6 +22,7 @@ __all__: list[str] = [
     "return_samples_many_weights_separate_obs_with_QEPG",
     "return_samples_numpy",
     "return_samples_with_fixed_QEPG",
+    "return_samples_with_fixed_QEPG_numpy",
     "return_samples_with_noise_vector",
 ]
 
@@ -130,6 +131,14 @@ def return_samples_with_fixed_QEPG(
 ) -> list[list[bool]]:
     """
     Function that returns samples based on a QEPG
+    """
+
+def return_samples_with_fixed_QEPG_numpy(
+    graph: QEPGGraph, weight: typing.SupportsInt, shots: typing.SupportsInt
+) -> tuple[numpy.ndarray[bool], numpy.ndarray[bool]]:
+    """
+    Generate fixed-weight samples with separate NumPy detector/observable outputs.
+    Returns (detector_outcomes, observable_outcomes).
     """
 
 def return_samples_with_noise_vector(

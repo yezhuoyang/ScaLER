@@ -535,6 +535,48 @@ protocol Distill15to1_T(surface f, int d):
       return
 ```
 
+## Performance: QEPG Sampling vs Stim
+---
+
+ScaLERQEC's C++ QEPG (Quantum Error Propagation Graph) backend provides **significantly faster detector sampling** than Stim's built-in detector sampler. The QEPG compiles the circuit into a sparse error-propagation graph once, then generates detector and observable outcomes by traversing only the active graph edges — avoiding full tableau simulation on every shot.
+
+Two QEPG sampling modes are available:
+
+- **QEPG Monte Carlo**: Sparse Poisson error injection (same semantics as Stim's detector sampler). Uses O(k) sparse sampling where k ~ Np is the expected number of faults, instead of iterating over all N noise locations.
+- **QEPG Fixed-Weight**: Injects exactly *w* faults per shot (used by ScaLER stratified estimation). Cost is O(weight) per sample via Floyd's algorithm.
+
+Both modes use a fused sampling pipeline that writes directly into NumPy buffers with zero intermediate allocation, SIMD-accelerated XOR accumulation, and OpenMP parallelism.
+
+**Single-threaded comparison (OMP_NUM_THREADS=1, 100K shots, p=0.001)**
+
+Stim's detector sampler is single-threaded with excellent SIMD optimization. For a fair apples-to-apples comparison, we benchmark with OpenMP disabled:
+
+| Code | Stim (M/s) | QEPG MC (M/s) | MC Speedup | QEPG FW (M/s) | FW Speedup |
+|------|----------:|---------------:|-----------:|---------------:|-----------:|
+| d=3  | 6.84      | 20.8           | **3x**     | 27.5           | **4x**     |
+| d=5  | 0.83      | 7.3            | **9x**     | 8.2            | **10x**    |
+| d=7  | 0.30      | 2.5            | **8x**     | 3.0            | **10x**    |
+| d=9  | 0.22      | 0.9            | **4x**     | 1.2            | **6x**     |
+| d=11 | 0.08      | 0.3            | **4x**     | 0.6            | **7x**     |
+
+The single-threaded advantage comes from the algorithmic difference: QEPG Monte Carlo costs O(k) per sample (k ~ Np expected faults), and QEPG Fixed-Weight costs O(w), while Stim simulates the full circuit at O(circuit_size).
+
+**Multi-threaded comparison (32 cores, 100K shots, p=0.001)**
+
+With OpenMP enabled, QEPG parallelizes across shots:
+
+| Code | Stim (M/s) | QEPG MC (M/s) | MC Speedup | QEPG FW (M/s) | FW Speedup |
+|------|----------:|---------------:|-----------:|---------------:|-----------:|
+| d=3  | 7.29      | 79.9           | **11x**    | 47.3           | **6x**     |
+| d=5  | 0.95      | 36.2           | **38x**    | 22.8           | **24x**    |
+| d=7  | 0.36      | 13.4           | **37x**    | 14.9           | **41x**    |
+| d=9  | 0.22      | 5.9            | **27x**    | 6.0            | **28x**    |
+| d=11 | 0.08      | 2.0            | **26x**    | 3.3            | **43x**    |
+
+![Sampling throughput comparison](Figures/benchmark_sampling_speed.png)
+
+*Decoding (pymatching) excluded to isolate sampling performance. Reproduce with `python benchmark_sampling_speed.py`. Note: Stim's detector sampler is single-threaded with SIMD; QEPG uses OpenMP for multi-threaded results.*
+
 ## How ScaLER works
 ---
 
