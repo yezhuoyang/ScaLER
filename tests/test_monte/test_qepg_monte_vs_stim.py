@@ -136,17 +136,17 @@ class TestQEPGMonteVsStim:
         with open(filepath, "r", encoding="utf-8") as f:
             stim_str = f.read()
 
-        # Compile circuit
+        # Compile circuit (noiseless) and inject noise separately
+        from scalerqec.QEC.noisemodel import SIDNoiseModel
         circuit = CliffordCircuit(2)
-        circuit.error_rate = error_rate
         circuit.compile_from_stim_circuit_str(stim_str)
-        new_stim_circuit = circuit.stimcircuit
+        noisy_stim = SIDNoiseModel(error_rate).inject_noise(circuit.stimcircuit)
 
         # Compile QEPG graph
         qepg_graph = compile_QEPG(stim_str)
 
         # Setup decoder (same for both methods)
-        detector_error_model = new_stim_circuit.detector_error_model(decompose_errors=True)
+        detector_error_model = noisy_stim.detector_error_model(decompose_errors=True)
         matcher = pymatching.Matching.from_detector_error_model(detector_error_model)
 
         # Step 1: QEPG Monte Carlo
@@ -173,7 +173,7 @@ class TestQEPGMonteVsStim:
         print(f"\n[Step 2/3] Running STIM Monte Carlo sampling...")
         print(f"  Sample size: {sample_size:,}")
 
-        sampler = new_stim_circuit.compile_detector_sampler()
+        sampler = noisy_stim.compile_detector_sampler()
         detection_stim, observable_stim = sampler.sample(
             sample_size, separate_observables=True
         )

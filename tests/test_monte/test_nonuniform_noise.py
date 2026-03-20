@@ -146,7 +146,6 @@ class TestNonuniformSampling:
         """Helper: normalize, compile, and build QEPG."""
         normalized = rewrite_stim_code(circuit_str)
         circuit = CliffordCircuit(2)
-        circuit.error_rate = 0.001
         circuit.compile_from_stim_circuit_str(normalized)
         graph = QEPGpython(circuit)
         graph.backword_graph_construction()

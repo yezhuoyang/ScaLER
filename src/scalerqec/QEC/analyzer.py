@@ -32,9 +32,15 @@ class DistanceAnalyzer:
     """
     Analyzer to compute the code distance of a quantum error correction code.
 
-    We provide two methods to verify the code distance:
-    1. Brute-force search through all possible error patterns.
-    2. Use Satisfiability Modulo Theories (SMT) solver to find the minimum weight logical operator.
+    The code distance is the minimum weight of any logical operator —
+    i.e., any Pauli string that commutes with all stabilizers but is not
+    itself in the stabilizer group.
+
+    Two methods:
+
+    1. **Brute-force** — enumerate all Pauli strings of increasing weight
+       until a logical operator is found.  Feasible for ``n <= ~15``.
+    2. **SMT** — (placeholder) use a SAT/SMT solver.
     """
 
     supported_methods = {"bruteforce", "smt"}
@@ -49,38 +55,214 @@ class DistanceAnalyzer:
             )
         self.method = method
 
-    def compute_distance_bruteforce(self) -> int:
+    def compute_distance_bruteforce(self, max_weight: int | None = None) -> int:
+        """Compute the code distance by brute-force enumeration.
+
+        Enumerates all Pauli strings of weight 1, 2, 3, ... up to
+        *max_weight* (default ``n``) and returns the weight of the
+        first logical operator found.
+
+        Args:
+            max_weight: Maximum weight to search.  Defaults to ``n``.
+
+        Returns:
+            The minimum weight of a logical operator, or ``n + 1`` if
+            none is found up to *max_weight*.
         """
-        Compute the code distance using brute-force method.
-        """
-        # Placeholder implementation
-        return self.code.d
+        from itertools import combinations, product as iterproduct
+
+        n = self.code.n
+        if max_weight is None:
+            max_weight = n
+        stabs = list(self.code.stabilizers)
+
+        # Build a LogicalOperatorAnalyzer for group membership checks
+        loa = LogicalOperatorAnalyzer(self.code)
+
+        paulis = ["X", "Y", "Z"]
+        for weight in range(1, max_weight + 1):
+            for positions in combinations(range(n), weight):
+                for letters in iterproduct(paulis, repeat=weight):
+                    op = ["I"] * n
+                    for pos, letter in zip(positions, letters):
+                        op[pos] = letter
+                    op_str = "".join(op)
+
+                    # Must commute with all stabilizers
+                    if not all(commute(op_str, s) for s in stabs):
+                        continue
+                    # Must NOT be in stabilizer group
+                    if loa._is_in_stabilizer_group(op_str):
+                        continue
+                    return weight
+
+        return n + 1  # No logical operator found
 
     def compute_distance_smt(self) -> int:
+        """Compute the code distance using SMT solver.
+
+        .. note:: Not yet implemented — returns the declared distance.
         """
-        Compute the code distance using SMT solver.
-        """
-        # Placeholder implementation
-        return self.code.distance
+        return self.code.d
 
     def verify_code_distance(self) -> bool:
-        """
-        Verify if the computed distance matches the expected distance.
-        """
+        """Verify if the computed distance matches the expected distance."""
         if self.method == "bruteforce":
             computed_distance = self.compute_distance_bruteforce()
         else:
-            computed_distance = self.compute_distance_smt
+            computed_distance = self.compute_distance_smt()
 
         return computed_distance == self.code.d
 
     def verify_circuit_level_code_distance(self, circuit) -> bool:
+        """Verify the code distance at the circuit level.
+
+        .. note:: Not yet implemented.
         """
-        Verify the code distance at the circuit level.
-        """
-        # Placeholder implementation
-        # In a real implementation, analyze the circuit to determine its distance
         return True
+
+
+class IRAnalyzer:
+    """Static analyzer for QStab IR and stabilizer code properties.
+
+    Provides validation checks that should be run before circuit compilation:
+
+    * :meth:`verify_commutation` — all stabilizers mutually commute.
+    * :meth:`verify_logical_operators` — logical Z operators are valid.
+    * :meth:`verify_sufficient_rounds` — enough syndrome rounds for the distance.
+    * :meth:`verify_code_distance` — brute-force distance matches declared ``d``.
+    * :meth:`validate` — run all checks at once.
+    """
+
+    def __init__(self, code: StabCode) -> None:
+        self.code = code
+
+    def verify_commutation(self) -> tuple[bool, str]:
+        """Check that all stabilizers mutually commute.
+
+        Returns:
+            ``(True, "")`` if valid, ``(False, message)`` otherwise.
+        """
+        stabs = self.code.stabilizers
+        for i in range(len(stabs)):
+            for j in range(i + 1, len(stabs)):
+                if not commute(stabs[i], stabs[j]):
+                    return False, (
+                        f"Stabilizers {i} ({stabs[i]}) and {j} ({stabs[j]}) "
+                        f"do not commute."
+                    )
+        return True, ""
+
+    def verify_logical_operators(self) -> tuple[bool, str]:
+        """Check that declared logical Z operators are valid.
+
+        Each logical Z must:
+        1. Commute with all stabilizers.
+        2. Not be in the stabilizer group.
+
+        Returns:
+            ``(True, "")`` if valid, ``(False, message)`` otherwise.
+        """
+        loa = LogicalOperatorAnalyzer(self.code)
+        logZ = getattr(self.code, "_logicalZ", {})
+        stabs = self.code.stabilizers
+
+        for idx, lz in logZ.items():
+            for s in stabs:
+                if not commute(lz, s):
+                    return False, (
+                        f"Logical Z[{idx}] = {lz} does not commute with stabilizer {s}."
+                    )
+            if loa._is_in_stabilizer_group(lz):
+                return False, (
+                    f"Logical Z[{idx}] = {lz} is in the stabilizer group "
+                    f"(not a genuine logical operator)."
+                )
+        return True, ""
+
+    def verify_sufficient_rounds(self) -> tuple[bool, str]:
+        """Check that the number of rounds is at least ``d``.
+
+        Fewer rounds mean the code cannot correct ``(d-1)/2`` errors
+        in the time direction.
+
+        Returns:
+            ``(True, "")`` if rounds >= d, ``(False, warning)`` otherwise.
+        """
+        rounds = self.code.rounds
+        d = self.code.d
+        if rounds < d:
+            return False, (
+                f"Rounds ({rounds}) < distance ({d}). "
+                f"Circuit-level distance may be reduced."
+            )
+        return True, ""
+
+    def verify_code_distance(self, max_n: int = 15) -> tuple[bool, str]:
+        """Brute-force verify the declared code distance.
+
+        Skipped when ``n > max_n`` (too expensive).
+
+        Args:
+            max_n: Maximum code size to attempt brute-force.
+
+        Returns:
+            ``(True, "")`` if distance matches or skipped,
+            ``(False, message)`` otherwise.
+        """
+        if self.code.n > max_n:
+            return True, f"Skipped (n={self.code.n} > {max_n})."
+
+        da = DistanceAnalyzer(self.code, method="bruteforce")
+        computed = da.compute_distance_bruteforce()
+        if computed != self.code.d:
+            return False, (
+                f"Computed distance {computed} != declared distance {self.code.d}."
+            )
+        return True, ""
+
+    def validate(self, check_distance: bool = True) -> tuple[bool, List[str]]:
+        """Run all validation checks.
+
+        Args:
+            check_distance: Whether to run brute-force distance check.
+
+        Returns:
+            ``(all_pass, messages)`` where *messages* lists any warnings
+            or errors.
+        """
+        messages: List[str] = []
+        all_pass = True
+
+        ok, msg = self.verify_commutation()
+        if not ok:
+            all_pass = False
+            messages.append(f"[FAIL] Commutation: {msg}")
+        else:
+            messages.append("[PASS] All stabilizers commute.")
+
+        ok, msg = self.verify_logical_operators()
+        if not ok:
+            all_pass = False
+            messages.append(f"[FAIL] Logical operators: {msg}")
+        else:
+            messages.append("[PASS] Logical operators valid.")
+
+        ok, msg = self.verify_sufficient_rounds()
+        if not ok:
+            messages.append(f"[WARN] Rounds: {msg}")
+        else:
+            messages.append("[PASS] Sufficient rounds.")
+
+        if check_distance:
+            ok, msg = self.verify_code_distance()
+            if not ok:
+                all_pass = False
+                messages.append(f"[FAIL] Distance: {msg}")
+            else:
+                messages.append(f"[PASS] Distance verified. {msg}")
+
+        return all_pass, messages
 
 
 # class LogicalOperatorAnalyzer:

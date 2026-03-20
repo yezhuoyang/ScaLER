@@ -236,7 +236,6 @@ class SymbolicLERcalc:
         with open(filepath, "r", encoding="utf-8") as f:
             stim_str = f.read()
 
-        self._cliffordcircuit.error_rate = self._error_rate
         self._cliffordcircuit.compile_from_stim_circuit_str(stim_str)
         self._num_noise = self._cliffordcircuit.totalnoise
         self._num_detector = len(self._cliffordcircuit.parityMatchGroup)
@@ -256,9 +255,13 @@ class SymbolicLERcalc:
         This table is later used by :meth:`calc_error_row_indices` to
         determine which outcomes lead to logical errors.
         """
-        # Configure a decoder using the circuit.
-        stimcircuit = self._cliffordcircuit.stimcircuit
-        detector_error_model = stimcircuit.detector_error_model(decompose_errors=False)
+        # Configure a decoder using the noisy circuit.
+        from ..QEC.noisemodel import SIDNoiseModel
+
+        noisy_stim = SIDNoiseModel(self._error_rate).inject_noise(
+            self._cliffordcircuit.stimcircuit
+        )
+        detector_error_model = noisy_stim.detector_error_model(decompose_errors=False)
         matcher = pymatching.Matching.from_detector_error_model(detector_error_model)
 
         all_inputs = []

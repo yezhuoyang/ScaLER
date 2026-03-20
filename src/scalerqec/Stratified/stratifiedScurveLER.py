@@ -306,17 +306,21 @@ class StratifiedScurveLERcalc:
         with open(filepath, "r", encoding="utf-8") as f:
             stim_str = f.read()
 
-        self._cliffordcircuit.error_rate = self._error_rate
         self._cliffordcircuit.compile_from_stim_circuit_str(stim_str)
         self._num_noise = self._cliffordcircuit.totalnoise
         self._num_detector = len(self._cliffordcircuit.parityMatchGroup)
         self._stim_str_after_rewrite = stim_str
 
-        # Configure a decoder using the circuit.
-        self._detector_error_model = (
-            self._cliffordcircuit.stimcircuit.detector_error_model(
-                decompose_errors=True
-            )
+        # Inject noise for decoder (DEM needs noisy circuit)
+        from ..QEC.noisemodel import SIDNoiseModel
+
+        noisy_stim = SIDNoiseModel(self._error_rate).inject_noise(
+            self._cliffordcircuit.stimcircuit
+        )
+
+        # Configure a decoder using the noisy circuit.
+        self._detector_error_model = noisy_stim.detector_error_model(
+            decompose_errors=True
         )
         self._matcher = pymatching.Matching.from_detector_error_model(
             self._detector_error_model
@@ -1805,7 +1809,12 @@ class StratifiedScurveLERcalc:
         self._matcher = pymatching.Matching.from_detector_error_model(
             self._detector_error_model
         )
-        self._QEPG_graph = compile_QEPG(str(noisy_circuit.stimcircuit))
+        from scalerqec.Clifford.stimparser import rewrite_stim_code
+
+        # C++ QEPG parser requires normalized one-op-per-line format
+        self._QEPG_graph = compile_QEPG(
+            rewrite_stim_code(str(noisy_circuit.stimcircuit), keep_noise=True)
+        )
 
         for i in range(repeat):
             self.clear_all()

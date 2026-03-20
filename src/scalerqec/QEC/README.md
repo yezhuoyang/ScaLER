@@ -500,6 +500,167 @@ The resulting STIM-style circuit contains:
 
 ---
 
+# Noise Model
+
+ScaLERQEC provides three approaches for adding circuit-level noise to a QEC circuit. All three produce a noisy `stim.Circuit` with identical detector error models, so the estimated logical error rate (LER) is the same regardless of which approach is used.
+
+## Available Noise Models
+
+| Class | Description | Noise channels |
+|-------|-------------|----------------|
+| `SIDNoiseModel(p)` | Single-qubit Independent Depolarizing | `DEPOLARIZE1(p)` before every operation |
+| `SD6NoiseModel(p)` | Standard Depolarizing (6 locations) | `DEPOLARIZE1(p)` after 1Q gates, `DEPOLARIZE2(p)` after 2Q gates, `X_ERROR(p)` after reset / before measurement |
+| `SI1000NoiseModel(p)` | Superconducting-Inspired | Per-operation rates: reset `p`, measurement `5p`, 1Q gate `p/10`, 2Q gate `p`, idle `p/10` |
+| `NoiseModel(p)` | Base class (same as SD6) | Configurable per-gate-type enable/disable via `disable_error()` |
+
+All noise models are in `scalerqec.QEC.noisemodel`.
+
+---
+
+## Approach 1 -- Parse a Noisy STIM Circuit
+
+Use this when you already have a noisy STIM circuit (e.g. from `stim.Circuit.generated(...)`, a hand-written circuit, or an external tool).
+
+```python
+from scalerqec.Clifford.clifford import CliffordCircuit
+
+# A noisy STIM circuit string (noise instructions already present)
+noisy_stim_str = """
+R 0 1
+X_ERROR(0.001) 0 1
+TICK
+CX 0 2 1 2
+DEPOLARIZE2(0.001) 0 2 1 2
+TICK
+X_ERROR(0.001) 2
+M 2
+DETECTOR rec[-1]
+OBSERVABLE_INCLUDE(0) rec[-1]
+"""
+
+circuit = CliffordCircuit(2)
+circuit.compile_from_noisy_stim_circuit_str(noisy_stim_str)
+
+# circuit.stimcircuit  -- the noisy stim.Circuit (preserved as-is)
+# circuit.gatelists    -- gate list with noise locations for QEPG
+# circuit.totalnoise   -- number of noise locations for weight-stratified sampling
+```
+
+The method `compile_from_noisy_stim_circuit_str` parses the noisy circuit directly: the `stim.Circuit` retains all noise instructions, while the internal gate list registers noise locations for the Quantum Error Propagation Graph (QEPG).
+
+---
+
+## Approach 2 -- Noiseless Compile + Inject Noise
+
+Use this when you have a noiseless STIM circuit (e.g. from a file) and want to apply a noise model programmatically. This is the standard approach for the ScaLER weight-stratified sampling pipeline.
+
+```python
+from scalerqec.Clifford.clifford import CliffordCircuit
+from scalerqec.Clifford.stimparser import rewrite_stim_code
+from scalerqec.QEC.noisemodel import SD6NoiseModel
+
+# Load and normalize a noiseless STIM circuit
+with open("path/to/circuit.stim") as f:
+    stim_str = rewrite_stim_code(f.read())
+
+# Step 1: compile noiseless circuit (builds QEPG gate list)
+circuit = CliffordCircuit(2)
+circuit.compile_from_stim_circuit_str(stim_str)
+
+# Step 2: inject noise into a separate stim.Circuit
+noise_model = SD6NoiseModel(p=0.001)
+noisy_stim = noise_model.inject_noise(circuit.stimcircuit)
+
+# Use noisy_stim for sampling / DEM
+dem = noisy_stim.detector_error_model(decompose_errors=True)
+```
+
+The two-pass separation keeps the QEPG gate list (for weight-stratified sampling) independent of the noise model. You can swap noise models without recompiling the circuit.
+
+---
+
+## Approach 3 -- QStab IR Compilation with Noise Model
+
+Use this when defining a code from stabilizer generators. This is the highest-level API and simplifies the user's workflow the most: define the code, attach a noise model, and call `construct_circuit()`.
+
+```python
+from scalerqec.QEC.surface import SurfaceCode
+from scalerqec.QEC.noisemodel import SI1000NoiseModel
+
+# Define a rotated surface code
+code = SurfaceCode(distance=5, rounds=5)
+code.scheme = "Standard"
+code.noisemodel = SI1000NoiseModel(p=0.001)
+code.construct_circuit()
+
+# code.stimcirc  -- noisy stim.Circuit with TICK-separated layers
+# code.circuit   -- CliffordCircuit with QEPG noise locations
+```
+
+The pipeline:
+
+1. Translates stabilizers into QStab IR (stabilizer propagation, detectors, observables).
+2. Compiles the IR into a noiseless `stim.Circuit` with proper TICK placement between reset, gate, and measurement layers.
+3. Injects noise via the attached `NoiseModel`.
+4. Rebuilds the `CliffordCircuit` from the noisy circuit so the QEPG gate list reflects the actual noise locations.
+
+This approach works with any `StabCode` subclass (`SurfaceCode`, `RepetitionCode`, or a custom code with explicit stabilizers):
+
+```python
+from scalerqec.QEC.qeccircuit import StabCode
+from scalerqec.QEC.noisemodel import SIDNoiseModel
+
+code = StabCode(n=5, k=1, d=3)
+code.add_stab("XZZXI")
+code.add_stab("IXZZX")
+code.add_stab("XIXZZ")
+code.add_stab("ZXIXZ")
+code.set_logical_Z(0, "ZZZZZ")
+code.scheme = "Standard"
+code.rounds = 9
+code.noisemodel = SIDNoiseModel(p=0.001)
+code.construct_circuit()
+
+print(code.stimcirc)
+```
+
+---
+
+## Estimating Logical Error Rate
+
+After obtaining a noisy circuit from any approach, use the Monte Carlo interface to estimate LER:
+
+```python
+from scalerqec.Monte.monteLER import MonteLERcalc
+
+calc = MonteLERcalc(time_budget=60, samplebudget=100000)
+
+# From a noisy stim circuit string (works with any noise model)
+ler = calc.calculate_LER_from_stim_circuit(str(noisy_stim))
+
+# From a noiseless stim file (injects SID noise internally)
+ler = calc.calculate_LER_from_file(
+    samplebudget=100000, filepath="circuit.stim", pvalue=0.001
+)
+```
+
+---
+
+## Disabling Specific Error Channels
+
+The base `NoiseModel` and `SD6NoiseModel` support selectively disabling noise on specific gate types:
+
+```python
+from scalerqec.QEC.noisemodel import NoiseModel
+
+model = NoiseModel(error_rate=0.001)
+model.disable_error("MEASUREMENT")  # no X_ERROR before measurements
+model.disable_error("RESET")        # no X_ERROR after resets
+# Supported: "MEASUREMENT", "RESET", "CNOT", "CZ", "H", "P", "X", "Y", "Z"
+```
+
+---
+
 ## Summary of Layers
 
 | Layer           | Main Abstraction                  | User-Facing Syntax                                                                                | Example Section                               |

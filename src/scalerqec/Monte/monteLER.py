@@ -29,7 +29,7 @@ from contextlib import redirect_stdout
 import numpy as np
 
 from ..qepg import compile_QEPG, return_samples_Monte_separate_obs_with_QEPG, QEPGGraph
-from ..QEC.noisemodel import NoiseModel
+from ..QEC.noisemodel import NoiseModel, SIDNoiseModel
 from ..QEC.qeccircuit import StabCode
 from .noise_model_parser import extract_noise_model, NonuniformNoiseModel
 
@@ -202,7 +202,8 @@ class MonteLERcalc:
 
         noisy_circuit = noise_model.reconstruct_clifford_circuit(qeccirc.circuit)
         stim_circuit = noisy_circuit.stimcircuit
-        self._QEPG = compile_QEPG(str(stim_circuit))
+        # C++ QEPG parser requires normalized one-op-per-line format
+        self._QEPG = compile_QEPG(rewrite_stim_code(str(stim_circuit), keep_noise=True))
 
         detector_error_model = stim_circuit.detector_error_model(decompose_errors=False)
         matcher = pymatching.Matching.from_detector_error_model(detector_error_model)
@@ -322,7 +323,6 @@ class MonteLERcalc:
         # The error_rate here is a placeholder — it populates DEPOLARIZE1 in the
         # compiled circuit structure, but actual sampling uses noise_model probabilities.
         circuit = CliffordCircuit(2)
-        circuit.error_rate = 0.001
         circuit.compile_from_stim_circuit_str(normalized)
 
         graph = QEPGpython(circuit)
@@ -468,7 +468,6 @@ class MonteLERcalc:
             and ``_QEPG`` on the instance. Prints statistics to stdout.
         """
         circuit = CliffordCircuit(2)
-        circuit.error_rate = pvalue
         self._samplebudget = samplebudget
 
         stim_str = ""
@@ -478,11 +477,9 @@ class MonteLERcalc:
 
         stim_circuit = rewrite_stim_code(stim_str)
         circuit.compile_from_stim_circuit_str(stim_circuit)
-        new_stim_circuit = circuit.stimcircuit
+        noisy_stim = SIDNoiseModel(pvalue).inject_noise(circuit.stimcircuit)
 
-        detector_error_model = new_stim_circuit.detector_error_model(
-            decompose_errors=False
-        )
+        detector_error_model = noisy_stim.detector_error_model(decompose_errors=False)
         matcher = pymatching.Matching.from_detector_error_model(detector_error_model)
 
         Ler_list: list[float] = []
@@ -591,7 +588,6 @@ class MonteLERcalc:
             stdout.
         """
         circuit = CliffordCircuit(2)
-        circuit.error_rate = pvalue
         self._samplebudget = samplebudget
 
         stim_str = ""
@@ -600,7 +596,7 @@ class MonteLERcalc:
 
         stim_circuit = rewrite_stim_code(stim_str)
         circuit.compile_from_stim_circuit_str(stim_circuit)
-        new_stim_circuit = circuit.stimcircuit
+        noisy_stim = SIDNoiseModel(pvalue).inject_noise(circuit.stimcircuit)
 
         Ler_list: list[float] = []
         samples_list: list[float] = []
@@ -612,7 +608,7 @@ class MonteLERcalc:
             self._sample_used = 0
 
             mytask = sinter.Task(
-                circuit=new_stim_circuit,
+                circuit=noisy_stim,
                 json_metadata={
                     "p": pvalue,
                     "d": 0,
@@ -702,7 +698,6 @@ class MonteLERcalc:
             the instance. Prints statistics to stdout.
         """
         circuit = CliffordCircuit(2)
-        circuit.error_rate = pvalue
         self._samplebudget = samplebudget
 
         stim_str = ""
@@ -711,12 +706,10 @@ class MonteLERcalc:
 
         stim_circuit = rewrite_stim_code(stim_str)
         circuit.compile_from_stim_circuit_str(stim_circuit)
-        new_stim_circuit = circuit.stimcircuit
+        noisy_stim = SIDNoiseModel(pvalue).inject_noise(circuit.stimcircuit)
 
-        sampler = new_stim_circuit.compile_detector_sampler()
-        detector_error_model = new_stim_circuit.detector_error_model(
-            decompose_errors=False
-        )
+        sampler = noisy_stim.compile_detector_sampler()
+        detector_error_model = noisy_stim.detector_error_model(decompose_errors=False)
         matcher = pymatching.Matching.from_detector_error_model(detector_error_model)
 
         Ler_list: list[float] = []
@@ -815,7 +808,6 @@ class MonteLERcalc:
                 - budget_exhausted: True if stopped due to time budget
         """
         circuit = CliffordCircuit(2)
-        circuit.error_rate = pvalue
 
         stim_str = ""
         with open(filepath, "r", encoding="utf-8") as f:
@@ -823,12 +815,10 @@ class MonteLERcalc:
 
         stim_circuit = rewrite_stim_code(stim_str)
         circuit.compile_from_stim_circuit_str(stim_circuit)
-        new_stim_circuit = circuit.stimcircuit
+        noisy_stim = SIDNoiseModel(pvalue).inject_noise(circuit.stimcircuit)
 
-        sampler = new_stim_circuit.compile_detector_sampler()
-        detector_error_model = new_stim_circuit.detector_error_model(
-            decompose_errors=False
-        )
+        sampler = noisy_stim.compile_detector_sampler()
+        detector_error_model = noisy_stim.detector_error_model(decompose_errors=False)
         matcher = pymatching.Matching.from_detector_error_model(detector_error_model)
 
         start_time = time.perf_counter()
