@@ -21,14 +21,38 @@ from scalerqec.Clifford.QEPGpython import QEPGpython
 # ============================================================================
 
 
+def _inject_noise_on_qubit(
+    sim: stim.TableauSimulator,
+    qubit: int,
+    noise_index: int,
+    noise_vector: list,
+    total_noise: int,
+) -> None:
+    """Apply X/Y/Z error on *qubit* according to noise_vector[noise_index]."""
+    if noise_vector[noise_index] == 1:
+        sim.x(qubit)
+    elif noise_vector[noise_index + total_noise] == 1:
+        sim.y(qubit)
+    elif noise_vector[noise_index + 2 * total_noise] == 1:
+        sim.z(qubit)
+
+
 def transpile_stim_with_noise_vector(
     stim_string: str, noise_vector: list, total_noise: int
 ) -> list:
     """
     Run STIM simulator with specific noise injections.
 
+    Noise is injected at the same locations as the C++ QEPG parser:
+    one DEPOLARIZE1 noise site before each single-qubit gate (H, S, X,
+    Y, Z, M) and two sites (control then target) before each CX gate.
+    Reset (R) does NOT carry a noise site.
+
+    If the circuit already contains explicit DEPOLARIZE1 lines, those
+    are used instead (the implicit injection is skipped for that gate).
+
     Args:
-        stim_string: The STIM circuit string
+        stim_string: The STIM circuit string (normalized, one op per line)
         noise_vector: List of length 3*total_noise indicating which errors to inject
                      [X errors (0 to n-1), Y errors (n to 2n-1), Z errors (2n to 3n-1)]
         total_noise: Number of noise sources in the circuit
@@ -38,6 +62,10 @@ def transpile_stim_with_noise_vector(
     """
     lines = stim_string.strip().split("\n")
 
+    # Detect whether the circuit has explicit DEPOLARIZE1 lines.
+    # If so, use those as noise injection points (original behaviour).
+    has_explicit_noise = any(l.strip().startswith("DEPOLARIZE1") for l in lines)
+
     s = stim.TableauSimulator(seed=0)
     current_noise_index = 0
 
@@ -45,32 +73,86 @@ def transpile_stim_with_noise_vector(
     observable_parity = 0
 
     for line in lines:
-        if line.startswith("M"):
-            qubit_index = int(line.split(" ")[1])
+        stripped = line.strip()
+        if not stripped:
+            continue
+        keyword = stripped.split()[0].split("(")[0]
+
+        if keyword == "M":
+            qubit_index = int(stripped.split(" ")[1])
+            if not has_explicit_noise:
+                _inject_noise_on_qubit(
+                    s, qubit_index, current_noise_index, noise_vector, total_noise
+                )
+                current_noise_index += 1
             s.measure(qubit_index)
 
-        elif line.startswith("CX"):
-            parts = line.split(" ")
-            qubit_index1 = int(parts[1])
-            qubit_index2 = int(parts[2])
-            s.cnot(qubit_index1, qubit_index2)
+        elif keyword == "CX":
+            parts = stripped.split(" ")
+            q_control = int(parts[1])
+            q_target = int(parts[2])
+            if not has_explicit_noise:
+                _inject_noise_on_qubit(
+                    s, q_control, current_noise_index, noise_vector, total_noise
+                )
+                current_noise_index += 1
+                _inject_noise_on_qubit(
+                    s, q_target, current_noise_index, noise_vector, total_noise
+                )
+                current_noise_index += 1
+            s.cnot(q_control, q_target)
 
-        elif line.startswith("H"):
-            qubit_index = int(line.split(" ")[1])
+        elif keyword == "H":
+            qubit_index = int(stripped.split(" ")[1])
+            if not has_explicit_noise:
+                _inject_noise_on_qubit(
+                    s, qubit_index, current_noise_index, noise_vector, total_noise
+                )
+                current_noise_index += 1
             s.h(qubit_index)
 
-        elif line.startswith("S"):
-            qubit_index = int(line.split(" ")[1])
+        elif keyword == "S":
+            qubit_index = int(stripped.split(" ")[1])
+            if not has_explicit_noise:
+                _inject_noise_on_qubit(
+                    s, qubit_index, current_noise_index, noise_vector, total_noise
+                )
+                current_noise_index += 1
             s.s(qubit_index)
 
-        elif line.startswith("R"):
-            parts = line.split(" ")
-            for i in range(1, len(parts)):
-                qubit_index = int(parts[i])
-                s.reset_z(qubit_index)
+        elif keyword == "X":
+            qubit_index = int(stripped.split(" ")[1])
+            if not has_explicit_noise:
+                _inject_noise_on_qubit(
+                    s, qubit_index, current_noise_index, noise_vector, total_noise
+                )
+                current_noise_index += 1
+            s.x(qubit_index)
 
-        elif line.startswith("DETECTOR"):
-            parts = line.split(" ")
+        elif keyword == "Y":
+            qubit_index = int(stripped.split(" ")[1])
+            if not has_explicit_noise:
+                _inject_noise_on_qubit(
+                    s, qubit_index, current_noise_index, noise_vector, total_noise
+                )
+                current_noise_index += 1
+            s.y(qubit_index)
+
+        elif keyword == "Z":
+            qubit_index = int(stripped.split(" ")[1])
+            if not has_explicit_noise:
+                _inject_noise_on_qubit(
+                    s, qubit_index, current_noise_index, noise_vector, total_noise
+                )
+                current_noise_index += 1
+            s.z(qubit_index)
+
+        elif keyword == "R":
+            qubit_index = int(stripped.split(" ")[1])
+            s.reset_z(qubit_index)
+
+        elif keyword == "DETECTOR":
+            parts = stripped.split(" ")
             parity = 0
             for i in range(1, len(parts)):
                 if parts[i].startswith("rec"):
@@ -79,8 +161,8 @@ def transpile_stim_with_noise_vector(
                         parity += 1
             detector_result.append(parity % 2)
 
-        elif line.startswith("OBSERVABLE_INCLUDE(0)"):
-            parts = line.split(" ")
+        elif keyword == "OBSERVABLE_INCLUDE":
+            parts = stripped.split(" ")
             for i in range(1, len(parts)):
                 if parts[i].startswith("rec"):
                     meas = int(parts[i][4:-1])
@@ -88,21 +170,15 @@ def transpile_stim_with_noise_vector(
                         observable_parity += 1
             observable_parity = observable_parity % 2
 
-        elif line.startswith("DEPOLARIZE1"):
-            parts = line.split(" ")
-            # Handle each qubit in the DEPOLARIZE1 instruction
-            for q in range(1, len(parts)):
-                qubit_index = int(parts[q])
-                # Check for X error
-                if noise_vector[current_noise_index] == 1:
-                    s.x(qubit_index)
-                # Check for Y error
-                elif noise_vector[current_noise_index + total_noise] == 1:
-                    s.y(qubit_index)
-                # Check for Z error
-                elif noise_vector[current_noise_index + 2 * total_noise] == 1:
-                    s.z(qubit_index)
-                current_noise_index += 1
+        elif keyword == "DEPOLARIZE1":
+            if has_explicit_noise:
+                parts = stripped.split(" ")
+                for q in range(1, len(parts)):
+                    qubit_index = int(parts[q])
+                    _inject_noise_on_qubit(
+                        s, qubit_index, current_noise_index, noise_vector, total_noise
+                    )
+                    current_noise_index += 1
 
     detector_result.append(observable_parity)
     return detector_result
