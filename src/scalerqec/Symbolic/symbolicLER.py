@@ -648,11 +648,10 @@ class SymbolicLERcalc:
             model's error rate.
         """
         self._error_rate = noise_model.error_rate
-        qeccirc.construct_IR_standard_scheme()
-        qeccirc.compile_stim_circuit_from_IR_standard()
-        self._cliffordcircuit = noise_model.reconstruct_clifford_circuit(
-            qeccirc.circuit
-        )
+        qeccirc.construct_circuit()
+        stim_circuit = noise_model.inject_noise(qeccirc.stimcirc)
+        self._cliffordcircuit = CliffordCircuit(0)
+        self._cliffordcircuit.compile_from_noisy_stim_circuit_str(str(stim_circuit))
 
         self._num_noise = self._cliffordcircuit.totalnoise
         self._num_detector = len(self._cliffordcircuit.parityMatchGroup)

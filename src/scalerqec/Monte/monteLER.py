@@ -206,11 +206,9 @@ class MonteLERcalc:
             Updates ``_estimated_LER``, ``_sample_used``, and ``_QEPG``
             on the instance. Prints timing and LER statistics to stdout.
         """
-        qeccirc.construct_IR_standard_scheme()
-        qeccirc.compile_stim_circuit_from_IR_standard()
+        qeccirc.construct_circuit()
 
-        noisy_circuit = noise_model.reconstruct_clifford_circuit(qeccirc.circuit)
-        stim_circuit = noisy_circuit.stimcircuit
+        stim_circuit = noise_model.inject_noise(qeccirc.stimcirc)
         # C++ QEPG parser requires normalized one-op-per-line format
         self._QEPG = compile_QEPG(rewrite_stim_code(str(stim_circuit), keep_noise=True))
 

@@ -1787,9 +1787,10 @@ class StratifiedScurveLERcalc:
         savefigure: bool = False,
         repeat: int = 1,
     ):
-        qeccirc.construct_IR_standard_scheme()
-        qeccirc.compile_stim_circuit_from_IR_standard()
-        noisy_circuit = noise_model.reconstruct_clifford_circuit(qeccirc.circuit)
+        qeccirc.construct_circuit()
+        stim_circuit = noise_model.inject_noise(qeccirc.stimcirc)
+        noisy_circuit = CliffordCircuit(0)
+        noisy_circuit.compile_from_noisy_stim_circuit_str(str(stim_circuit))
 
         self._error_rate = noise_model.error_rate
 

@@ -684,6 +684,24 @@ class StabCode:
         else:
             raise NotImplementedError(f"Scheme {self._scheme} not implemented yet.")
 
+    def label_noise(self) -> "NoiseLabelMap":
+        """Auto-label all noise sources in the compiled circuit.
+
+        Must be called after :meth:`construct_circuit`.  Returns a
+        :class:`~scalerqec.Clifford.noiselabel.NoiseLabelMap` with each
+        noise source labeled by category (hook_error, measurement_error,
+        etc.) and enriched with round/stabilizer context.
+
+        Returns:
+            A populated NoiseLabelMap.
+
+        Raises:
+            AssertionError: If the circuit has not been compiled.
+        """
+        from .autolabel import auto_label_from_stabcode
+
+        return auto_label_from_stabcode(self)
+
     def construct_IR_shor_scheme(self) -> None:
         """Build the IR for Shor-style fault-tolerant syndrome extraction.
 
