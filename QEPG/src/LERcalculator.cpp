@@ -239,6 +239,29 @@ std::vector<std::vector<bool>> return_samples_with_fixed_QEPG(const QEPG::QEPG& 
     return std::move(result);
 }
 
+/// @copydoc LERcalculator::return_samples_with_fixed_QEPG_numpy
+std::pair<py::array_t<std::uint8_t>,py::array_t<std::uint8_t>> return_samples_with_fixed_QEPG_numpy(const QEPG::QEPG& graph,size_t weight, size_t shots){
+    const std::size_t n_det = graph.get_total_detector();
+    SAMPLE::sampler sampler(graph.get_total_noise());
+
+    // Allocate NumPy buffers directly
+    py::array_t<std::uint8_t> detectorresult({shots, n_det});
+    py::array_t<std::uint8_t> obsresult(shots);
+
+    auto det_info = detectorresult.request();
+    auto obs_info = obsresult.request();
+    auto* det_ptr = static_cast<std::uint8_t*>(det_info.ptr);
+    auto* obs_ptr = static_cast<std::uint8_t*>(obs_info.ptr);
+
+    // Fused sampling: write directly into NumPy buffers, no intermediate Row allocation
+    {
+        py::gil_scoped_release release;
+        sampler.generate_many_output_samples_to_numpy(graph, det_ptr, obs_ptr, n_det, weight, shots);
+    }
+
+    return {std::move(detectorresult), std::move(obsresult)};
+}
+
 
 
 

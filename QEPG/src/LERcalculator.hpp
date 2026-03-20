@@ -61,6 +61,19 @@ namespace py = pybind11;
   */
  std::vector<std::vector<bool>> return_samples_with_fixed_QEPG(const QEPG::QEPG& graph,size_t weight, size_t shots);
 
+ /**
+  * @brief Generate weighted samples with separate NumPy detector/observable outputs.
+  *
+  * Same as return_samples_with_fixed_QEPG but returns pre-allocated NumPy arrays
+  * with OpenMP-parallel unpacking for maximum throughput.
+  *
+  * @param graph  Pre-compiled QEPG graph.
+  * @param weight Hamming weight of each error sample.
+  * @param shots  Number of samples to generate.
+  * @return A pair of NumPy arrays: (detector_outcomes of shape (shots, num_detectors),
+  *         observable_outcomes of shape (shots,)).
+  */
+ std::pair<py::array_t<std::uint8_t>,py::array_t<std::uint8_t>> return_samples_with_fixed_QEPG_numpy(const QEPG::QEPG& graph,size_t weight, size_t shots);
 
  /**
   * @brief Generate weighted samples and return both noise vectors and outcomes.

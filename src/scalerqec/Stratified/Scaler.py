@@ -25,7 +25,7 @@ from scalerqec.Stratified.stratifiedScurveLER import format_with_uncertainty
 from scalerqec.qepg import (
     compile_QEPG,
     return_samples_many_weights_separate_obs_with_QEPG,
-    return_samples_with_fixed_QEPG,
+    return_samples_with_fixed_QEPG_numpy,
     QEPGGraph,
 )
 import pymatching
@@ -323,10 +323,8 @@ class Scaler:
             "QEPG graph must be initialized before sampling"
         )
         assert self._matcher is not None, "Matcher must be initialized before decoding"
-        result = return_samples_with_fixed_QEPG(self._QEPG_graph, w, shots)
-        arr = np.asarray(result)
-        states = arr[:, :-1]
-        observables = arr[:, -1]
+        states, observables = return_samples_with_fixed_QEPG_numpy(self._QEPG_graph, w, shots)
+        observables = np.asarray(observables).ravel()
         predictions = np.squeeze(self._matcher.decode_batch(states))
         num_errors = np.count_nonzero(observables != predictions)
         return num_errors / shots

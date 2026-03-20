@@ -12,7 +12,7 @@ from scalerqec.Stratified.models import ModelType
 from scalerqec.qepg import (
     compile_QEPG,
     return_samples_many_weights_separate_obs_with_QEPG,
-    return_samples_with_fixed_QEPG,
+    return_samples_with_fixed_QEPG_numpy,
 )
 
 try:
@@ -253,10 +253,8 @@ class ScalerLDPC(Scaler):
             "BPOSD decoder must be initialized before decoding"
         )
 
-        result = return_samples_with_fixed_QEPG(self._QEPG_graph, w, shots)
-        arr = np.asarray(result)
-        states = arr[:, :-1]
-        observables = arr[:, -1]
+        states, observables = return_samples_with_fixed_QEPG_numpy(self._QEPG_graph, w, shots)
+        observables = np.asarray(observables).ravel()
 
         # Use BPOSD decoder
         predictions = self._decoder.decode_batch(states)

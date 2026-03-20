@@ -16,7 +16,7 @@ from typing import Optional
 from scalerqec.qepg import (
     compile_QEPG,
     return_samples_many_weights_separate_obs_with_QEPG,
-    return_samples_with_fixed_QEPG,
+    return_samples_with_fixed_QEPG_numpy,
     QEPGGraph,
 )
 from scalerqec.Clifford.clifford import *
@@ -191,16 +191,8 @@ class StratifiedScurveLERcalc:
         assert self._QEPG_graph is not None, (
             "QEPG graph must be initialized before sampling"
         )
-        result = return_samples_with_fixed_QEPG(self._QEPG_graph, w, shots)
-        # self._sample_used+=shots
-        # if w not in self._subspace_LE_count.keys():
-        #     self._subspace_LE_count[w]=0
-        #     self._subspace_sample_used[w]=shots
-        # else:
-        #     self._subspace_sample_used[w]+=shots
-        arr = np.asarray(result)
-        states = arr[:, :-1]
-        observables = arr[:, -1]
+        states, observables = return_samples_with_fixed_QEPG_numpy(self._QEPG_graph, w, shots)
+        observables = np.asarray(observables).ravel()
         predictions = np.squeeze(self._matcher.decode_batch(states))
         num_errors = np.count_nonzero(observables != predictions)
         # self._subspace_LE_count[w]+=num_errors
