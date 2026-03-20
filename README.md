@@ -130,30 +130,30 @@ scalerqec/
 ## Quick Start
 ---
 
-### 1. Construct a QEC circuit from stabilizers
+### 1. Define a QEC code with StabIR
+
+StabIR is our stabilizer-level intermediate representation. You define the **code structure** (stabilizers, logical operators, measurement scheme, rounds) independently of any noise model. The IR is then compiled into a noiseless Stim circuit.
 
 A detailed tutorial is available in `Tutorial.ipynb`. Below is a smaller example using the [[3, 1, 3]] Z-repetition code.
 
 ```python
 from scalerqec.QEC.qeccircuit import StabCode
-from scalerqec.QEC.noisemodel import NoiseModel
 
+# Step 1: Define the code structure
 qeccirc = StabCode(n=3, k=1, d=3)
-
-# Stabilizer generators
-qeccirc.add_stab("ZZI")
+qeccirc.add_stab("ZZI")          # stabilizer generators
 qeccirc.add_stab("IZZ")
+qeccirc.set_logical_Z(0, "ZZZ")  # logical Z operator
 
-# Set the logical Z operator
-qeccirc.set_logical_Z(0, "ZZZ")
-
-# Configure noise and measurement scheme
-noise_model = NoiseModel(0.001)
-qeccirc.scheme = "Standard"   # Also supports: Shor, Knill, Flag
+# Step 2: Configure the measurement scheme
+qeccirc.scheme = "Standard"       # also supports: Shor, Knill, Flag
 qeccirc.rounds = 2
 
-# Build the circuit
+# Step 3: Compile to a noiseless Stim circuit
 qeccirc.construct_circuit()
+
+# The compiled circuit is available as a stim.Circuit object
+print(qeccirc.stimcirc)
 ```
 
 You can inspect the intermediate representation:
@@ -173,6 +173,30 @@ d1 = Parity c1 c3
 c4 = Prop ZZZ
 o0 = Parity c4
 ```
+
+Once compiled, you can combine the code with any noise model to estimate the logical error rate. The noise model is applied **separately** -- it is not part of the code definition:
+
+```python
+from scalerqec.QEC.noisemodel import NoiseModel, SD6NoiseModel, SI1000NoiseModel
+
+# Option A: Simple depolarizing noise
+noise_model = NoiseModel(0.001)
+
+# Option B: Standard depolarizing (6 noise locations per round)
+noise_model = SD6NoiseModel(0.001)
+
+# Option C: Superconducting-inspired noise
+noise_model = SI1000NoiseModel(0.001)
+
+# Estimate LER with Monte Carlo
+from scalerqec.Monte import MonteLERcalc
+
+mc = MonteLERcalc(time_budget=30, samplebudget=500000, MIN_NUM_LE_EVENT=50)
+mc.calculate_LER_from_StabCode(qeccirc, noise_model)
+print(f"LER = {mc._estimated_LER:.2e}")
+```
+
+All LER calculators (ScaLER, Monte Carlo, Symbolic) accept a StabCode + NoiseModel pair. You can also pass a custom decoder via `decoder=my_decoder` -- any object with a `decode_batch()` method works.
 
 
 ### 2. ScaLER -- Time-budgeted S-curve LER estimation (main method)
@@ -248,17 +272,7 @@ calculator.calculate_LER_from_file(
 
 ### 4. Monte Carlo LER estimation
 
-Standard Monte Carlo fault injection with adaptive batching:
-
-**From a StabCode object:**
-
-```python
-from scalerqec.Monte import MonteLERcalc
-
-mc = MonteLERcalc(time_budget=30, samplebudget=500000, MIN_NUM_LE_EVENT=50)
-mc.calculate_LER_from_StabCode(qeccirc, noise_model)
-print(f"LER = {mc._estimated_LER:.2e} +/- {mc._uncertainty:.2e}")
-```
+Standard Monte Carlo fault injection with adaptive batching. All calculators accept an optional `decoder` parameter -- any object with a `decode_batch()` method (pymatching, BPOSD, or your own). If omitted, pymatching is used by default. See Section 1 above for how to use `calculate_LER_from_StabCode` with a StabCode + NoiseModel pair.
 
 **From a Stim circuit file (uniform noise):**
 
@@ -318,7 +332,62 @@ exact_ler = sym.calculate_LER_from_file(
 This is useful for validating Monte Carlo and ScaLER estimates on small circuits.
 
 
-### 6. Using the C++ QEPG backend directly
+### 6. Hotspot analysis -- identify dominant error sources
+
+ScaLERQEC includes a **decoder-agnostic hotspot analysis** module that reveals which noise categories contribute most to logical failures. It uses a three-phase C++-accelerated pipeline:
+
+1. **C++ labeled sampling**: sample noise via QEPG with per-shot category bitmask tracking (near-zero overhead).
+2. **User's decoder**: decode detector outcomes with any decoder (pymatching, BPOSD, custom).
+3. **C++ aggregation**: compute P(category fired | logical error), lift, and multi-error configuration breakdown.
+
+The noise label system classifies each DEPOLARIZE1 source into one of four QStab IR error types using positional classification (relative to the CX schedule):
+
+| Type | Name | Description |
+|------|------|-------------|
+| 0 | `data_qubit_error` | Data qubit error before/after CX phase |
+| I | `ghost_error` | Data qubit error during CX phase with future CX |
+| II | `hook_error` | Ancilla error with remaining CX (back-propagation) |
+| III | `measurement_error` | Ancilla error after last CX |
+
+```python
+import pymatching
+from scalerqec.Analysis.hotspot import HotspotAnalyzer
+from scalerqec import qepg as qepg_cpp
+
+# Build circuit and decoder (any decoder with decode_batch works)
+stim_circuit = code.stimcirc
+dem = stim_circuit.detector_error_model(decompose_errors=True)
+matcher = pymatching.Matching.from_detector_error_model(dem)
+
+# Compile QEPG and auto-label noise sources
+prog_str = code.circuit.stim_str
+graph = qepg_cpp.compile_QEPG(rewrite_stim_code(prog_str, keep_noise=True))
+cc_cpp = qepg_cpp.CliffordCircuit()
+cc_cpp.compile_from_rewrited_stim_string(rewrite_stim_code(prog_str))
+label_map = qepg_cpp.auto_label(cc_cpp, num_data_qubits)
+
+# Run hotspot analysis with your chosen decoder
+analyzer = HotspotAnalyzer(graph, label_map, decoder=matcher)
+result = analyzer.analyze(noise_probs, num_shots=1_000_000)
+analyzer.print_report(result)
+```
+
+Output:
+```
+======================================================================
+  Hotspot Analysis  (613 logical errors, LER = 0.000613, 1000000 shots)
+======================================================================
+  Category                  Count   P(fire)  P(fire|err)  P(err|fire)    Lift
+  ------------------------- -----  --------  -----------  -----------  ------
+  data_qubit_error              4    0.0200       0.3622       0.0111   18.10
+  ghost_error                  11    0.0534       0.9494       0.0109   17.77
+  measurement_error             2    0.0101       0.0326       0.0020    3.23
+  hook_error                   16    0.0772       0.1974       0.0016    2.56
+======================================================================
+```
+
+
+### 7. Using the C++ QEPG backend directly
 
 The QEPG (Quantum Error Propagation Graph) is a binary model of how errors propagate to flip detector outcomes.
 
@@ -493,6 +562,8 @@ We propose a novel method which tests the logical error rate by stratified sampl
 - [x] OpenMP parallel sampling across threads
 - [x] CI/CD pipeline with GitHub Actions (lint, build, test on Linux/macOS/Windows)
 - [x] Support toric codes, color codes, and BB LDPC codes
+- [x] **Hotspot analysis** -- C++-accelerated noise attribution with pluggable decoders
+- [x] **Pluggable decoders** -- all LER calculators accept user-provided decoders (pymatching, BPOSD, custom)
 
 ### In Progress
 
@@ -530,11 +601,6 @@ We propose a novel method which tests the logical error rate by stratified sampl
   - [ ] Support split/merge operations between surface code patches
   - [ ] LDPC code switching protocols
   - [ ] Estimate LER of multi-patch logical operations
-
-- [ ] **HotSpot analysis**
-  - [ ] Identify which noise sources contribute most to logical failures
-  - [ ] Classify errors by type (hook error, gate error, propagated error)
-  - [ ] Visualize error flow through the QEPG graph
 
 - [ ] **Visualization**
   - [ ] Interactive QEPG graph visualization (networkx or D3.js)

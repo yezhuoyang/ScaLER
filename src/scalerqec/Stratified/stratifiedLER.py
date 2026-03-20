@@ -22,6 +22,7 @@ from ..qepg import (
     return_samples_with_noise_vector,
 )
 from ..Clifford.clifford import *
+from ..Clifford.stimparser import rewrite_stim_code
 import pymatching
 import time
 from ..QEC.noisemodel import NoiseModel
@@ -57,11 +58,13 @@ class StratifiedLERcalc:
     """
 
     def __init__(
-        self, error_rate: float = 0, sampleBudget: int = 10000, num_subspace: int = 30
+        self, error_rate: float = 0, sampleBudget: int = 10000, num_subspace: int = 30,
+        decoder=None,
     ):
         self._num_detector: int = 0
         self._num_noise: int = 0
         self._error_rate: float = error_rate
+        self._decoder = decoder
         self._cliffordcircuit: CliffordCircuit = CliffordCircuit(4)
 
         self._ler: float = 0
@@ -121,9 +124,12 @@ class StratifiedLERcalc:
         self._detector_error_model = noisy_stim.detector_error_model(
             decompose_errors=True
         )
-        self._matcher = pymatching.Matching.from_detector_error_model(
-            self._detector_error_model
-        )
+        if self._decoder is not None:
+            self._matcher = self._decoder
+        else:
+            self._matcher = pymatching.Matching.from_detector_error_model(
+                self._detector_error_model
+            )
 
     def sample_all_subspace(self, shots_each_subspace: int = 1000000):
         """Sample every weight subspace with a fixed number of shots.
@@ -544,9 +550,10 @@ class StratifiedLERcalc:
             noise_model: The noise model to apply to the circuit.
             repeat: Number of independent trials.
         """
-        qeccirc.construct_IR_standard_scheme()
-        qeccirc.compile_stim_circuit_from_IR_standard()
-        noisy_circuit = noise_model.reconstruct_clifford_circuit(qeccirc.circuit)
+        qeccirc.construct_circuit()
+        stim_circuit = noise_model.inject_noise(qeccirc.stimcirc)
+        noisy_circuit = CliffordCircuit(0)
+        noisy_circuit.compile_from_noisy_stim_circuit_str(str(stim_circuit))
         self._error_rate = noise_model.error_rate
         self._circuit_level_code_distance = qeccirc.d
         self._cliffordcircuit = noisy_circuit
@@ -559,10 +566,15 @@ class StratifiedLERcalc:
                 decompose_errors=True
             )
         )
-        self._matcher = pymatching.Matching.from_detector_error_model(
-            self._detector_error_model
+        if self._decoder is not None:
+            self._matcher = self._decoder
+        else:
+            self._matcher = pymatching.Matching.from_detector_error_model(
+                self._detector_error_model
+            )
+        self._QEPG_graph = compile_QEPG(
+            rewrite_stim_code(self._stim_str_after_rewrite, keep_noise=True)
         )
-        self._QEPG_graph = compile_QEPG(self._stim_str_after_rewrite)
 
         ler_list: list[float] = []
         sample_used_list: list[int] = []

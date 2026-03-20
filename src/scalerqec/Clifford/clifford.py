@@ -807,6 +807,38 @@ class CliffordCircuit:
         for i in range(self._totalnoise):
             print(self._index_to_noise[i])
 
+    def get_noise_context(self, noise_index: int) -> dict:
+        """Return contextual info about a noise source.
+
+        Looks at the gate list entry immediately after the noise source
+        to determine what gate the noise precedes.
+
+        Args:
+            noise_index: Index of the noise source.
+
+        Returns:
+            A dict with keys ``qubit``, ``following_gate``, and
+            ``following_gate_type``.
+        """
+        noise = self._index_to_noise.get(noise_index)
+        if noise is None:
+            return {}
+
+        # Find position of this noise in gate list
+        result = {"qubit": noise._qubitindex}
+        for i, gate in enumerate(self._gatelists):
+            if isinstance(gate, pauliNoise) and gate._noiseindex == noise_index:
+                # Look at the next non-noise gate
+                for j in range(i + 1, len(self._gatelists)):
+                    next_gate = self._gatelists[j]
+                    if not isinstance(next_gate, pauliNoise):
+                        result["following_gate"] = str(next_gate)
+                        result["following_gate_type"] = type(next_gate).__name__
+                        break
+                break
+
+        return result
+
     def add_xflip_noise(self, qubit: int) -> None:
         """Add an X-flip noise channel on a qubit.
 

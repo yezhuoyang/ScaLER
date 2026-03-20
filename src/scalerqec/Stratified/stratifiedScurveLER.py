@@ -74,10 +74,12 @@ class StratifiedScurveLERcalc:
         k_range: int = 3,
         num_subspace: int = 5,
         beta: float = 4,
+        decoder=None,
     ):
         self._num_detector: int = 0
         self._num_noise: int = 0
         self._error_rate: float = error_rate
+        self._decoder = decoder
         self._cliffordcircuit: CliffordCircuit = CliffordCircuit(4)
 
         self._ler: float = 0
@@ -322,9 +324,12 @@ class StratifiedScurveLERcalc:
         self._detector_error_model = noisy_stim.detector_error_model(
             decompose_errors=True
         )
-        self._matcher = pymatching.Matching.from_detector_error_model(
-            self._detector_error_model
-        )
+        if self._decoder is not None:
+            self._matcher = self._decoder
+        else:
+            self._matcher = pymatching.Matching.from_detector_error_model(
+                self._detector_error_model
+            )
 
         self._QEPG_graph = compile_QEPG(stim_str)
 
@@ -1782,9 +1787,10 @@ class StratifiedScurveLERcalc:
         savefigure: bool = False,
         repeat: int = 1,
     ):
-        qeccirc.construct_IR_standard_scheme()
-        qeccirc.compile_stim_circuit_from_IR_standard()
-        noisy_circuit = noise_model.reconstruct_clifford_circuit(qeccirc.circuit)
+        qeccirc.construct_circuit()
+        stim_circuit = noise_model.inject_noise(qeccirc.stimcirc)
+        noisy_circuit = CliffordCircuit(0)
+        noisy_circuit.compile_from_noisy_stim_circuit_str(str(stim_circuit))
 
         self._error_rate = noise_model.error_rate
 
@@ -1806,9 +1812,12 @@ class StratifiedScurveLERcalc:
                 decompose_errors=True
             )
         )
-        self._matcher = pymatching.Matching.from_detector_error_model(
-            self._detector_error_model
-        )
+        if self._decoder is not None:
+            self._matcher = self._decoder
+        else:
+            self._matcher = pymatching.Matching.from_detector_error_model(
+                self._detector_error_model
+            )
         from scalerqec.Clifford.stimparser import rewrite_stim_code
 
         # C++ QEPG parser requires normalized one-op-per-line format

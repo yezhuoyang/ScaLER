@@ -24,6 +24,7 @@ from .noisemodel import NoiseModel, SD6NoiseModel, SI1000NoiseModel, SIDNoiseMod
 from .surface import RepetitionCode, SurfaceCode
 from .small import fivequbitCode, steaneCode, ShorCode
 from .analyzer import IRAnalyzer, LogicalOperatorAnalyzer, DistanceAnalyzer
+from .autolabel import auto_label_from_circuit, auto_label_from_stabcode
 
 
 __all__ = [
@@ -40,4 +41,6 @@ __all__ = [
     "fivequbitCode",
     "steaneCode",
     "ShorCode",
+    "auto_label_from_circuit",
+    "auto_label_from_stabcode",
 ]

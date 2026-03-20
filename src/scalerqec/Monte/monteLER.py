@@ -36,18 +36,21 @@ from .noise_model_parser import extract_noise_model, NonuniformNoiseModel
 import sinter
 
 
-def count_logical_errors(circuit: stim.Circuit, num_shots: int) -> int:
-    """Sample a stim circuit and count logical errors using pymatching.
+def count_logical_errors(circuit: stim.Circuit, num_shots: int, decoder=None) -> int:
+    """Sample a stim circuit and count logical errors.
 
     The function compiles a detector sampler from the circuit, draws
-    ``num_shots`` samples, builds a pymatching decoder from the detector
-    error model, and counts shots where the decoded observable outcome
-    differs from the actual observable flip.
+    ``num_shots`` samples, decodes with the provided decoder (or
+    pymatching by default), and counts shots where the decoded
+    observable outcome differs from the actual observable flip.
 
     Args:
         circuit: A stim circuit that includes noise operations and
             observable/detector annotations.
         num_shots: Number of Monte Carlo shots to sample.
+        decoder: Any object with a ``decode_batch`` method. If ``None``,
+            a pymatching decoder is built from the circuit's detector
+            error model.
 
     Returns:
         The number of shots in which at least one observable was
@@ -60,11 +63,12 @@ def count_logical_errors(circuit: stim.Circuit, num_shots: int) -> int:
     )
 
     # Configure a decoder using the circuit.
-    detector_error_model = circuit.detector_error_model(decompose_errors=False)
-    matcher = pymatching.Matching.from_detector_error_model(detector_error_model)
+    if decoder is None:
+        detector_error_model = circuit.detector_error_model(decompose_errors=False)
+        decoder = pymatching.Matching.from_detector_error_model(detector_error_model)
 
     # Run the decoder.
-    predictions = matcher.decode_batch(detection_events)
+    predictions = decoder.decode_batch(detection_events)
 
     # Count the mistakes.
     num_errors = 0
@@ -145,6 +149,7 @@ class MonteLERcalc:
         time_budget: int = 10,
         samplebudget: int = 100000,
         MIN_NUM_LE_EVENT: int = 20,
+        decoder=None,
     ) -> None:
         """Initialise the Monte Carlo LER calculator.
 
@@ -156,6 +161,9 @@ class MonteLERcalc:
                 averaging run before sampling is terminated.
             MIN_NUM_LE_EVENT: Minimum number of logical error events to
                 collect before declaring convergence and stopping.
+            decoder: Any object with a ``decode_batch`` method
+                (e.g. ``pymatching.Matching``, ``ldpc.bposd_decoder``).
+                If ``None``, a pymatching decoder is built automatically.
         """
         self._num_LER: int = 0
         self._sample_used: float = 0.0
@@ -166,6 +174,7 @@ class MonteLERcalc:
         self._min_num_ke_event: int = MIN_NUM_LE_EVENT
         self._QEPG: Optional[QEPGGraph] = None
         self._time_budget: int = time_budget
+        self._decoder = decoder
 
     def calculate_LER_from_StabCode(
         self, qeccirc: StabCode, noise_model: NoiseModel, repeat: int = 1
@@ -197,16 +206,16 @@ class MonteLERcalc:
             Updates ``_estimated_LER``, ``_sample_used``, and ``_QEPG``
             on the instance. Prints timing and LER statistics to stdout.
         """
-        qeccirc.construct_IR_standard_scheme()
-        qeccirc.compile_stim_circuit_from_IR_standard()
+        qeccirc.construct_circuit()
 
-        noisy_circuit = noise_model.reconstruct_clifford_circuit(qeccirc.circuit)
-        stim_circuit = noisy_circuit.stimcircuit
+        stim_circuit = noise_model.inject_noise(qeccirc.stimcirc)
         # C++ QEPG parser requires normalized one-op-per-line format
         self._QEPG = compile_QEPG(rewrite_stim_code(str(stim_circuit), keep_noise=True))
 
         detector_error_model = stim_circuit.detector_error_model(decompose_errors=False)
-        matcher = pymatching.Matching.from_detector_error_model(detector_error_model)
+        matcher = self._decoder
+        if matcher is None:
+            matcher = pymatching.Matching.from_detector_error_model(detector_error_model)
 
         error_rate = noise_model.error_rate
         Ler_list: list[float] = []
@@ -359,7 +368,9 @@ class MonteLERcalc:
         # 4. Build decoder from the ORIGINAL noisy circuit's DEM
         stim_circuit = stim.Circuit(stim_circuit_str)
         detector_error_model = stim_circuit.detector_error_model(decompose_errors=True)
-        matcher = pymatching.Matching.from_detector_error_model(detector_error_model)
+        matcher = self._decoder
+        if matcher is None:
+            matcher = pymatching.Matching.from_detector_error_model(detector_error_model)
 
         # 5. Adaptive batching with non-uniform sampling
         Ler_list: list[float] = []
@@ -480,7 +491,9 @@ class MonteLERcalc:
         noisy_stim = SIDNoiseModel(pvalue).inject_noise(circuit.stimcircuit)
 
         detector_error_model = noisy_stim.detector_error_model(decompose_errors=False)
-        matcher = pymatching.Matching.from_detector_error_model(detector_error_model)
+        matcher = self._decoder
+        if matcher is None:
+            matcher = pymatching.Matching.from_detector_error_model(detector_error_model)
 
         Ler_list: list[float] = []
         samples_list: list[float] = []
@@ -710,7 +723,9 @@ class MonteLERcalc:
 
         sampler = noisy_stim.compile_detector_sampler()
         detector_error_model = noisy_stim.detector_error_model(decompose_errors=False)
-        matcher = pymatching.Matching.from_detector_error_model(detector_error_model)
+        matcher = self._decoder
+        if matcher is None:
+            matcher = pymatching.Matching.from_detector_error_model(detector_error_model)
 
         Ler_list: list[float] = []
         samples_list: list[float] = []
@@ -819,7 +834,9 @@ class MonteLERcalc:
 
         sampler = noisy_stim.compile_detector_sampler()
         detector_error_model = noisy_stim.detector_error_model(decompose_errors=False)
-        matcher = pymatching.Matching.from_detector_error_model(detector_error_model)
+        matcher = self._decoder
+        if matcher is None:
+            matcher = pymatching.Matching.from_detector_error_model(detector_error_model)
 
         start_time = time.perf_counter()
         ler_count = 0

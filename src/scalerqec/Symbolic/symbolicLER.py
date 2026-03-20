@@ -190,16 +190,19 @@ class SymbolicLERcalc:
             each error weight subspace.
     """
 
-    def __init__(self, error_rate=0):
+    def __init__(self, error_rate=0, decoder=None):
         """Initialize the symbolic LER calculator.
 
         Args:
             error_rate (float): Default physical error rate for
                 depolarizing noise injection.  Defaults to 0.
+            decoder: Any object with a ``decode_batch`` method. If
+                ``None``, a pymatching decoder is built automatically.
         """
         self._num_detector = 0
         self._num_noise = 0
         self._error_rate = error_rate
+        self._decoder = decoder
         self._dp = None
         self._cliffordcircuit = CliffordCircuit(4)
         self._graph = None
@@ -256,13 +259,16 @@ class SymbolicLERcalc:
         determine which outcomes lead to logical errors.
         """
         # Configure a decoder using the noisy circuit.
-        from ..QEC.noisemodel import SIDNoiseModel
+        if self._decoder is not None:
+            decoder = self._decoder
+        else:
+            from ..QEC.noisemodel import SIDNoiseModel
 
-        noisy_stim = SIDNoiseModel(self._error_rate).inject_noise(
-            self._cliffordcircuit.stimcircuit
-        )
-        detector_error_model = noisy_stim.detector_error_model(decompose_errors=False)
-        matcher = pymatching.Matching.from_detector_error_model(detector_error_model)
+            noisy_stim = SIDNoiseModel(self._error_rate).inject_noise(
+                self._cliffordcircuit.stimcircuit
+            )
+            detector_error_model = noisy_stim.detector_error_model(decompose_errors=False)
+            decoder = pymatching.Matching.from_detector_error_model(detector_error_model)
 
         all_inputs = []
 
@@ -275,7 +281,7 @@ class SymbolicLERcalc:
             # Print the list of booleans
             all_inputs.append(bool_list)
         # print(all_inputs)
-        self._all_predictions = matcher.decode_batch(all_inputs)
+        self._all_predictions = decoder.decode_batch(all_inputs)
 
     def calc_error_row_indices(self):
         """Identify detector/observable outcomes that cause logical errors.
@@ -642,11 +648,10 @@ class SymbolicLERcalc:
             model's error rate.
         """
         self._error_rate = noise_model.error_rate
-        qeccirc.construct_IR_standard_scheme()
-        qeccirc.compile_stim_circuit_from_IR_standard()
-        self._cliffordcircuit = noise_model.reconstruct_clifford_circuit(
-            qeccirc.circuit
-        )
+        qeccirc.construct_circuit()
+        stim_circuit = noise_model.inject_noise(qeccirc.stimcirc)
+        self._cliffordcircuit = CliffordCircuit(0)
+        self._cliffordcircuit.compile_from_noisy_stim_circuit_str(str(stim_circuit))
 
         self._num_noise = self._cliffordcircuit.totalnoise
         self._num_detector = len(self._cliffordcircuit.parityMatchGroup)
