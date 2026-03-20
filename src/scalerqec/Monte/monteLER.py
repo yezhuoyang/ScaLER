@@ -202,7 +202,8 @@ class MonteLERcalc:
 
         noisy_circuit = noise_model.reconstruct_clifford_circuit(qeccirc.circuit)
         stim_circuit = noisy_circuit.stimcircuit
-        self._QEPG = compile_QEPG(str(stim_circuit))
+        # C++ QEPG parser requires normalized one-op-per-line format
+        self._QEPG = compile_QEPG(rewrite_stim_code(str(stim_circuit), keep_noise=True))
 
         detector_error_model = stim_circuit.detector_error_model(decompose_errors=False)
         matcher = pymatching.Matching.from_detector_error_model(detector_error_model)

@@ -1809,7 +1809,12 @@ class StratifiedScurveLERcalc:
         self._matcher = pymatching.Matching.from_detector_error_model(
             self._detector_error_model
         )
-        self._QEPG_graph = compile_QEPG(str(noisy_circuit.stimcircuit))
+        from scalerqec.Clifford.stimparser import rewrite_stim_code
+
+        # C++ QEPG parser requires normalized one-op-per-line format
+        self._QEPG_graph = compile_QEPG(
+            rewrite_stim_code(str(noisy_circuit.stimcircuit), keep_noise=True)
+        )
 
         for i in range(repeat):
             self.clear_all()
