@@ -850,6 +850,32 @@ class StabCode:
 
         self._IR_compiled = True
 
+    def to_qiskit(self) -> "qiskit.QuantumCircuit":
+        """Compile the IR to a Qiskit ``QuantumCircuit`` with named registers.
+
+        The output circuit uses separate ``data`` and ``anc`` quantum
+        registers so that the caller can supply independent physical-qubit
+        layouts for data and ancilla qubits.
+
+        Returns:
+            A ``qiskit.QuantumCircuit`` with registers ``data[0..n-1]``
+            and ``anc[0..num_stabs-1]``.
+
+        Raises:
+            RuntimeError: If the IR has not been compiled yet (call
+                :meth:`construct_circuit` first).
+        """
+        if not self._IR_compiled:
+            raise RuntimeError(
+                "IR not compiled. Call construct_circuit() before to_qiskit()."
+            )
+        from .qiskitIRcompiler import qiskitIRCompiler
+
+        compiler = qiskitIRCompiler()
+        return compiler.compile_IR_to_qiskit(
+            self._IRList, self._n, len(self._stabs), self._rounds
+        )
+
     def show_IR(self) -> None:
         """Print the intermediate representation to stdout.
 
