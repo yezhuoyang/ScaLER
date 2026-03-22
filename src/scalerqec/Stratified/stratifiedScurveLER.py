@@ -300,6 +300,20 @@ class StratifiedScurveLERcalc:
         with open(filepath, "r", encoding="utf-8") as f:
             stim_str = f.read()
 
+        # Normalize: decompose multi-target instructions so both
+        # CliffordCircuit and C++ QEPG can parse.
+        from ..Clifford.stimparser import rewrite_stim_code
+
+        stim_str = rewrite_stim_code(stim_str, keep_noise=True)
+
+        # Re-create CliffordCircuit with correct qubit count to avoid
+        # buffer overflow when the circuit has more qubits than the
+        # default (4) allocated in __init__.
+        import stim
+
+        num_qubits = stim.Circuit(stim_str).num_qubits
+        self._cliffordcircuit = CliffordCircuit(num_qubits)
+
         self._cliffordcircuit.compile_from_stim_circuit_str(stim_str)
         self._num_noise = self._cliffordcircuit.totalnoise
         self._num_detector = len(self._cliffordcircuit.parityMatchGroup)

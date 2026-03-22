@@ -239,6 +239,14 @@ class SymbolicLERcalc:
         with open(filepath, "r", encoding="utf-8") as f:
             stim_str = f.read()
 
+        # Normalize and resize CliffordCircuit for correct qubit count
+        from ..Clifford.stimparser import rewrite_stim_code
+        import stim
+
+        stim_str = rewrite_stim_code(stim_str, keep_noise=True)
+        num_qubits = stim.Circuit(stim_str).num_qubits
+        self._cliffordcircuit = CliffordCircuit(num_qubits)
+
         self._cliffordcircuit.compile_from_stim_circuit_str(stim_str)
         self._num_noise = self._cliffordcircuit.totalnoise
         self._num_detector = len(self._cliffordcircuit.parityMatchGroup)

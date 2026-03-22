@@ -7,6 +7,7 @@ from __future__ import annotations
 import numpy as np
 import time
 from typing import List, Optional, Dict
+from scalerqec.Clifford.clifford import CliffordCircuit
 from scalerqec.Stratified.Scaler import Scaler
 from scalerqec.Stratified.models import ModelType
 from scalerqec.qepg import (
@@ -105,6 +106,20 @@ class ScalerLDPC(Scaler):
         print(f"\n[ScalerLDPC] Parsing circuit from: {filepath}")
         with open(filepath, "r", encoding="utf-8") as f:
             stim_str = f.read()
+
+        # Normalize: decompose multi-target instructions so both
+        # CliffordCircuit and C++ QEPG can parse.
+        from scalerqec.Clifford.stimparser import rewrite_stim_code
+
+        stim_str = rewrite_stim_code(stim_str, keep_noise=True)
+
+        # Re-create CliffordCircuit with correct qubit count to avoid
+        # buffer overflow when the circuit has more qubits than the
+        # default (4) allocated in __init__.
+        import stim
+
+        num_qubits = stim.Circuit(stim_str).num_qubits
+        self._cliffordcircuit = CliffordCircuit(num_qubits)
 
         print("[ScalerLDPC] Compiling circuit...")
         self._cliffordcircuit.compile_from_stim_circuit_str(stim_str)
