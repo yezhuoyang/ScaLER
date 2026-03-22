@@ -462,11 +462,16 @@ class CliffordCircuit:
             gate = tokens[0]
 
             if gate == "M":
-                measure_index_to_line[current_measure_index] = current_line_index
-                measure_line_to_measure_index[current_line_index] = (
-                    current_measure_index
-                )
-                current_measure_index += 1
+                # Multi-target M: "M 3 4" = 2 measurements
+                num_targets = len(tokens) - 1
+                for t in range(num_targets):
+                    # Each measurement gets a unique measure_index.
+                    # Use (current_line_index, t) as key to distinguish
+                    # multiple measurements on the same line.
+                    key = (current_line_index, t)
+                    measure_index_to_line[current_measure_index] = key
+                    measure_line_to_measure_index[key] = current_measure_index
+                    current_measure_index += 1
 
             current_line_index += 1
 
@@ -506,7 +511,10 @@ class CliffordCircuit:
 
             gate = keyword
             if gate == "M":
-                measure_stack.append(current_line_index)
+                tokens = stripped_line.split()
+                num_targets = len(tokens) - 1
+                for t in range(num_targets):
+                    measure_stack.append((current_line_index, t))
             current_line_index += 1
 
         """
@@ -540,25 +548,29 @@ class CliffordCircuit:
             gate = tokens[0]
 
             if gate == "CX":
-                control = int(tokens[1])
-                target = int(tokens[2])
-                maxum_q_index = max(maxum_q_index, control, target)
-                # Track noise locations for QEPG (no noise in stim circuit)
-                self._track_noise_location(control)
-                self._track_noise_location(target)
-                self.add_cnot(control, target)
+                # Multi-target CX: "CX 0 3 1 3 1 4 2 4" = 4 pairs
+                args = [int(t) for t in tokens[1:]]
+                for j in range(0, len(args), 2):
+                    control, target = args[j], args[j + 1]
+                    maxum_q_index = max(maxum_q_index, control, target)
+                    self._track_noise_location(control)
+                    self._track_noise_location(target)
+                    self.add_cnot(control, target)
 
             elif gate in _1Q_GATE_MAP:
-                qubit = int(tokens[1])
-                maxum_q_index = max(maxum_q_index, qubit)
-                self._track_noise_location(qubit)
-                _1Q_GATE_MAP[gate](qubit)
+                # Multi-target 1Q gates: "M 3 4" = 2 measurements
+                for qubit_str in tokens[1:]:
+                    qubit = int(qubit_str)
+                    maxum_q_index = max(maxum_q_index, qubit)
+                    self._track_noise_location(qubit)
+                    _1Q_GATE_MAP[gate](qubit)
 
             elif gate == "R":
-                qubit = int(tokens[1])
-                maxum_q_index = max(maxum_q_index, qubit)
-                # No noise location before reset
-                self.add_reset(qubit)
+                # Multi-target R: "R 3 4" = 2 resets
+                for qubit_str in tokens[1:]:
+                    qubit = int(qubit_str)
+                    maxum_q_index = max(maxum_q_index, qubit)
+                    self.add_reset(qubit)
 
         """
         Finally, compile detector and observable
