@@ -2110,6 +2110,66 @@ class Scaler:
         return self._iteration_log
 
 
+    def calculate_LER_from_StabCode(
+        self,
+        qeccirc,
+        noise_model,
+        figname: str | None = None,
+        titlename: str | None = None,
+        repeat: int = 1,
+    ) -> float | None:
+        """Estimate LER directly from a :class:`StabCode` and noise model.
+
+        Constructs the noisy STIM circuit internally, then runs the
+        ScaLER stratified sampling pipeline.
+
+        Args:
+            qeccirc: A :class:`~scalerqec.QEC.qeccircuit.StabCode` with
+                stabilisers and logical operators already configured.
+            noise_model: A :class:`~scalerqec.QEC.noisemodel.NoiseModel`
+                to apply to the circuit.
+            figname: Optional path prefix for saving S-curve plots.
+            titlename: Optional title for the plots.
+            repeat: Number of independent trials.
+
+        Returns:
+            The estimated logical error rate, or ``None`` on failure.
+        """
+        import tempfile
+        import os
+
+        qeccirc.construct_circuit()
+        noisy_circuit = noise_model.inject_noise(qeccirc.stimcirc)
+
+        # Write to a temporary file and delegate to calculate_LER_from_file
+        tmpdir = tempfile.mkdtemp()
+        tmp = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".stim", delete=False, dir=tmpdir
+        )
+        tmp.write(str(noisy_circuit))
+        tmp.flush()
+        tmp.close()
+
+        if figname is None:
+            figname = os.path.join(tmpdir, "scaler_")
+        if titlename is None:
+            titlename = f"d={qeccirc.d}"
+
+        try:
+            return self.calculate_LER_from_file(
+                filepath=tmp.name,
+                pvalue=noise_model.error_rate,
+                codedistance=qeccirc.d,
+                figname=figname,
+                titlename=titlename,
+                repeat=repeat,
+            )
+        finally:
+            import shutil
+
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+
 if __name__ == "__main__":
     # Test on repetition code with different models
     filepath = "C:/Users/yezhu/Documents/ScaLER/stimprograms/repetition/repetition5"
