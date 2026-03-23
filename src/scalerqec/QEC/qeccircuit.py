@@ -670,6 +670,10 @@ class StabCode:
                 has not been set.
         """
         if self._scheme == SCHEME.STANDARD:
+            # Build CX schedule if coordinates are available but no
+            # schedule has been set (e.g. by a subclass like SurfaceCode).
+            if not getattr(self, "_cx_schedule", None):
+                self._build_cx_schedule()
             self.construct_IR_standard_scheme()
             self.compile_stim_circuit_from_IR_standard()
             if self._noisemodel is not None:
@@ -735,6 +739,76 @@ class StabCode:
         .. note:: Not yet implemented.
         """
         pass
+
+    def _build_cx_schedule(self) -> None:
+        """Build a directional CX schedule from qubit coordinates.
+
+        For CSS codes, assigns each CX pair to one of 4 directional
+        layers (SE, NE, SW, NW) based on the data qubit's position
+        relative to its stabilizer's ancilla coordinate.
+
+        Ancilla coordinates are determined in priority order:
+
+        1. Pre-set values in ``_qubit_coords[n + si]`` (e.g. by a
+           subclass like ``SurfaceCode``).
+        2. Computed as the mean of the support qubit coordinates.
+
+        Requires ``self._qubit_coords`` to be set (a dict mapping qubit
+        index to ``(x, y)`` coordinate).  If coordinates are not
+        available, does nothing.
+
+        Sets ``self._cx_schedule``: list of 4 layers, each a list of
+        ``(control, target)`` tuples.
+        """
+        if not hasattr(self, "_qubit_coords") or not self._qubit_coords:
+            return
+
+        n = self._n
+        coords = self._qubit_coords
+
+        # Determine ancilla center for each stabilizer
+        stab_centers: dict[int, tuple[float, float]] = {}
+        for si, stab in enumerate(self._stabs):
+            anc = n + si
+            # Use pre-set ancilla coordinates if available
+            if anc in coords:
+                stab_centers[si] = coords[anc]
+            else:
+                # Fall back to mean of support qubit coordinates
+                support = [q for q, p in enumerate(stab) if p != "I"]
+                if not support:
+                    continue
+                cx = sum(coords[q][0] for q in support) / len(support)
+                cy = sum(coords[q][1] for q in support) / len(support)
+                stab_centers[si] = (cx, cy)
+                coords[anc] = (cx, cy)
+
+        # 4 direction steps: SE(+1,+1), NE(+1,-1), SW(-1,+1), NW(-1,-1)
+        directions = [(+1, +1), (+1, -1), (-1, +1), (-1, -1)]
+        layers: list[list[tuple[int, int]]] = [[] for _ in range(4)]
+
+        for si, stab in enumerate(self._stabs):
+            if si not in stab_centers:
+                continue
+            anc = n + si
+            cx_center, cy_center = stab_centers[si]
+            is_x = self._is_x_type_stabilizer(stab)
+
+            for q, pauli in enumerate(stab):
+                if pauli == "I":
+                    continue
+                dx, dy = coords[q]
+                rel_x = dx - cx_center
+                rel_y = dy - cy_center
+                direction = (1 if rel_x > 0 else -1, 1 if rel_y > 0 else -1)
+
+                step = directions.index(direction)
+                if is_x:
+                    layers[step].append((anc, q))  # ancilla controls
+                else:
+                    layers[step].append((q, anc))  # data controls
+
+        self._cx_schedule = layers
 
     def _is_z_type_stabilizer(self, stab: str) -> bool:
         """Check if a stabilizer is pure Z-type (only I and Z entries)."""
@@ -972,13 +1046,17 @@ class StabCode:
         dest_to_meas_idx: dict[str, int] = {}
 
         for round_idx, (round_stabs, round_detectors) in enumerate(rounds_data):
-            # --- Reset ancillas ---
-            # First round: explicit R + TICK.  Later rounds: MR at end
-            # of previous round already reset the ancillas, and the
-            # preceding TICK separates the MR from the next round's gates.
+            # --- Reset qubits ---
+            # First round: reset ALL qubits (data + ancilla) to establish
+            # a known |0⟩ state.  This is required for correct QEPG
+            # backward propagation — without initial resets, error
+            # propagation paths extend beyond the circuit boundary.
+            # Later rounds: MR at end of previous round already reset the
+            # ancillas; no separate R needed.
             ancillas = [self._n + sp.get_stabindex() for sp in round_stabs]
             if round_idx == 0:
-                circuit.append("R", ancillas)
+                all_qubits = list(range(self._n)) + ancillas
+                circuit.append("R", all_qubits)
                 circuit.append("TICK")
 
             # --- Entangling gates for all stabilizers ---
@@ -990,17 +1068,15 @@ class StabCode:
                 if self._is_x_type_stabilizer(stab):
                     x_ancillas.append(ancilla)
 
-            if hasattr(self, "_cx_schedule") and self._cx_schedule:
-                # Use pre-computed directional CX schedule (e.g. from
-                # SurfaceCode._build_cx_schedule).  This 4-step schedule
-                # ensures correct quantum entanglement ordering: for each
-                # shared data qubit, X-type and Z-type CX gates are
-                # ordered so that stabilizer parities are deterministic.
+            cx_schedule = getattr(self, "_cx_schedule", None)
+
+            if cx_schedule:
+                # Use pre-computed directional CX schedule
                 if x_ancillas:
                     circuit.append("H", x_ancillas)
                 circuit.append("TICK")
 
-                for layer in self._cx_schedule:
+                for layer in cx_schedule:
                     if layer:
                         for ctrl, targ in layer:
                             circuit.append("CX", [ctrl, targ])
