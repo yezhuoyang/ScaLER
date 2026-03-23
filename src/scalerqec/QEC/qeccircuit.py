@@ -971,50 +971,85 @@ class StabCode:
         total_meas = 0
         dest_to_meas_idx: dict[str, int] = {}
 
-        for round_stabs, round_detectors in rounds_data:
-            # --- Reset all ancillas for this round ---
+        for round_idx, (round_stabs, round_detectors) in enumerate(rounds_data):
+            # --- Reset ancillas ---
+            # First round: explicit R + TICK.  Later rounds: MR at end
+            # of previous round already reset the ancillas, and the
+            # preceding TICK separates the MR from the next round's gates.
             ancillas = [self._n + sp.get_stabindex() for sp in round_stabs]
-            circuit.append("R", ancillas)
-            circuit.append("TICK")
+            if round_idx == 0:
+                circuit.append("R", ancillas)
+                circuit.append("TICK")
 
             # --- Entangling gates for all stabilizers ---
+            # Identify X-type ancillas that need H gates
+            x_ancillas = []
             for sp in round_stabs:
                 stab = sp.stab
                 ancilla = self._n + sp.get_stabindex()
+                if self._is_x_type_stabilizer(stab):
+                    x_ancillas.append(ancilla)
 
-                is_pure_x = self._is_x_type_stabilizer(stab)
-                is_pure_z = self._is_z_type_stabilizer(stab)
+            if hasattr(self, "_cx_schedule") and self._cx_schedule:
+                # Use pre-computed directional CX schedule (e.g. from
+                # SurfaceCode._build_cx_schedule).  This 4-step schedule
+                # ensures correct quantum entanglement ordering: for each
+                # shared data qubit, X-type and Z-type CX gates are
+                # ordered so that stabilizer parities are deterministic.
+                if x_ancillas:
+                    circuit.append("H", x_ancillas)
+                circuit.append("TICK")
 
-                if is_pure_x:
-                    circuit.append("H", [ancilla])
-                    for qubit_index, pauli in enumerate(stab):
-                        if pauli == "X":
-                            circuit.append("CX", [ancilla, qubit_index])
-                    circuit.append("H", [ancilla])
-                elif is_pure_z:
-                    for qubit_index, pauli in enumerate(stab):
-                        if pauli == "Z":
-                            circuit.append("CX", [qubit_index, ancilla])
-                else:
-                    for qubit_index, pauli in enumerate(stab):
-                        if pauli == "X":
-                            circuit.append("H", [qubit_index])
-                            circuit.append("CX", [qubit_index, ancilla])
-                            circuit.append("H", [qubit_index])
-                        elif pauli == "Z":
-                            circuit.append("CX", [qubit_index, ancilla])
-                        elif pauli == "Y":
-                            circuit.append("H", [qubit_index])
-                            circuit.append("CX", [qubit_index, ancilla])
-                            circuit.append("H", [qubit_index])
-                            circuit.append("CX", [qubit_index, ancilla])
+                for layer in self._cx_schedule:
+                    if layer:
+                        for ctrl, targ in layer:
+                            circuit.append("CX", [ctrl, targ])
+                        circuit.append("TICK")
 
-            circuit.append("TICK")
+                if x_ancillas:
+                    circuit.append("H", x_ancillas)
+                circuit.append("TICK")
+            else:
+                # Fallback: sequential per-stabilizer emission
+                for sp in round_stabs:
+                    stab = sp.stab
+                    ancilla = self._n + sp.get_stabindex()
+
+                    is_pure_x = self._is_x_type_stabilizer(stab)
+                    is_pure_z = self._is_z_type_stabilizer(stab)
+
+                    if is_pure_x:
+                        circuit.append("H", [ancilla])
+                        for q, pauli in enumerate(stab):
+                            if pauli == "X":
+                                circuit.append("CX", [ancilla, q])
+                        circuit.append("H", [ancilla])
+                    elif is_pure_z:
+                        for q, pauli in enumerate(stab):
+                            if pauli == "Z":
+                                circuit.append("CX", [q, ancilla])
+                    else:
+                        for q, pauli in enumerate(stab):
+                            if pauli == "X":
+                                circuit.append("H", [q])
+                                circuit.append("CX", [q, ancilla])
+                                circuit.append("H", [q])
+                            elif pauli == "Z":
+                                circuit.append("CX", [q, ancilla])
+                            elif pauli == "Y":
+                                circuit.append("H", [q])
+                                circuit.append("CX", [q, ancilla])
+                                circuit.append("H", [q])
+                                circuit.append("CX", [q, ancilla])
+
+                circuit.append("TICK")
 
             # --- Measure all ancillas ---
+            # Use MR (measure-then-reset) for all syndrome rounds,
+            # matching Stim reference circuits.  The reset at the last
+            # round is harmless (ancilla is not reused).
+            circuit.append("MR", ancillas)
             for sp in round_stabs:
-                ancilla = self._n + sp.get_stabindex()
-                circuit.append("M", [ancilla])
                 dest_to_meas_idx[sp.dest] = total_meas
                 total_meas += 1
 

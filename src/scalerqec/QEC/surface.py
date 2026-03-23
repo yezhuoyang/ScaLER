@@ -91,6 +91,7 @@ class SurfaceCode(StabCode):
 
         self._construct_stabilizers()
         self._set_logical_operators()
+        self._build_cx_schedule()
 
         if rounds is not None:
             self._rounds = rounds
@@ -185,6 +186,93 @@ class SurfaceCode(StabCode):
                 for q in qubits:
                     stab[q] = "X"
                 self.add_stab("".join(stab))
+
+    def _build_cx_schedule(self) -> None:
+        """Build a 4-step directional CX schedule for parallel layers.
+
+        For the rotated surface code, each plaquette (stabilizer) has data
+        qubits at 4 corners relative to the ancilla center.  The 4-step
+        schedule connects each ancilla to one corner per step, using
+        directions SE, NE, SW, NW (matching Stim's reference circuit).
+
+        This ensures that for any data qubit shared between an X-type and
+        a Z-type stabilizer, all CX gates from the same X-type stabilizer
+        that touch the Z-type stabilizer's support qubits are either all
+        before or all after the Z-type CX, preserving determinism.
+
+        Sets ``self._cx_schedule``: list of 4 layers, each a list of
+        ``(control, target)`` tuples.
+        """
+        d = self._distance
+        n = self._n
+
+        # Compute ancilla center coordinates for each stabilizer
+        # Bulk: face (fr, fc) → center at (2*fc+1, 2*fr+1)
+        # Boundary: virtual face → center extrapolated outside the grid
+        stab_centers: dict[int, tuple[float, float]] = {}
+        stab_idx = 0
+
+        # Bulk (weight-4), enumerated in the same order as _construct_stabilizers
+        for fr in range(d - 1):
+            for fc in range(d - 1):
+                stab_centers[stab_idx] = (2.0 * fc + 1.0, 2.0 * fr + 1.0)
+                stab_idx += 1
+
+        # Top boundary (fr=-1), fc odd
+        for fc in range(d - 1):
+            if fc % 2 == 1:
+                stab_centers[stab_idx] = (2.0 * fc + 1.0, -1.0)
+                stab_idx += 1
+
+        # Bottom boundary (fr=d-1)
+        for fc in range(d - 1):
+            if (d - 1 + fc) % 2 == 0:
+                stab_centers[stab_idx] = (2.0 * fc + 1.0, 2.0 * d - 1.0)
+                stab_idx += 1
+
+        # Left boundary (fc=-1), fr even
+        for fr in range(d - 1):
+            if fr % 2 == 0:
+                stab_centers[stab_idx] = (-1.0, 2.0 * fr + 1.0)
+                stab_idx += 1
+
+        # Right boundary (fc=d-1)
+        for fr in range(d - 1):
+            if (fr + d - 1) % 2 == 1:
+                stab_centers[stab_idx] = (2.0 * d - 1.0, 2.0 * fr + 1.0)
+                stab_idx += 1
+
+        # Also store ancilla coordinates for emission
+        for si, (cx, cy) in stab_centers.items():
+            anc = n + si
+            self._qubit_coords[anc] = (cx, cy)
+
+        # 4 direction steps: SE(+1,+1), NE(+1,-1), SW(-1,+1), NW(-1,-1)
+        # This matches Stim's reference circuit ordering
+        directions = [(+1, +1), (+1, -1), (-1, +1), (-1, -1)]
+
+        layers: list[list[tuple[int, int]]] = [[] for _ in range(4)]
+
+        for si, stab in enumerate(self._stabs):
+            anc = n + si
+            cx_center, cy_center = stab_centers[si]
+            is_x = self._is_x_type_stabilizer(stab)
+
+            for q, pauli in enumerate(stab):
+                if pauli == "I":
+                    continue
+                dx, dy = self._qubit_coords[q]
+                rel_x = dx - cx_center  # +1 or -1
+                rel_y = dy - cy_center  # +1 or -1
+                direction = (1 if rel_x > 0 else -1, 1 if rel_y > 0 else -1)
+
+                step = directions.index(direction)
+                if is_x:
+                    layers[step].append((anc, q))  # ancilla controls
+                else:
+                    layers[step].append((q, anc))  # data controls
+
+        self._cx_schedule = layers
 
     def _set_logical_operators(self) -> None:
         """Set logical Z = leftmost column, logical X = top row."""

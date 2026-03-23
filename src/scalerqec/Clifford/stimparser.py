@@ -77,9 +77,10 @@ def _rewrite(code: str, *, keep_noise: bool = False) -> str:
     """Normalize a STIM program so each line has at most one gate operation.
 
     Transformations:
-    1. Splits multi-target instructions (one op per qubit or qubit pair).
-    2. Decomposes composite gates to primitives via the tables above.
-    3. Strips noise directives unless *keep_noise* is ``True``.
+    1. Flattens ``REPEAT`` blocks so every round is explicit.
+    2. Splits multi-target instructions (one op per qubit or qubit pair).
+    3. Decomposes composite gates to primitives via the tables above.
+    4. Strips noise directives unless *keep_noise* is ``True``.
 
     Args:
         code: The raw STIM circuit program as a multi-line string.
@@ -89,6 +90,16 @@ def _rewrite(code: str, *, keep_noise: bool = False) -> str:
     Returns:
         A normalized STIM program string with one operation per line.
     """
+    # Flatten REPEAT blocks so the parser sees every round explicitly.
+    # stim.Circuit handles REPEAT natively; converting to string after
+    # flattening gives a circuit with no REPEAT/SHIFT_COORDS directives.
+    import stim as _stim
+
+    try:
+        code = str(_stim.Circuit(code).flattened())
+    except Exception:
+        pass  # If stim can't parse it, fall through to manual rewrite
+
     lines = code.splitlines()
     output_lines: list[str] = []
 
